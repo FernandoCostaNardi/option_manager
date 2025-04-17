@@ -1,0 +1,13 @@
+{
+  "name": "options-manager-backend",
+  "version": "1.0.0",
+  "description": "Backend for options management system",
+  "scripts": {
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
+  },
+  "devDependencies": {
+    "eslint": "^8.56.0",
+    "prettier": "^3.5.3"
+  }
+}

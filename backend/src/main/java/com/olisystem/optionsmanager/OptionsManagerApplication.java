@@ -5,7 +5,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
 public class OptionsManagerApplication {
-    public static void main(String[] args) {
-        SpringApplication.run(OptionsManagerApplication.class, args);
-    }
-} 
+  public static void main(String[] args) {
+    SpringApplication.run(OptionsManagerApplication.class, args);
+  }
+}
