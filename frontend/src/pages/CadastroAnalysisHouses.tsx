@@ -16,7 +16,8 @@ function CadastroAnalysisHouseModal({ open, onClose, onSuccess, analysisHouseId 
     website: '', 
     contactEmail: '', 
     contactPhone: '', 
-    subscriptionType: '' 
+    subscriptionType: '',
+    status: 'Ativo' 
   });
   const [loading, setLoading] = useState(() => open && !!analysisHouseId);
   const [error, setError] = useState('');
@@ -32,7 +33,8 @@ function CadastroAnalysisHouseModal({ open, onClose, onSuccess, analysisHouseId 
             website: data.website || '',
             contactEmail: data.contactEmail || '',
             contactPhone: data.contactPhone || '',
-            subscriptionType: data.subscriptionType || ''
+            subscriptionType: data.subscriptionType || '',
+            status: { 'ACTIVE': 'Ativo', 'INACTIVE': 'Inativo' }[data.status as string] ?? 'Pendente'
           });
         })
         .catch(() => setError('Erro ao buscar casa de análise.'))
@@ -44,9 +46,11 @@ function CadastroAnalysisHouseModal({ open, onClose, onSuccess, analysisHouseId 
         website: '', 
         contactEmail: '', 
         contactPhone: '', 
-        subscriptionType: '' 
+        subscriptionType: '',
+        status: 'Ativo' 
       });
       setError('');
+      setLoading(false);
     }
   }, [open, analysisHouseId]);
 
@@ -65,19 +69,20 @@ function CadastroAnalysisHouseModal({ open, onClose, onSuccess, analysisHouseId 
     }
     setLoading(true);
     try {
+      const statusApi = form.status === 'Ativo' ? 'ACTIVE' : 'INACTIVE';
       const payload = {
-        id: analysisHouseId,
         name: form.name,
-        cnpj: form.cnpj,
-        ...(form.website ? { website: form.website } : {}),
-        ...(form.contactEmail ? { contactEmail: form.contactEmail } : {}),
-        ...(form.contactPhone ? { contactPhone: form.contactPhone } : {}),
-        ...(form.subscriptionType ? { subscriptionType: form.subscriptionType } : {})
+        cnpj: form.cnpj || '',
+        website: form.website || '',
+        contactEmail: form.contactEmail || '',
+        contactPhone: form.contactPhone || '',
+        subscriptionType: form.subscriptionType || '',
+        status: statusApi
       };
       if (analysisHouseId) {
-        await AnalysisHouseService.updateAnalysisHouse(analysisHouseId, payload);
+        await AnalysisHouseService.updateAnalysisHouse(analysisHouseId, payload as AnalysisHouse);
       } else {
-        await AnalysisHouseService.createAnalysisHouse(payload);
+        await AnalysisHouseService.createAnalysisHouse(payload as AnalysisHouse);
       }
       onSuccess();
       onClose();
@@ -87,7 +92,8 @@ function CadastroAnalysisHouseModal({ open, onClose, onSuccess, analysisHouseId 
         website: '', 
         contactEmail: '', 
         contactPhone: '', 
-        subscriptionType: '' 
+        subscriptionType: '',
+        status: 'Ativo' 
       });
     } catch (err) {
       setError('Erro ao salvar casa de análise.');
@@ -147,6 +153,18 @@ function CadastroAnalysisHouseModal({ open, onClose, onSuccess, analysisHouseId 
                   <option value="Basic">Básico</option>
                   <option value="Standard">Padrão</option>
                   <option value="Premium">Premium</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium">Status</label>
+                <select 
+                  name="status" 
+                  value={form.status} 
+                  onChange={handleChange} 
+                  className="border rounded w-full px-3 py-2 mt-1"
+                >
+                  <option value="Ativo">Ativo</option>
+                  <option value="Inativo">Inativo</option>
                 </select>
               </div>
               <div className="flex justify-end gap-2 mt-4">
@@ -263,44 +281,36 @@ export function CadastroAnalysisHouses() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead>
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CNPJ</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Telefone</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo de Assinatura</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+                  <th className="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome</th>
+                  <th className="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CNPJ</th>
+                  <th className="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Website</th>
+                  <th className="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-3 bg-gray-50"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
-                {analysisHouses.map((analysisHouse) => (
-                  <tr key={analysisHouse.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{analysisHouse.name}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{analysisHouse.cnpj || '-'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{analysisHouse.contactEmail || '-'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{analysisHouse.contactPhone || '-'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{analysisHouse.subscriptionType || '-'}</td>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {analysisHouses.map((house) => (
+                  <tr key={house.id}>
+                    <td className="px-6 py-4 whitespace-nowrap">{house.name}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">{house.cnpj}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">{house.website}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+  {(house.status as string) === 'ACTIVE' ? (
+    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+      Ativo
+    </span>
+  ) : (
+    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
+      Inativo
+    </span>
+  )}
+</td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button 
-                        onClick={() => handleEdit(analysisHouse.id!)} 
-                        className="text-indigo-600 hover:text-indigo-900 mr-4"
-                        title="Editar"
-                      >
-                        <Pencil size={18} />
-                      </button>
-                      <button 
-                        onClick={() => handleDelete(analysisHouse.id!)} 
-                        className="text-red-600 hover:text-red-900" 
-                        title="Excluir" 
-                        disabled={deleteLoading === analysisHouse.id}
-                      >
-                        {deleteLoading === analysisHouse.id ? 
-                          <Loader2 className="animate-spin h-4 w-4" /> : 
-                          <Trash size={18} />
-                        }
-                      </button>
+                      <button onClick={() => { setEditId(house.id); setModalOpen(true); }} className="text-indigo-600 hover:text-indigo-900 mr-2"><Pencil size={16} /></button>
+                      <button onClick={() => handleDelete(house.id!)} className="text-red-600 hover:text-red-900"><Trash size={16} /></button>
                     </td>
                   </tr>
                 ))}

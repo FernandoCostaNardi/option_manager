@@ -45,6 +45,14 @@ export class ApiService {
       
       // Verifica se a resposta foi bem-sucedida
       if (!response.ok) {
+        // Verifica se é erro de autenticação (401)
+        if (response.status === 401) {
+          console.log('Token expirado ou inválido. Redirecionando para login...');
+          localStorage.removeItem('token');
+          window.location.href = '/login';
+          throw new Error('Sessão expirada. Por favor, faça login novamente.');
+        }
+        
         // Tenta extrair a mensagem de erro da resposta
         try {
           const errorData = await response.json();

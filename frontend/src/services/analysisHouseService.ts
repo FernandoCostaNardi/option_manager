@@ -8,6 +8,7 @@ export interface AnalysisHouse {
   contactEmail?: string;
   contactPhone?: string;
   subscriptionType?: string;
+  status?: 'Ativo' | 'Inativo';
 }
 
 export interface AnalysisHousePaginated {
@@ -35,7 +36,7 @@ export class AnalysisHouseService {
     return ApiService.delete(`/analysis-houses/${id}`);
   }
 
-  static async createAnalysisHouse(data: Omit<AnalysisHouse, 'id'>): Promise<AnalysisHouse> {
+  static async createAnalysisHouse(data: AnalysisHouse): Promise<AnalysisHouse> {
     return ApiService.post('/analysis-houses', data);
   }
 }
