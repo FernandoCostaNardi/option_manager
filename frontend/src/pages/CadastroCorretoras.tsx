@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Brokerage, BrokerageService, BrokeragePaginated } from '../services/brokerageService';
 import { Pencil, Trash, Loader2, Plus } from 'lucide-react';
 import { Pagination } from '../components/Pagination'; // Importação do componente
+import { ConfirmDialog } from '../components/ConfirmDialog';
 
 interface ModalProps {
   open: boolean;
@@ -141,11 +142,20 @@ export function CadastroCorretoras() {
     setModalOpen(true);
   };
 
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Tem certeza que deseja excluir esta corretora?')) return;
-    setDeleteLoading(id);
+    setDeleteId(id);
+    setConfirmDialogOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteId) return;
+    
+    setDeleteLoading(deleteId);
     try {
-      await BrokerageService.deleteBrokerage(id);
+      await BrokerageService.deleteBrokerage(deleteId);
       // Refetch na mesma página ou ajustar se o último item for excluído
       const newTotalPages = Math.ceil((totalPages * 10 - 1) / 10); // Estimativa simples
       const pageToFetch = (brokerages.length === 1 && page > 0) ? page - 1 : page;
@@ -170,11 +180,11 @@ export function CadastroCorretoras() {
   };
 
   return (
-    <div className="p-4">
+    <><div className="p-4">
       <header className="mb-8 flex items-center justify-between">
         <h1 className="text-2xl md:text-3xl font-bold text-gray-800">Corretoras</h1>
-        <button 
-          onClick={() => { setModalOpen(true); setEditId(undefined); }} 
+        <button
+          onClick={() => { setModalOpen(true); setEditId(undefined); } }
           className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-lg hover:from-blue-700 hover:to-indigo-800 shadow-sm flex items-center gap-2"
         >
           <Plus size={18} /> {/* Add the Plus icon here */}
@@ -186,8 +196,7 @@ export function CadastroCorretoras() {
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         onSuccess={() => fetchBrokerages(page)} // Recarregar página atual ao ter sucesso
-        brokerageId={editId}
-      />
+        brokerageId={editId} />
 
       {brokerages.length === 0 ? (
         <div className="bg-white rounded-xl shadow-sm p-10 text-center border border-gray-100">
@@ -218,23 +227,22 @@ export function CadastroCorretoras() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{brokerage.account || '-'}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{brokerage.agency || '-'}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button 
-                        onClick={() => handleEdit(brokerage.id!)} 
+                      <button
+                        onClick={() => handleEdit(brokerage.id!)}
                         className="text-indigo-600 hover:text-indigo-900 mr-4"
                         title="Editar"
                       >
                         <Pencil size={18} />
                       </button>
-                      <button 
-                        onClick={() => handleDelete(brokerage.id!)} 
-                        className="text-red-600 hover:text-red-900" 
-                        title="Excluir" 
+                      <button
+                        onClick={() => handleDelete(brokerage.id!)}
+                        className="text-red-600 hover:text-red-900"
+                        title="Excluir"
                         disabled={deleteLoading === brokerage.id}
                       >
-                        {deleteLoading === brokerage.id ? 
-                          <Loader2 className="animate-spin h-4 w-4" /> : 
-                          <Trash size={18} />
-                        }
+                        {deleteLoading === brokerage.id ?
+                          <Loader2 className="animate-spin h-4 w-4" /> :
+                          <Trash size={18} />}
                       </button>
                     </td>
                   </tr>
@@ -242,54 +250,26 @@ export function CadastroCorretoras() {
               </tbody>
             </table>
           </div>
-          
+
           <div className="px-6 py-3 flex items-center justify-between border-t border-gray-200">
             <div className="text-sm text-gray-500">
               Mostrando {brokerages.length} de {totalPages * 10} resultados
             </div>
-            
-            <div className="flex gap-2">
-              <button 
-                onClick={() => page > 0 && handlePageChange(page - 1)}
-                disabled={page === 0}
-                className="px-3 py-1 border border-gray-300 rounded-md text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:hover:bg-white"
-              >
-                Anterior
-              </button>
-              
-              {Array.from({ length: Math.min(totalPages, 3) }, (_, i) => {
-                const pageNumber = page <= 0 ? i : 
-                                  page >= totalPages - 2 ? totalPages - 3 + i : 
-                                  page - 1 + i;
-                
-                if (pageNumber < 0 || pageNumber >= totalPages) return null;
-                
-                return (
-                  <button 
-                    key={pageNumber}
-                    onClick={() => handlePageChange(pageNumber)}
-                    className={`px-3 py-1 border rounded-md text-sm ${
-                      page === pageNumber 
-                        ? 'bg-blue-50 text-blue-600 border-blue-200' 
-                        : 'border-gray-300 text-gray-600 hover:bg-gray-50'
-                    }`}
-                  >
-                    {pageNumber + 1}
-                  </button>
-                );
-              })}
-              
-              <button 
-                onClick={() => page < totalPages - 1 && handlePageChange(page + 1)}
-                disabled={page >= totalPages - 1}
-                className="px-3 py-1 border border-gray-300 rounded-md text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:hover:bg-white"
-              >
-                Próximo
-              </button>
-            </div>
+
+            <Pagination
+              currentPage={page}
+              totalPages={totalPages}
+              onPageChange={handlePageChange} />
           </div>
         </div>
       )}
-    </div>
+    </div><ConfirmDialog
+        isOpen={confirmDialogOpen}
+        onClose={() => setConfirmDialogOpen(false)}
+        onConfirm={confirmDelete}
+        title="Excluir Corretora"
+        description="Tem certeza que deseja excluir esta corretora? Esta ação não pode ser desfeita."
+        confirmText="Excluir"
+        cancelText="Cancelar" /></>
   );
 }

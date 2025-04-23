@@ -1,0 +1,371 @@
+import React, { useEffect, useState } from 'react';
+import { AnalysisHouse, AnalysisHouseService, AnalysisHousePaginated } from '../services/analysisHouseService';
+import { Pencil, Trash, Loader2, Plus } from 'lucide-react';
+import { ConfirmDialog } from '../components/ConfirmDialog';
+
+interface ModalProps {
+  open: boolean;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+function CadastroAnalysisHouseModal({ open, onClose, onSuccess, analysisHouseId }: ModalProps & { analysisHouseId?: string }) {
+  const [form, setForm] = useState({ 
+    name: '', 
+    cnpj: '', 
+    website: '', 
+    contactEmail: '', 
+    contactPhone: '', 
+    subscriptionType: '' 
+  });
+  const [loading, setLoading] = useState(() => open && !!analysisHouseId);
+  const [error, setError] = useState('');
+  
+  useEffect(() => {
+    if (open && analysisHouseId) {
+      setLoading(true);
+      AnalysisHouseService.getAnalysisHouseById(analysisHouseId)
+        .then((data) => {
+          setForm({
+            name: data.name || '',
+            cnpj: data.cnpj || '',
+            website: data.website || '',
+            contactEmail: data.contactEmail || '',
+            contactPhone: data.contactPhone || '',
+            subscriptionType: data.subscriptionType || ''
+          });
+        })
+        .catch(() => setError('Erro ao buscar casa de análise.'))
+        .finally(() => setLoading(false));
+    } else if (open && !analysisHouseId) {
+      setForm({ 
+        name: '', 
+        cnpj: '', 
+        website: '', 
+        contactEmail: '', 
+        contactPhone: '', 
+        subscriptionType: '' 
+      });
+      setError('');
+    }
+  }, [open, analysisHouseId]);
+
+  if (!open) return null;
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    setForm({ ...form, [e.target.name]: e.target.value });
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    if (!form.name) {
+      setError('Nome é obrigatório.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const payload = {
+        id: analysisHouseId,
+        name: form.name,
+        cnpj: form.cnpj,
+        ...(form.website ? { website: form.website } : {}),
+        ...(form.contactEmail ? { contactEmail: form.contactEmail } : {}),
+        ...(form.contactPhone ? { contactPhone: form.contactPhone } : {}),
+        ...(form.subscriptionType ? { subscriptionType: form.subscriptionType } : {})
+      };
+      if (analysisHouseId) {
+        await AnalysisHouseService.updateAnalysisHouse(analysisHouseId, payload);
+      } else {
+        await AnalysisHouseService.createAnalysisHouse(payload);
+      }
+      onSuccess();
+      onClose();
+      setForm({ 
+        name: '', 
+        cnpj: '', 
+        website: '', 
+        contactEmail: '', 
+        contactPhone: '', 
+        subscriptionType: '' 
+      });
+    } catch (err) {
+      setError('Erro ao salvar casa de análise.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+      <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
+        {loading ? (
+          <div className="flex justify-center items-center p-6">
+            <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+          </div>
+        ) : (
+          <>
+            <h2 className="text-xl font-bold mb-4">Cadastrar Casa de Análise</h2>
+            {error && <div className="text-red-600 text-sm mb-2">{error}</div>}
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium">Nome *</label>
+                <input name="name" value={form.name} onChange={handleChange} className="border rounded w-full px-3 py-2 mt-1" required />
+              </div>
+              <div>
+                <label className="block text-sm font-medium">CNPJ</label>
+                <input name="cnpj" value={form.cnpj} onChange={handleChange} className="border rounded w-full px-3 py-2 mt-1" placeholder="Opcional" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium">Website</label>
+                <input name="website" value={form.website} onChange={handleChange} className="border rounded w-full px-3 py-2 mt-1" placeholder="Opcional" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium">Email de Contato</label>
+                <input 
+                  name="contactEmail" 
+                  type="email" 
+                  value={form.contactEmail} 
+                  onChange={handleChange} 
+                  className="border rounded w-full px-3 py-2 mt-1" 
+                  placeholder="Opcional" 
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium">Telefone de Contato</label>
+                <input name="contactPhone" value={form.contactPhone} onChange={handleChange} className="border rounded w-full px-3 py-2 mt-1" placeholder="Opcional" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium">Tipo de Assinatura</label>
+                <select 
+                  name="subscriptionType" 
+                  value={form.subscriptionType} 
+                  onChange={handleChange} 
+                  className="border rounded w-full px-3 py-2 mt-1"
+                >
+                  <option value="">Selecione...</option>
+                  <option value="Basic">Básico</option>
+                  <option value="Standard">Padrão</option>
+                  <option value="Premium">Premium</option>
+                </select>
+              </div>
+              <div className="flex justify-end gap-2 mt-4">
+                <button type="button" onClick={onClose} className="px-4 py-2 rounded bg-gray-200">Cancelar</button>
+                <button type="submit" className="px-4 py-2 rounded bg-indigo-600 text-white" disabled={loading}>{loading ? 'Salvando...' : 'Salvar'}</button>
+              </div>
+            </form>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function CadastroAnalysisHouses() {
+  const [analysisHouses, setAnalysisHouses] = useState<AnalysisHouse[]>([]);
+  const [page, setPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editId, setEditId] = useState<string | undefined>(undefined);
+  const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
+
+  // Add these two states:
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  // Função para buscar casas de análise
+  const fetchAnalysisHouses = async (currentPage: number = page) => {
+    console.log("Buscando casas de análise da página:", currentPage);
+    try {
+      const data: AnalysisHousePaginated = await AnalysisHouseService.getAnalysisHouses(currentPage, 10);
+      console.log("Dados recebidos:", data);
+      setAnalysisHouses(data.content);
+      // Garantir que totalPages seja pelo menos 1 para forçar exibição da paginação
+      setTotalPages(Math.max(1, data.totalPages));
+      setPage(currentPage); 
+    } catch (error) {
+      console.error("Erro ao buscar casas de análise:", error);
+      setAnalysisHouses([]);
+      // Manter totalPages como 1 mesmo em caso de erro
+      setTotalPages(1);
+    }
+  };
+
+  const handleEdit = (id: string) => {
+    setEditId(id);
+    setModalOpen(true);
+  };
+
+  // Update the handleDelete function to open the dialog instead of using window.confirm
+  const handleDelete = (id: string) => {
+    setDeleteId(id);
+    setConfirmDialogOpen(true);
+  };
+
+  // Add a new function to handle the confirmation
+  const confirmDelete = async () => {
+    if (!deleteId) return;
+    
+    setDeleteLoading(deleteId);
+    try {
+      await AnalysisHouseService.deleteAnalysisHouse(deleteId);
+      const pageToFetch = (analysisHouses.length === 1 && page > 0) ? page - 1 : page;
+      fetchAnalysisHouses(pageToFetch);
+    } catch {
+      alert('Erro ao excluir casa de análise.');
+    } finally {
+      setDeleteLoading(null);
+      setConfirmDialogOpen(false); // Close dialog after operation
+      setDeleteId(null); // Clear deleteId after operation
+    }
+  };
+
+  // Buscar casas de análise quando o componente monta
+  useEffect(() => {
+    console.log("Componente montado, buscando dados iniciais");
+    fetchAnalysisHouses(0); // Buscar página inicial
+  }, []); // Array de dependências vazio garante que isso roda apenas uma vez na montagem
+
+  // Handler para mudanças de página
+  const handlePageChange = (newPage: number) => {
+    console.log("Mudando para página:", newPage);
+    fetchAnalysisHouses(newPage);
+  };
+
+  return (
+    <div className="p-4">
+      <header className="mb-8 flex items-center justify-between">
+        <h1 className="text-2xl md:text-3xl font-bold text-gray-800">Casas de Análise</h1>
+        <button 
+          onClick={() => { setModalOpen(true); setEditId(undefined); }} 
+          className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-lg hover:from-blue-700 hover:to-indigo-800 shadow-sm flex items-center gap-2"
+        >
+          <Plus size={18} />
+          <span>Nova Casa de Análise</span>
+        </button>
+      </header>
+
+      <CadastroAnalysisHouseModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        onSuccess={() => fetchAnalysisHouses(page)} // Recarregar página atual ao ter sucesso
+        analysisHouseId={editId}
+      />
+
+      {analysisHouses.length === 0 ? (
+        <div className="bg-white rounded-xl shadow-sm p-10 text-center border border-gray-100">
+          <p className="text-gray-500">Nenhuma casa de análise cadastrada ainda.</p>
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
+          <div className="px-6 py-4 border-b border-gray-100">
+            <h2 className="font-semibold text-gray-800">Casas de Análise Cadastradas</h2>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CNPJ</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Telefone</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo de Assinatura</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {analysisHouses.map((analysisHouse) => (
+                  <tr key={analysisHouse.id}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{analysisHouse.name}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{analysisHouse.cnpj || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{analysisHouse.contactEmail || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{analysisHouse.contactPhone || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{analysisHouse.subscriptionType || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <button 
+                        onClick={() => handleEdit(analysisHouse.id!)} 
+                        className="text-indigo-600 hover:text-indigo-900 mr-4"
+                        title="Editar"
+                      >
+                        <Pencil size={18} />
+                      </button>
+                      <button 
+                        onClick={() => handleDelete(analysisHouse.id!)} 
+                        className="text-red-600 hover:text-red-900" 
+                        title="Excluir" 
+                        disabled={deleteLoading === analysisHouse.id}
+                      >
+                        {deleteLoading === analysisHouse.id ? 
+                          <Loader2 className="animate-spin h-4 w-4" /> : 
+                          <Trash size={18} />
+                        }
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          
+          <div className="px-6 py-3 flex items-center justify-between border-t border-gray-200">
+            <div className="text-sm text-gray-500">
+              Mostrando {analysisHouses.length} de {totalPages * 10} resultados
+            </div>
+            
+            <div className="flex gap-2">
+              <button 
+                onClick={() => page > 0 && handlePageChange(page - 1)}
+                disabled={page === 0}
+                className="px-3 py-1 border border-gray-300 rounded-md text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:hover:bg-white"
+              >
+                Anterior
+              </button>
+              
+              {Array.from({ length: Math.min(totalPages, 3) }, (_, i) => {
+                const pageNumber = page <= 0 ? i : 
+                                  page >= totalPages - 2 ? totalPages - 3 + i : 
+                                  page - 1 + i;
+                
+                if (pageNumber < 0 || pageNumber >= totalPages) return null;
+                
+                return (
+                  <button 
+                    key={pageNumber}
+                    onClick={() => handlePageChange(pageNumber)}
+                    className={`px-3 py-1 border rounded-md text-sm ${
+                      page === pageNumber 
+                        ? 'bg-blue-50 text-blue-600 border-blue-200' 
+                        : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    {pageNumber + 1}
+                  </button>
+                );
+              })}
+              
+              <button 
+                onClick={() => page < totalPages - 1 && handlePageChange(page + 1)}
+                disabled={page >= totalPages - 1}
+                className="px-3 py-1 border border-gray-300 rounded-md text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:hover:bg-white"
+              >
+                Próximo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      <ConfirmDialog
+        isOpen={confirmDialogOpen}
+        onClose={() => setConfirmDialogOpen(false)}
+        onConfirm={confirmDelete}
+        title="Excluir Casa de Análise"
+        description="Tem certeza que deseja excluir esta casa de análise? Esta ação não pode ser desfeita."
+        confirmText="Excluir"
+        cancelText="Cancelar"
+      />
+    </div>
+  );
+}
+

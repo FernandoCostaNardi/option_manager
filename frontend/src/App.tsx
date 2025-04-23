@@ -7,6 +7,7 @@ import { Register } from './pages/Register';
 import { Layout } from './components/Layout';
 import { NotasCorretagem } from './pages/importacoes/NotasCorretagem';
 import { CadastroCorretoras } from './pages/CadastroCorretoras';
+import { CadastroAnalysisHouses } from './pages/CadastroAnalysisHouses';
 
 function App() {
   return (
@@ -26,7 +27,7 @@ function App() {
               {/* Cadastros */}
               <Route path="cadastro">
                 <Route path="corretoras" element={<CadastroCorretoras />} />
-                <Route path="casas-analise" element={<div className="p-4">Cadastro de Casas de Análise</div>} />
+                <Route path="casas-analise" element={<CadastroAnalysisHouses />} />
               </Route>
               
               {/* Transações */}
