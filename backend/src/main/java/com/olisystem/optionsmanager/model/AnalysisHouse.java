@@ -21,6 +21,9 @@ public class AnalysisHouse {
   private String contactPhone;
   private String subscriptionType; // e.g., "Free", "Premium", "Enterprise"
 
+  @Enumerated(EnumType.STRING)
+  private StatusType status = StatusType.ACTIVE; // Valor padrão: Ativo
+
   @ManyToOne
   @JoinColumn(name = "user_id")
   private User user; // Reference to the logged-in user

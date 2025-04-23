@@ -3,6 +3,7 @@ package com.olisystem.optionsmanager.mapper;
 import com.olisystem.optionsmanager.dto.AnalysisHouseCreateRequestDto;
 import com.olisystem.optionsmanager.dto.AnalysisHouseResponseDto;
 import com.olisystem.optionsmanager.model.AnalysisHouse;
+import com.olisystem.optionsmanager.model.StatusType;
 import com.olisystem.optionsmanager.model.User;
 
 public class AnalysisHouseMapper {
@@ -15,6 +16,7 @@ public class AnalysisHouseMapper {
         .contactEmail(dto.getContactEmail())
         .contactPhone(dto.getContactPhone())
         .subscriptionType(dto.getSubscriptionType())
+        .status(dto.getStatus() != null ? dto.getStatus() : StatusType.ACTIVE)
         .user(user)
         .build();
   }
@@ -28,6 +30,7 @@ public class AnalysisHouseMapper {
         .contactEmail(entity.getContactEmail())
         .contactPhone(entity.getContactPhone())
         .subscriptionType(entity.getSubscriptionType())
+        .status(entity.getStatus())
         .build();
   }
 }

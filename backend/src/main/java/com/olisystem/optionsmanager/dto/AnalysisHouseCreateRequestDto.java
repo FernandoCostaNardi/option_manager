@@ -1,14 +1,9 @@
 package com.olisystem.optionsmanager.dto;
 
-import lombok.AllArgsConstructor;
-import lombok.Builder;
+import com.olisystem.optionsmanager.model.StatusType;
 import lombok.Data;
-import lombok.NoArgsConstructor;
 
 @Data
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
 public class AnalysisHouseCreateRequestDto {
   private String name;
   private String cnpj;
@@ -16,4 +11,5 @@ public class AnalysisHouseCreateRequestDto {
   private String contactEmail;
   private String contactPhone;
   private String subscriptionType;
+  private StatusType status;
 }
