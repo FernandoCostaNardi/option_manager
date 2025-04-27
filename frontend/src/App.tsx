@@ -8,6 +8,7 @@ import { Layout } from './components/Layout';
 import { NotasCorretagem } from './pages/importacoes/NotasCorretagem';
 import { CadastroCorretoras } from './pages/CadastroCorretoras';
 import { CadastroAnalysisHouses } from './pages/CadastroAnalysisHouses';
+import { Operacoes } from './pages/operacoes/Operacoes';
 
 function App() {
   return (
@@ -37,7 +38,7 @@ function App() {
               
               {/* Operações */}
               <Route path="operacoes">
-                <Route path="operacoes" element={<div className="p-4">Operações</div>} />
+                <Route path="operacoes" element={<Operacoes />} />
                 <Route path="dados-diarios" element={<div className="p-4">Dados Diários</div>} />
               </Route>
               
