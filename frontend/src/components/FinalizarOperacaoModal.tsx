@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X } from 'lucide-react';
+import { X, Loader2, CheckCircle, XCircle } from 'lucide-react';
+import axios from 'axios';
 
 interface FinalizarOperacaoModalProps {
   isOpen: boolean;
@@ -21,132 +22,104 @@ interface OperacaoAtiva {
 }
 
 export function FinalizarOperacaoModal({ isOpen, operacaoId, onClose, onSuccess }: FinalizarOperacaoModalProps) {
-  // Estado para armazenar os dados da operação ativa
+  // Estado para os detalhes da operação
   const [operacao, setOperacao] = useState<OperacaoAtiva | null>(null);
   
   // Estados para os campos do formulário
-  const [dataSaida, setDataSaida] = useState('');
-  const [valorUnitarioSaida, setValorUnitarioSaida] = useState('');
-  
-  // Estados calculados
-  const [valorTotalSaida, setValorTotalSaida] = useState(0);
-  const [valorLucroPrejuizo, setValorLucroPrejuizo] = useState(0);
-  const [percentualLucroPrejuizo, setPercentualLucroPrejuizo] = useState(0);
   const [status, setStatus] = useState<'Vencedor' | 'Perdedor'>('Vencedor');
+  const [valorUnitarioSaida, setValorUnitarioSaida] = useState('');
+  const [dataSaida, setDataSaida] = useState('');
   
-  // Estado para controle de carregamento
-  const [loading, setLoading] = useState(false);
-  const [loadingOperacao, setLoadingOperacao] = useState(false);
+  // Estados para controle de carregamento e erros
+  const [carregando, setCarregando] = useState(false);
+  const [salvando, setSalvando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Carregar os dados da operação quando o modal for aberto
+  // Carregar os detalhes da operação ao abrir o modal
   useEffect(() => {
     if (isOpen && operacaoId) {
-      carregarOperacao(operacaoId);
+      carregarOperacao();
     }
   }, [isOpen, operacaoId]);
 
-  // Definir a data de saída como a data atual quando o modal for aberto
-  useEffect(() => {
-    if (isOpen) {
-      const hoje = new Date();
-      const dataFormatada = hoje.toISOString().split('T')[0]; // Formato YYYY-MM-DD
-      setDataSaida(dataFormatada);
-    }
-  }, [isOpen]);
-
-  // Calcular os valores quando o valor unitário de saída mudar
-  useEffect(() => {
-    if (operacao && valorUnitarioSaida) {
-      const valorUnitSaida = parseFloat(valorUnitarioSaida);
-      const valorTotalSaida = operacao.quantidade * valorUnitSaida;
-      const lucroPrejuizo = valorTotalSaida - operacao.valorTotal;
-      const percentual = (lucroPrejuizo / operacao.valorTotal) * 100;
-      
-      setValorTotalSaida(valorTotalSaida);
-      setValorLucroPrejuizo(lucroPrejuizo);
-      setPercentualLucroPrejuizo(percentual);
-      setStatus(lucroPrejuizo >= 0 ? 'Vencedor' : 'Perdedor');
-    }
-  }, [operacao, valorUnitarioSaida]);
-
-  // Função para carregar os dados da operação
-  const carregarOperacao = async (id: string) => {
-    setLoadingOperacao(true);
+  // Função para carregar os detalhes da operação
+  const carregarOperacao = async () => {
+    if (!operacaoId) return;
+    
+    setCarregando(true);
     setError(null);
-
+    
     try {
-      // Aqui seria a chamada para a API real
-      // Por enquanto, simulamos com dados mockados
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Simulação de chamada de API para facilitar teste
+      await new Promise(resolve => setTimeout(resolve, 800));
       
-      // Dados mockados para exemplo
-      const operacaoMock: OperacaoAtiva = {
-        id: id,
-        dataEntrada: '2023-05-15',
-        casaAnalise: 'Empiricus',
-        corretora: 'XP Investimentos',
-        opcao: 'PETR4',
-        logoEmpresa: 'https://logodownload.org/wp-content/uploads/2014/07/petrobras-logo-1-1.png',
-        quantidade: 100,
-        valorUnitario: 32.50,
-        valorTotal: 3250.00
+      // Dados mockados para demonstração
+      const operacaoMockada: OperacaoAtiva = {
+        id: operacaoId,
+        dataEntrada: '2023-07-10',
+        casaAnalise: 'Nord Research',
+        corretora: 'Rico',
+        opcao: 'ITUB4',
+        logoEmpresa: 'https://logodownload.org/wp-content/uploads/2016/09/itau-logo-1-1.png',
+        quantidade: 200,
+        valorUnitario: 28.30,
+        valorTotal: 5660.00
       };
       
-      setOperacao(operacaoMock);
+      setOperacao(operacaoMockada);
+      
+      // Inicializar com a data atual formatada para o input date
+      const hoje = new Date();
+      const dataFormatada = hoje.toISOString().split('T')[0];
+      setDataSaida(dataFormatada);
     } catch (error) {
       console.error('Erro ao carregar operação:', error);
-      setError('Não foi possível carregar os dados da operação. Tente novamente.');
+      setError('Não foi possível carregar os detalhes da operação. Tente novamente.');
     } finally {
-      setLoadingOperacao(false);
+      setCarregando(false);
     }
   };
 
-  // Função para limpar o formulário
-  const limparFormulario = () => {
-    setDataSaida('');
-    setValorUnitarioSaida('');
-    setValorTotalSaida(0);
-    setValorLucroPrejuizo(0);
-    setPercentualLucroPrejuizo(0);
-    setStatus('Vencedor');
-    setOperacao(null);
-    setError(null);
-  };
-
-  // Função para fechar o modal
-  const handleClose = () => {
-    limparFormulario();
-    onClose();
-  };
-
-  // Função para finalizar a operação
-  const handleFinalizar = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-
-    // Validação básica
-    if (!dataSaida || !valorUnitarioSaida) {
-      setError('Todos os campos são obrigatórios');
-      setLoading(false);
+  // Função para salvar a finalização da operação
+  const salvarFinalizacao = async () => {
+    if (!operacao) return;
+    
+    if (!valorUnitarioSaida || !dataSaida) {
+      setError('Por favor, preencha todos os campos.');
       return;
     }
-
+    
+    setSalvando(true);
+    setError(null);
+    
     try {
-      // Aqui seria a chamada para a API real
-      // Por enquanto, apenas simulamos uma chamada bem-sucedida
+      // Simulação de chamada de API para facilitar teste
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      // Notificar sucesso e fechar o modal
+      // Sucesso - notificar o componente pai
       onSuccess();
-      handleClose();
     } catch (error) {
       console.error('Erro ao finalizar operação:', error);
       setError('Não foi possível finalizar a operação. Tente novamente.');
     } finally {
-      setLoading(false);
+      setSalvando(false);
     }
+  };
+
+  // Cálculo dos valores de saída
+  const calcularValores = () => {
+    if (!operacao || !valorUnitarioSaida) return null;
+    
+    const valorUnitarioSaidaNum = parseFloat(valorUnitarioSaida);
+    const valorTotalSaida = operacao.quantidade * valorUnitarioSaidaNum;
+    const valorLucroPrejuizo = valorTotalSaida - operacao.valorTotal;
+    const percentualLucroPrejuizo = (valorLucroPrejuizo / operacao.valorTotal) * 100;
+    
+    return {
+      valorTotalSaida,
+      valorLucroPrejuizo,
+      percentualLucroPrejuizo
+    };
   };
 
   // Função para formatar valores em reais
@@ -160,151 +133,205 @@ export function FinalizarOperacaoModal({ isOpen, operacaoId, onClose, onSuccess 
   // Se o modal não estiver aberto, não renderiza nada
   if (!isOpen) return null;
 
+  // Calcular os valores
+  const valores = calcularValores();
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
-        <div className="flex justify-between items-center p-6 border-b border-gray-100">
-          <h2 className="text-xl font-semibold text-gray-800">Finalizar Operação</h2>
+    <div 
+      role="dialog" 
+      aria-modal="true" 
+      aria-labelledby="finalizar-modal-title"
+      className="fixed inset-0 flex items-center justify-center z-50 p-4"
+    >
+      {/* Overlay do modal */}
+      <div className="fixed inset-0 bg-gray-900 bg-opacity-75" onClick={onClose} />
+      
+      {/* Conteúdo do modal */}
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden relative z-10">
+        {/* Cabeçalho do modal */}
+        <div className="flex justify-between items-center p-4 border-b border-gray-200">
+          <h2 id="finalizar-modal-title" className="text-xl font-semibold text-gray-800">Finalizar Operação</h2>
           <button
-            onClick={handleClose}
-            className="text-gray-400 hover:text-gray-600"
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 focus:outline-none"
+            aria-label="Fechar modal"
           >
             <X className="h-6 w-6" />
           </button>
         </div>
-
-        {loadingOperacao ? (
-          <div className="p-6 flex flex-col items-center justify-center">
-            <div className="animate-spin h-8 w-8 border-4 border-purple-500 rounded-full border-t-transparent mb-4"></div>
-            <p className="text-gray-500">Carregando dados da operação...</p>
-          </div>
-        ) : error && !operacao ? (
-          <div className="p-6">
-            <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">
+        
+        {/* Corpo do modal */}
+        <div className="p-6">
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
               {error}
             </div>
-            <div className="flex justify-end">
-              <button
-                onClick={handleClose}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
-              >
-                Fechar
-              </button>
+          )}
+          
+          {carregando ? (
+            <div className="flex justify-center items-center py-10">
+              <Loader2 className="animate-spin w-8 h-8 text-purple-600" />
+              <span className="ml-3 text-gray-600">Carregando detalhes da operação...</span>
             </div>
-          </div>
-        ) : operacao ? (
-          <form onSubmit={handleFinalizar} className="p-6">
-            {error && (
-              <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">
-                {error}
-              </div>
-            )}
-
-            <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-              <h3 className="font-medium text-gray-700 mb-2">Dados da Operação</h3>
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div>
-                  <span className="text-gray-500">Opção:</span>
-                  <p className="font-medium">{operacao.opcao}</p>
-                </div>
-                <div>
-                  <span className="text-gray-500">Quantidade:</span>
-                  <p className="font-medium">{operacao.quantidade}</p>
-                </div>
-                <div>
-                  <span className="text-gray-500">Valor Unitário:</span>
-                  <p className="font-medium">{formatarMoeda(operacao.valorUnitario)}</p>
-                </div>
-                <div>
-                  <span className="text-gray-500">Valor Total:</span>
-                  <p className="font-medium">{formatarMoeda(operacao.valorTotal)}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label htmlFor="dataSaida" className="block text-sm font-medium text-gray-700 mb-1">
-                  Data de Saída
-                </label>
-                <input
-                  type="date"
-                  id="dataSaida"
-                  value={dataSaida}
-                  onChange={(e) => setDataSaida(e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  disabled={loading}
-                />
-              </div>
-
-              <div>
-                <label htmlFor="valorUnitarioSaida" className="block text-sm font-medium text-gray-700 mb-1">
-                  Valor Unitário de Saída (R$)
-                </label>
-                <input
-                  type="number"
-                  id="valorUnitarioSaida"
-                  value={valorUnitarioSaida}
-                  onChange={(e) => setValorUnitarioSaida(e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  placeholder="Ex: 35.75"
-                  step="0.01"
-                  min="0.01"
-                  disabled={loading}
-                />
-              </div>
-
-              {valorUnitarioSaida && (
-                <div className="p-3 bg-gray-50 rounded-lg space-y-2">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Valor Total de Saída:</span>
-                    <span className="font-medium">{formatarMoeda(valorTotalSaida)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Lucro/Prejuízo:</span>
-                    <span className={`font-medium ${valorLucroPrejuizo >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {formatarMoeda(valorLucroPrejuizo)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Percentual:</span>
-                    <span className={`font-medium ${percentualLucroPrejuizo >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {percentualLucroPrejuizo.toFixed(2)}%
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Status:</span>
-                    <span className={`px-2 py-1 text-xs font-semibold rounded-full ${status === 'Vencedor' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                      {status}
-                    </span>
+          ) : operacao ? (
+            <div className="space-y-6">
+              {/* Detalhes da operação */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <img src={operacao.logoEmpresa} alt={operacao.opcao} className="h-10 w-10 rounded-full object-contain" />
+                  <div>
+                    <h3 className="font-bold text-lg">{operacao.opcao}</h3>
+                    <p className="text-sm text-gray-500">{operacao.corretora}</p>
                   </div>
                 </div>
-              )}
-            </div>
-
-            <div className="mt-6 flex justify-end space-x-3">
-              <button
-                type="button"
-                onClick={handleClose}
-                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-                disabled={loading}
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 flex items-center justify-center min-w-[100px]"
-                disabled={loading}
-              >
-                {loading ? (
-                  <span className="animate-pulse">Finalizando...</span>
-                ) : (
-                  'Finalizar'
+                
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-gray-500">Quantidade</p>
+                    <p className="font-medium">{operacao.quantidade}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Valor de Entrada</p>
+                    <p className="font-medium">{formatarMoeda(operacao.valorUnitario)}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Valor Total Investido</p>
+                    <p className="font-medium">{formatarMoeda(operacao.valorTotal)}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Data de Entrada</p>
+                    <p className="font-medium">{new Date(operacao.dataEntrada).toLocaleDateString('pt-BR')}</p>
+                  </div>
+                </div>
+              </div>
+              
+              <hr className="border-gray-200" />
+              
+              {/* Formulário de finalização */}
+              <div className="space-y-4">
+                <div>
+                  <label htmlFor="dataSaida" className="block text-sm font-medium text-gray-700 mb-1">
+                    Data de Saída
+                  </label>
+                  <input
+                    type="date"
+                    id="dataSaida"
+                    value={dataSaida}
+                    onChange={(e) => setDataSaida(e.target.value)}
+                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    disabled={salvando}
+                  />
+                </div>
+                
+                <div>
+                  <label htmlFor="valorUnitarioSaida" className="block text-sm font-medium text-gray-700 mb-1">
+                    Valor Unitário de Saída (R$)
+                  </label>
+                  <input
+                    type="number"
+                    id="valorUnitarioSaida"
+                    value={valorUnitarioSaida}
+                    onChange={(e) => setValorUnitarioSaida(e.target.value)}
+                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    placeholder="0.00"
+                    step="0.01"
+                    min="0.01"
+                    disabled={salvando}
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Resultado da Operação
+                  </label>
+                  <div className="flex gap-4 mt-2">
+                    <label className={`flex items-center cursor-pointer p-3 rounded-lg border ${status === 'Vencedor' ? 'border-green-500 bg-green-50' : 'border-gray-300'}`}>
+                      <input
+                        type="radio"
+                        name="status"
+                        value="Vencedor"
+                        checked={status === 'Vencedor'}
+                        onChange={() => setStatus('Vencedor')}
+                        className="hidden"
+                      />
+                      <CheckCircle className={`w-5 h-5 mr-2 ${status === 'Vencedor' ? 'text-green-500' : 'text-gray-400'}`} />
+                      <span className={status === 'Vencedor' ? 'text-green-700' : 'text-gray-600'}>Vencedor</span>
+                    </label>
+                    
+                    <label className={`flex items-center cursor-pointer p-3 rounded-lg border ${status === 'Perdedor' ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}>
+                      <input
+                        type="radio"
+                        name="status"
+                        value="Perdedor"
+                        checked={status === 'Perdedor'}
+                        onChange={() => setStatus('Perdedor')}
+                        className="hidden"
+                      />
+                      <XCircle className={`w-5 h-5 mr-2 ${status === 'Perdedor' ? 'text-red-500' : 'text-gray-400'}`} />
+                      <span className={status === 'Perdedor' ? 'text-red-700' : 'text-gray-600'}>Perdedor</span>
+                    </label>
+                  </div>
+                </div>
+                
+                {/* Resumo dos valores calculados */}
+                {valores && (
+                  <div className="p-4 bg-gray-50 rounded-lg space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Valor Total de Saída:</span>
+                      <span className="font-medium">{formatarMoeda(valores.valorTotalSaida)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Lucro / Prejuízo:</span>
+                      <span className={valores.valorLucroPrejuizo >= 0 ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>
+                        {formatarMoeda(valores.valorLucroPrejuizo)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Percentual:</span>
+                      <span className={valores.percentualLucroPrejuizo >= 0 ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>
+                        {valores.percentualLucroPrejuizo.toFixed(2)}%
+                      </span>
+                    </div>
+                  </div>
                 )}
-              </button>
+              </div>
             </div>
-          </form>
-        ) : null}
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              Não foi possível carregar os detalhes da operação.
+            </div>
+          )}
+        </div>
+        
+        {/* Rodapé com botões */}
+        <div className="p-4 border-t border-gray-200 flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 mr-3"
+            disabled={salvando}
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={salvarFinalizacao}
+            className={`px-4 py-2 bg-purple-600 text-white rounded-lg flex items-center justify-center min-w-[100px] ${salvando || !operacao ? 'opacity-70 cursor-not-allowed' : 'hover:bg-purple-700'}`}
+            disabled={salvando || !operacao || !valorUnitarioSaida || !dataSaida}
+          >
+            {salvando ? (
+              <>
+                <Loader2 className="animate-spin mr-2 h-4 w-4" />
+                <span>Processando...</span>
+              </>
+            ) : (
+              'Finalizar Operação'
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );

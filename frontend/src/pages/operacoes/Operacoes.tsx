@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { BarChart2, Plus, Edit, Trash, Target, CheckSquare, Eye, Loader2, AlertCircle } from 'lucide-react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
-import { NovaOperacaoModal } from "../../components/NovaOperacaoModal";
-import { FinalizarOperacaoModal } from "../../components/FinalizarOperacaoModal";
+import { BarChart2, Plus, Edit, Trash, CheckSquare, Eye, Loader2, AlertCircle } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
+import { NovaOperacaoModal } from '../../components/NovaOperacaoModal';
+import { FinalizarOperacaoModal } from '../../components/FinalizarOperacaoModal';
+
 
 // Interfaces para os tipos de dados
 interface OperacaoAtiva {
@@ -131,7 +132,7 @@ export function Operacoes() {
   
   // Estado para controlar o modal de nova operação
   const [modalNovaOperacaoAberto, setModalNovaOperacaoAberto] = useState(false);
-  
+
   // Estado para controlar o modal de finalizar operação
   const [modalFinalizarOperacaoAberto, setModalFinalizarOperacaoAberto] = useState(false);
   const [operacaoParaFinalizar, setOperacaoParaFinalizar] = useState<string | null>(null);
@@ -199,10 +200,6 @@ export function Operacoes() {
     }
   };
 
-  const handleAlvos = (id: string) => {
-    alert(`Configurando alvos para operação ${id}`);
-  };
-
   const handleFinalizar = (id: string) => {
     setOperacaoParaFinalizar(id);
     setModalFinalizarOperacaoAberto(true);
@@ -213,11 +210,11 @@ export function Operacoes() {
     alert(`Visualizando detalhes da operação ${id}`);
   };
   
-  // Funções para o modal de nova operação
+  // Handlers para o modal de nova operação
   const abrirModalNovaOperacao = () => {
     setModalNovaOperacaoAberto(true);
   };
-  
+
   const fecharModalNovaOperacao = () => {
     setModalNovaOperacaoAberto(false);
   };
@@ -227,6 +224,8 @@ export function Operacoes() {
     carregarOperacoesAtivas();
     // Mudar para a aba de operações ativas
     setActiveTab("ativas");
+    // Fechar o modal
+    setModalNovaOperacaoAberto(false);
   };
   
   // Funções para o modal de finalizar operação
@@ -239,26 +238,30 @@ export function Operacoes() {
     // Recarregar as operações após finalizar
     carregarOperacoesAtivas();
     carregarOperacoesFinalizadas();
+    // Fechar o modal
+    fecharModalFinalizarOperacao();
   };
 
   return (
-    <div className="container mx-auto py-8">
+    <div className="container mx-auto py-6">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold flex items-center gap-2">
           <BarChart2 className="w-7 h-7 text-purple-600" /> Operações
         </h1>
         <button
-          className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
-          onClick={() => setModalNovaOperacaoAberto(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+          onClick={abrirModalNovaOperacao}
         >
           <Plus className="w-5 h-5" /> Nova Operação
         </button>
       </div>
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="ativas">Operações Ativas</TabsTrigger>
-          <TabsTrigger value="finalizadas">Operações Finalizadas</TabsTrigger>
+      
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="mb-4">
+          <TabsTrigger value="ativas" className="px-4 py-2">Operações Ativas</TabsTrigger>
+          <TabsTrigger value="finalizadas" className="px-4 py-2">Operações Finalizadas</TabsTrigger>
         </TabsList>
+        
         <TabsContent value="ativas">
           {loadingAtivas ? (
             <div className="flex justify-center items-center py-10">
@@ -291,11 +294,11 @@ export function Operacoes() {
                     </tr>
                   ) : (
                     operacoesAtivas.map((op) => (
-                      <tr key={op.id} className="border-b">
+                      <tr key={op.id} className="border-b hover:bg-gray-50">
                         <td className="px-4 py-2 flex items-center gap-2">
-                          <img src={op.logoEmpresa} alt={op.opcao} className="w-7 h-7 rounded-full" />
+                          <img src={op.logoEmpresa} alt={op.opcao} className="w-7 h-7 rounded-full object-contain" />
                           <span>{op.opcao}</span>
-                         </td>
+                        </td>
                         <td className="px-4 py-2 text-center">{formatarData(op.dataEntrada)}</td>
                         <td className="px-4 py-2 text-center">{op.casaAnalise}</td>
                         <td className="px-4 py-2 text-center">{op.corretora}</td>
@@ -303,9 +306,27 @@ export function Operacoes() {
                         <td className="px-4 py-2 text-right">{formatarMoeda(op.valorUnitario)}</td>
                         <td className="px-4 py-2 text-right">{formatarMoeda(op.valorTotal)}</td>
                         <td className="px-4 py-2 flex gap-2 justify-center">
-                          <button title="Editar" className="p-2 rounded hover:bg-gray-100" onClick={() => handleEditar(op.id)}><Edit className="w-4 h-4 text-blue-600" /></button>
-                          <button title="Finalizar" className="p-2 rounded hover:bg-gray-100" onClick={() => { setOperacaoParaFinalizar(op.id); setModalFinalizarOperacaoAberto(true); }}><CheckSquare className="w-4 h-4 text-green-600" /></button>
-                          <button title="Remover" className="p-2 rounded hover:bg-gray-100" onClick={() => handleRemover(op.id)}><Trash className="w-4 h-4 text-red-600" /></button>
+                          <button 
+                            title="Editar" 
+                            className="p-2 rounded hover:bg-gray-100" 
+                            onClick={() => handleEditar(op.id)}
+                          >
+                            <Edit className="w-4 h-4 text-blue-600" />
+                          </button>
+                          <button 
+                            title="Finalizar" 
+                            className="p-2 rounded hover:bg-gray-100" 
+                            onClick={() => handleFinalizar(op.id)}
+                          >
+                            <CheckSquare className="w-4 h-4 text-green-600" />
+                          </button>
+                          <button 
+                            title="Remover" 
+                            className="p-2 rounded hover:bg-gray-100" 
+                            onClick={() => handleRemover(op.id)}
+                          >
+                            <Trash className="w-4 h-4 text-red-600" />
+                          </button>
                         </td>
                       </tr>
                     ))
@@ -315,6 +336,7 @@ export function Operacoes() {
             </div>
           )}
         </TabsContent>
+        
         <TabsContent value="finalizadas">
           {loadingFinalizadas ? (
             <div className="flex justify-center items-center py-10">
@@ -332,10 +354,10 @@ export function Operacoes() {
                   <tr className="bg-gray-100 text-gray-700">
                     <th className="px-4 py-2">Opção</th>
                     <th className="px-4 py-2">Data Entrada</th>
-                    <th className="px-4 py-2 text-center">Data Saída</th>
-                    <th className="px-4 py-2 text-center">Casa de Análise</th>
-                    <th className="px-4 py-2 text-center">Corretora</th>
-                    <th className="px-4 py-2 text-center">Quantidade</th>
+                    <th className="px-4 py-2">Data Saída</th>
+                    <th className="px-4 py-2">Casa de Análise</th>
+                    <th className="px-4 py-2">Corretora</th>
+                    <th className="px-4 py-2">Quantidade</th>
                     <th className="px-4 py-2">Valor Entrada</th>
                     <th className="px-4 py-2">Valor Saída</th>
                     <th className="px-4 py-2">Lucro / Prejuízo</th>
@@ -350,9 +372,9 @@ export function Operacoes() {
                     </tr>
                   ) : (
                     operacoesFinalizadas.map((op) => (
-                      <tr key={op.id} className="border-b">
+                      <tr key={op.id} className="border-b hover:bg-gray-50">
                         <td className="px-4 py-2 flex items-center gap-2">
-                          <img src={op.logoEmpresa} alt={op.opcao} className="w-7 h-7 rounded-full" />
+                          <img src={op.logoEmpresa} alt={op.opcao} className="w-7 h-7 rounded-full object-contain" />
                           <span>{op.opcao}</span>
                         </td>
                         <td className="px-4 py-2 text-center">{formatarData(op.dataEntrada)}</td>
@@ -360,10 +382,14 @@ export function Operacoes() {
                         <td className="px-4 py-2 text-center">{op.casaAnalise}</td>
                         <td className="px-4 py-2 text-center">{op.corretora}</td>
                         <td className="px-4 py-2 text-center">{op.quantidade}</td>
-                        <td className="px-4 py-2 text-right ">{formatarMoeda(op.valorUnitario)}</td>
+                        <td className="px-4 py-2 text-right">{formatarMoeda(op.valorUnitario)}</td>
                         <td className="px-4 py-2 text-right">{formatarMoeda(op.valorUnitarioSaida)}</td>
-                        <td className="px-4 py-2 text-right {op.valorLucroPrejuizo >= 0 ? 'text-green-600' : 'text-red-600'}">{formatarMoeda(op.valorLucroPrejuizo)}</td>
-                        <td className="px-4 py-2 text-center {op.percentualLucroPrejuizo >= 0 ? 'text-green-600' : 'text-red-600'}">{op.percentualLucroPrejuizo.toFixed(2)}%</td>
+                        <td className={`px-4 py-2 text-right ${op.valorLucroPrejuizo >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {formatarMoeda(op.valorLucroPrejuizo)}
+                        </td>
+                        <td className={`px-4 py-2 text-center ${op.percentualLucroPrejuizo >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {op.percentualLucroPrejuizo.toFixed(2)}%
+                        </td>
                         <td className="px-4 py-2">
                           <span className={`px-2 py-1 text-xs font-semibold rounded-full ${op.status === 'Vencedor' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                             {op.status}
@@ -378,8 +404,23 @@ export function Operacoes() {
           )}
         </TabsContent>
       </Tabs>
-      <NovaOperacaoModal isOpen={modalNovaOperacaoAberto} onClose={() => setModalNovaOperacaoAberto(false)} onSuccess={carregarOperacoesAtivas} />
-      <FinalizarOperacaoModal isOpen={modalFinalizarOperacaoAberto} operacaoId={operacaoParaFinalizar} onClose={() => setModalFinalizarOperacaoAberto(false)} onSuccess={() => { setModalFinalizarOperacaoAberto(false); carregarOperacoesAtivas(); carregarOperacoesFinalizadas(); }} />
+      
+      {/* Modal de Nova Operação */}
+      <NovaOperacaoModal 
+        isOpen={modalNovaOperacaoAberto} 
+        onClose={fecharModalNovaOperacao} 
+        onSuccess={handleNovaOperacaoSucesso} 
+      />
+      
+      {/* Modal de Finalizar Operação */}
+      {modalFinalizarOperacaoAberto && (
+        <FinalizarOperacaoModal 
+          isOpen={modalFinalizarOperacaoAberto} 
+          operacaoId={operacaoParaFinalizar} 
+          onClose={fecharModalFinalizarOperacao}
+          onSuccess={handleFinalizarOperacaoSucesso} 
+        />
+      )}
     </div>
   );
 }
