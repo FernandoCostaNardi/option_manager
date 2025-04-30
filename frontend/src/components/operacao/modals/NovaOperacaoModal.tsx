@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Loader2, Plus, Edit, Trash } from 'lucide-react';
-import axios from 'axios';
+import api from '../../../services/api';
 
 interface NovaOperacaoModalProps {
   isOpen: boolean;
@@ -51,6 +51,15 @@ export function NovaOperacaoModal({ isOpen, onClose, onSuccess }: NovaOperacaoMo
   // Estado para controle de carregamento e erros
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  
+// Adicionar novo estado para o tipo de operação (Compra ou Venda)
+const [tipoOperacao, setTipoOperacao] = useState<'BUY' | 'SELL' | ''>('');
+// Novo estado para a data de entrada
+const [dataEntrada, setDataEntrada] = useState(() => {
+  const hoje = new Date();
+  return hoje.toISOString().split('T')[0];
+});
 
   // Função para adicionar ou editar target/stop loss
   const adicionarOuEditarTarget = () => {
@@ -103,6 +112,7 @@ export function NovaOperacaoModal({ isOpen, onClose, onSuccess }: NovaOperacaoMo
     setPassoAtual(1);
     setCodigoOpcao('');
     setDadosOpcao(null);
+    setTipoOperacao(''); 
     setQuantidade('');
     setValorUnitario('');
     setCorretoraSelecionada('');
@@ -132,11 +142,8 @@ export function NovaOperacaoModal({ isOpen, onClose, onSuccess }: NovaOperacaoMo
     setError(null);
     
     try {
-      // Chamada à API real
-      const token = localStorage.getItem('token');
-      const response = await axios.get(`http://localhost:8080/api/option-series/${codigoOpcao.trim().toLowerCase()}`,
-        token ? { headers: { Authorization: `Bearer ${token}` } } : undefined
-      );
+      // Usar a instância do axios com interceptor
+      const response = await api.get(`/option-series/${codigoOpcao.trim().toLowerCase()}`);
       setDadosOpcao(response.data);    
       setPassoAtual(2);
     } catch (error) {
@@ -153,6 +160,14 @@ export function NovaOperacaoModal({ isOpen, onClose, onSuccess }: NovaOperacaoMo
       buscarDadosOpcao();
     } else if (passoAtual === 2) {
       // Validar se os campos estão preenchidos antes de avançar
+      if (!tipoOperacao) {
+        setError('Por favor, selecione o tipo de operação (Compra ou Venda)');
+        return;
+      }
+      if (!dataEntrada) {
+        setError('Por favor, selecione a data de entrada da operação');
+        return;
+      }
       if (!quantidade || !valorUnitario) {
         setError('Por favor, preencha a quantidade e o valor unitário');
         return;
@@ -195,15 +210,12 @@ export function NovaOperacaoModal({ isOpen, onClose, onSuccess }: NovaOperacaoMo
     setCarregandoCorretoras(true);
     
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get('http://localhost:8080/api/brokerages?page=0&size=100',
-        token ? { headers: { Authorization: `Bearer ${token}` } } : undefined
-      );
+      const response = await api.get('/brokerages?page=0&size=100');
       const lista = response.data.content || response.data;
       setCorretoras(Array.isArray(lista) ? lista.map((c: any) => ({ id: c.id, name: c.name })) : []);
     } catch (error) {
       console.error('Erro ao carregar corretoras:', error);
-      setError('Não foi possível carregar as corretoras. Tente novamente mais tarde.');
+      setError('Não foi possível carregar a lista de corretoras.');
     } finally {
       setCarregandoCorretoras(false);
     }
@@ -211,20 +223,15 @@ export function NovaOperacaoModal({ isOpen, onClose, onSuccess }: NovaOperacaoMo
 
   // Função para carregar casas de análise
   const carregarCasasAnalise = async () => {
-    if (!temCasaAnalise) return;
-    
     setCarregandoCasasAnalise(true);
     
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get('http://localhost:8080/api/analysis-houses?page=0&size=100',
-        token ? { headers: { Authorization: `Bearer ${token}` } } : undefined
-      );
+      const response = await api.get('/analysis-houses?page=0&size=100');
       const lista = response.data.content || response.data;
       setCasasAnalise(Array.isArray(lista) ? lista.map((c: any) => ({ id: c.id, name: c.name })) : []);
     } catch (error) {
       console.error('Erro ao carregar casas de análise:', error);
-      setError('Não foi possível carregar as casas de análise. Tente novamente mais tarde.');
+      setError('Não foi possível carregar a lista de casas de análise.');
     } finally {
       setCarregandoCasasAnalise(false);
     }
@@ -239,45 +246,56 @@ export function NovaOperacaoModal({ isOpen, onClose, onSuccess }: NovaOperacaoMo
 
   // Função para salvar a operação
   const salvarOperacao = async () => {
-    if (!dadosOpcao || !quantidade || !valorUnitario || !corretoraSelecionada) {
+    if (!dadosOpcao || !quantidade || !valorUnitario || !corretoraSelecionada || !tipoOperacao || !dataEntrada) {
       setError('Por favor, preencha todos os campos obrigatórios');
       return;
     }
-    
+  
     if (temCasaAnalise && !casaAnaliseSelecionada) {
       setError('Por favor, selecione uma casa de análise');
       return;
     }
-    
+  
     setLoading(true);
     setError(null);
-    
+  
     try {
-      // Preparar os dados para envio
+      // Monta o DTO conforme OperationDataRequest
       const payload = {
-        optionSeriesId: dadosOpcao.optionCode.toLowerCase(),
-        quantity: parseInt(quantidade),
-        entryUnitValue: parseFloat(valorUnitario),
+        // id: pode ser omitido para criação, ou gere um UUID se necessário
+        baseAssetCode: dadosOpcao.baseAsset,
+        baseAssetName: dadosOpcao.baseAssetName,
+        baseAssetType: dadosOpcao.baseAssetType,
+        baseAssetLogoUrl: dadosOpcao.baseAssetUrlLogo,
+  
+        optionSeriesCode: dadosOpcao.optionCode,
+        optionSeriesType: dadosOpcao.optionType,
+        optionSeriesStrikePrice: dadosOpcao.optionStrikePrice,
+        optionSeriesExpirationDate: `${dadosOpcao.optionExpirationDate[0]}-${String(dadosOpcao.optionExpirationDate[1]).padStart(2, '0')}-${String(dadosOpcao.optionExpirationDate[2]).padStart(2, '0')}`,
+  
+        targets: targets.map(t => ({
+          type: t.type,
+          sequence: t.sequence,
+          value: parseFloat(t.value)
+        })),
+  
         brokerageId: corretoraSelecionada,
-        ...(temCasaAnalise && casaAnaliseSelecionada ? { analysisHouseId: casaAnaliseSelecionada } : {}),
-        ...(targets.length > 0 ? { 
-          targets: targets.map(t => ({ 
-            type: t.type, 
-            sequence: t.sequence, 
-            value: parseFloat(t.value) 
-          })) 
-        } : {})
+        analysisHouseId: temCasaAnalise ? casaAnaliseSelecionada : undefined,
+        transactionType: tipoOperacao,
+        entryDate: dataEntrada,
+        exitDate: null, // ou defina conforme sua lógica
+        quantity: parseInt(quantidade),
+        entryUnitPrice: parseFloat(valorUnitario)
       };
-      
+  
       const token = localStorage.getItem('token');
-      await axios.post('http://localhost:8080/api/operations', payload, {
-        headers: { 
+      await api.post('http://localhost:8080/api/operations', payload, {
+        headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {})
         }
       });
-      
-      // Notificar sucesso e fechar o modal
+  
       onSuccess();
       handleClose();
     } catch (error) {
@@ -464,6 +482,48 @@ export function NovaOperacaoModal({ isOpen, onClose, onSuccess }: NovaOperacaoMo
 
                 {/* Campos de entrada */}
                 <div className="space-y-4">
+                {/* Tipo de Operação e Data de Entrada (na mesma linha) */}
+<div className="flex gap-4">
+  <div className="flex-1">
+    <label htmlFor="tipoOperacao" className="block text-sm font-medium text-gray-700 mb-1">
+      Tipo de Operação *
+    </label>
+    <div className="relative">
+      <select
+        id="tipoOperacao"
+        value={tipoOperacao}
+        onChange={(e) => setTipoOperacao(e.target.value as 'BUY' | 'SELL' | '')}
+        className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent appearance-none bg-white"
+        disabled={loading}
+        required
+      >
+        <option value="">Selecione o tipo</option>
+        <option value="BUY">Compra</option>
+        <option value="SELL">Venda</option>
+      </select>
+      <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+        <svg className="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+        </svg>
+      </div>
+    </div>
+  </div>
+  
+  <div className="flex-1">
+    <label htmlFor="dataEntrada" className="block text-sm font-medium text-gray-700 mb-1">
+      Data de Entrada *
+    </label>
+    <input
+      type="date"
+      id="dataEntrada"
+      value={dataEntrada}
+      onChange={(e) => setDataEntrada(e.target.value)}
+      className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+      disabled={loading}
+      required
+    />
+  </div>
+</div>
                   <div>
                     <label htmlFor="quantidade" className="block text-sm font-medium text-gray-700 mb-1">
                       Quantidade
@@ -749,7 +809,7 @@ export function NovaOperacaoModal({ isOpen, onClose, onSuccess }: NovaOperacaoMo
                   type="button"
                   onClick={avancarPasso}
                   className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-                  disabled={loading || !quantidade || !valorUnitario}
+                  disabled={loading || !tipoOperacao || !quantidade || !valorUnitario}
                 >
                   Próximo
                 </button>

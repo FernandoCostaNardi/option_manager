@@ -1,13 +1,52 @@
-// Configuração base da API
-const API_BASE_URL = 'http://localhost:8080/api'; // Ajustado para a porta padrão do Spring Boot
+import axios from 'axios';
+import { useAuth } from '../contexts/AuthContext';
 
-/**
- * Classe de serviço para interação com APIs
- */
+// URL base da API
+export const API_BASE_URL = 'http://localhost:8080/api';
+
+// Criar uma instância do axios com configurações padrão
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// Interceptor para adicionar o token em todas as requisições
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Interceptor para tratar erros de resposta
+api.interceptors.response.use(
+  (response) => {
+    return response;
+  },
+  (error) => {
+    // Verificar se é erro de autenticação (401)
+    if (error.response && error.response.status === 401) {
+      console.log('Token expirado ou inválido. Redirecionando para login...');
+      localStorage.removeItem('token');
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
+
+export default api;
+
+// Classe de serviço API para métodos comuns
 export class ApiService {
-  /**
-   * Método para fazer requisições HTTP genéricas
-   */
+  // Método genérico para fazer requisições
   static async request(endpoint: string, method: string = 'GET', data?: any, headers: HeadersInit = {}) {
     // Constrói a URL completa
     const url = `${API_BASE_URL}${endpoint}`;
@@ -81,20 +120,20 @@ export class ApiService {
     }
   }
   
-  // Métodos específicos para cada tipo de requisição
-  static async get(endpoint: string, headers?: HeadersInit) {
+  // Métodos auxiliares para cada tipo de requisição
+  static async get(endpoint: string, headers: HeadersInit = {}) {
     return this.request(endpoint, 'GET', undefined, headers);
   }
   
-  static async post(endpoint: string, data?: any, headers?: HeadersInit) {
+  static async post(endpoint: string, data: any, headers: HeadersInit = {}) {
     return this.request(endpoint, 'POST', data, headers);
   }
   
-  static async put(endpoint: string, data?: any, headers?: HeadersInit) {
+  static async put(endpoint: string, data: any, headers: HeadersInit = {}) {
     return this.request(endpoint, 'PUT', data, headers);
   }
   
-  static async delete(endpoint: string, headers?: HeadersInit) {
+  static async delete(endpoint: string, headers: HeadersInit = {}) {
     return this.request(endpoint, 'DELETE', undefined, headers);
   }
 }
