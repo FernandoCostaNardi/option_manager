@@ -57,4 +57,8 @@ public class Operation {
   private BigDecimal adjustedAveragePrice;
 
   private BigDecimal averagePriceAdjustmentValue;
+
+  @ManyToOne
+  @JoinColumn(name = "user_id")
+  private User user; // Reference to the logged-in user
 }
