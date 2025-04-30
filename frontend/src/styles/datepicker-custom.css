@@ -1,0 +1,15 @@
+/* Estilos personalizados para o DatePicker */
+.react-datepicker-wrapper {
+  width: 100% !important;
+  display: block !important;
+}
+
+.react-datepicker__input-container {
+  width: 100% !important;
+  display: block !important;
+}
+
+.react-datepicker__input-container input {
+  width: 100% !important;
+  display: block !important;
+}
