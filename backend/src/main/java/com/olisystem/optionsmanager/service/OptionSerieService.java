@@ -74,4 +74,8 @@ public class OptionSerieService {
     JSONObject json = brapiClient.getQuoteJson(ticker);
     return AssetFactory.fromJson(json);
   }
+
+  public OptionSerie getOptionSerieByCode(String optionSeriesCode) {
+    return optionSerieRepository.findByCode(optionSeriesCode).orElse(null);
+  }
 }

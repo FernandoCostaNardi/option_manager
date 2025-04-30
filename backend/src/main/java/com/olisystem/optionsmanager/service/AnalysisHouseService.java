@@ -34,4 +34,11 @@ public class AnalysisHouseService {
   public void deleteById(UUID id) {
     analysisHouseRepository.deleteById(id);
   }
+
+  public AnalysisHouse getAnalysisHouseById(UUID analysisHouseId) {
+    return analysisHouseRepository
+        .findById(analysisHouseId)
+        .orElseThrow(
+            () -> new RuntimeException("AnalysisHouse não encontrado com ID: " + analysisHouseId));
+  }
 }

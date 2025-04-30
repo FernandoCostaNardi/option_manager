@@ -33,4 +33,8 @@ public class AssetService {
   public void deleteById(UUID id) {
     assetRepository.deleteById(id);
   }
+
+  public Asset getAssetByCode(String baseAssetCode) {
+    return assetRepository.findByCode(baseAssetCode).orElse(null);
+  }
 }

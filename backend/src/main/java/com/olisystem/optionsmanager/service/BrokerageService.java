@@ -50,4 +50,8 @@ public class BrokerageService {
       return brokerageRepository.findAll(pageable);
     }
   }
+
+  public Brokerage getBrokerageById(UUID brokerageId) {
+    return brokerageRepository.findById(brokerageId).orElse(null);
+  }
 }
