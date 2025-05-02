@@ -4,18 +4,16 @@ import com.olisystem.optionsmanager.model.AnalysisHouse;
 import com.olisystem.optionsmanager.repository.AnalysisHouseRepository;
 import java.util.Optional;
 import java.util.UUID;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
-@RequiredArgsConstructor
 public class AnalysisHouseService {
 
-  private final AnalysisHouseRepository analysisHouseRepository;
+  @Autowired private AnalysisHouseRepository analysisHouseRepository;
 
   public Page<AnalysisHouse> findAll(Pageable pageable, String name, String cnpj) {
     Specification<AnalysisHouse> spec = Specification.where(null);
@@ -42,12 +40,10 @@ public class AnalysisHouseService {
     return analysisHouseRepository.findByCnpj(cnpj);
   }
 
-  @Transactional
   public AnalysisHouse save(AnalysisHouse analysisHouse) {
     return analysisHouseRepository.save(analysisHouse);
   }
 
-  @Transactional
   public void deleteById(UUID id) {
     analysisHouseRepository.deleteById(id);
   }

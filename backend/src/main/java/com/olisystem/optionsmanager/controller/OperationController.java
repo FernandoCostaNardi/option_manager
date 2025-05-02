@@ -7,12 +7,15 @@ import com.olisystem.optionsmanager.model.OperationStatus;
 import com.olisystem.optionsmanager.model.OptionType;
 import com.olisystem.optionsmanager.model.TradeType;
 import com.olisystem.optionsmanager.model.TransactionType;
+import com.olisystem.optionsmanager.service.OperationService;
 import java.time.LocalDate;
+import java.util.Collections;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.web.PageableDefault;
+import org.springframework.data.domain.Sort;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -54,7 +57,27 @@ public class OperationController {
       @RequestParam(required = false) TransactionType transactionType,
       @RequestParam(required = false) TradeType tradeType,
       @RequestParam(required = false) OptionType optionType,
-      @PageableDefault(size = 5) Pageable pageable) {
+      @RequestParam(required = false) String optionSeriesCode,
+      Pageable pageable) {
+
+    // Se status não for fornecido, use ACTIVE como padrão
+    if (status == null || status.isEmpty()) {
+      status = Collections.singletonList(OperationStatus.ACTIVE);
+    }
+
+    // Corrigir o problema de ordenação com optionSerieCode vs optionSeriesCode
+    if (pageable.getSort().isSorted()) {
+      for (Sort.Order order : pageable.getSort()) {
+        if (order.getProperty().equals("optionSerieCode")) {
+          // Criar um novo Sort com o nome correto da propriedade
+          Sort newSort = Sort.by(order.getDirection(), "optionSeriesCode");
+
+          // Criar um novo Pageable com o Sort corrigido
+          pageable = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), newSort);
+          break;
+        }
+      }
+    }
 
     OperationFilterCriteria filterCriteria =
         OperationFilterCriteria.builder()
@@ -68,6 +91,7 @@ public class OperationController {
             .transactionType(transactionType)
             .tradeType(tradeType)
             .optionType(optionType)
+            .optionSeriesCode(optionSeriesCode)
             .build();
 
     Page<OperationSummaryResponseDto> result =

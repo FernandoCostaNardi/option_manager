@@ -1,9 +1,16 @@
+package com.olisystem.optionsmanager.service;
+
+import com.olisystem.optionsmanager.dto.OperationDataRequest;
 import com.olisystem.optionsmanager.dto.OperationFilterCriteria;
 import com.olisystem.optionsmanager.dto.OperationItemDto;
 import com.olisystem.optionsmanager.dto.OperationSummaryResponseDto;
+import com.olisystem.optionsmanager.model.AnalysisHouse;
+import com.olisystem.optionsmanager.model.Asset;
+import com.olisystem.optionsmanager.model.Brokerage;
 import com.olisystem.optionsmanager.model.Operation;
 import com.olisystem.optionsmanager.model.OperationStatus;
-import com.olisystem.optionsmanager.model.OptionType;
+import com.olisystem.optionsmanager.model.OperationTarget;
+import com.olisystem.optionsmanager.model.OptionSerie;
 import com.olisystem.optionsmanager.model.TradeType;
 import com.olisystem.optionsmanager.model.User;
 import com.olisystem.optionsmanager.repository.OperationRepository;
@@ -12,10 +19,10 @@ import com.olisystem.optionsmanager.repository.OptionSerieRepository;
 import com.olisystem.optionsmanager.util.OperationSummaryCalculator;
 import com.olisystem.optionsmanager.util.SecurityUtil;
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,15 +38,96 @@ import org.springframework.stereotype.Service;
 @Service
 public class OperationService {
 
-  @Autowired private OptionSerieRepository optionSerieRepository;
   @Autowired private OperationRepository operationRepository;
-  @Autowired private OperationTargetRepository operationTargetRepository;
-  @Autowired private BrokerageService brokerageService;
-  @Autowired private AnalysisHouseService analysisHouseService;
   @Autowired private AssetService assetService;
   @Autowired private OptionSerieService optionSerieService;
+  @Autowired private OptionSerieRepository optionSerieRepository;
+  @Autowired private AnalysisHouseService analysisHouseService;
+  @Autowired private BrokerageService brokerageService;
+  @Autowired private OperationTargetRepository operationTargetRepository;
 
-  // Métodos createOperation e calculateTradeType permanecem iguais
+  public void createOperation(OperationDataRequest request) {
+    log.info("indo buscar o : " + request.getBaseAssetCode());
+    // 1. Busca ou salva o Asset
+    Asset asset = assetService.getAssetByCode(request.getBaseAssetCode());
+    log.info("Asset buscou e encontrou: " + asset);
+    if (asset == null) {
+      asset = new Asset();
+      asset.setCode(request.getBaseAssetCode().toLowerCase());
+      asset.setName(request.getBaseAssetName());
+      asset.setType(request.getBaseAssetType());
+      asset.setUrlLogo(request.getBaseAssetLogoUrl());
+      asset = assetService.save(asset);
+    }
+
+    // 2. Busca ou salva o OptionSerie
+    OptionSerie optionSerie =
+        optionSerieService.getOptionSerieByCode(request.getOptionSeriesCode());
+    if (optionSerie == null) {
+      optionSerie = new OptionSerie();
+      optionSerie.setCode(request.getOptionSeriesCode().toUpperCase());
+      optionSerie.setType(request.getOptionSeriesType());
+      optionSerie.setStrikePrice(request.getOptionSeriesStrikePrice());
+      optionSerie.setExpirationDate(request.getOptionSeriesExpirationDate());
+      optionSerie.setAsset(asset);
+      optionSerie = optionSerieRepository.save(optionSerie);
+    }
+
+    // 3. Salva Operation
+    Operation operation = new Operation();
+    operation.setOptionSeries(optionSerie);
+    Brokerage brokerage = brokerageService.getBrokerageById(request.getBrokerageId());
+    operation.setBrokerage(brokerage);
+
+    if (request.getAnalysisHouseId() != null) {
+      Optional<AnalysisHouse> analysisHouseOpt =
+          analysisHouseService.findById(request.getAnalysisHouseId());
+      analysisHouseOpt.ifPresent(operation::setAnalysisHouse);
+    }
+
+    operation.setTransactionType(request.getTransactionType());
+    if (request.getExitDate() != null) {
+      operation.setTradeType(calculateTradeType(request.getEntryDate(), request.getExitDate()));
+    }
+    operation.setEntryDate(request.getEntryDate());
+    operation.setExitDate(request.getExitDate());
+    operation.setQuantity(request.getQuantity());
+    operation.setEntryUnitPrice(request.getEntryUnitPrice());
+    operation.setEntryTotalValue(
+        request.getEntryUnitPrice().multiply(BigDecimal.valueOf(request.getQuantity())));
+    operation.setStatus(OperationStatus.ACTIVE);
+    operation.setUser(SecurityUtil.getLoggedUser());
+
+    // Salva a Operation e guarda a referência final
+    final Operation savedOperation = operationRepository.save(operation);
+
+    // 4. Salva OperationTargets
+    List<OperationTarget> targets = request.getTargets();
+    if (targets != null && !targets.isEmpty()) {
+      List<OperationTarget> newTargets =
+          targets.stream()
+              .map(
+                  targetDto -> {
+                    OperationTarget target = new OperationTarget();
+                    target.setSequence(targetDto.getSequence());
+                    target.setType(targetDto.getType());
+                    target.setValue(targetDto.getValue());
+                    target.setOperation(savedOperation); // Usando a referência final
+                    return target;
+                  })
+              .collect(Collectors.toList());
+
+      operationTargetRepository.saveAll(newTargets);
+    }
+  }
+
+  private TradeType calculateTradeType(LocalDate entryDate, LocalDate exitDate) {
+    if (entryDate.isBefore(exitDate)) {
+      return TradeType.SWING;
+    } else {
+      return TradeType.DAY;
+    }
+  }
 
   public Page<OperationSummaryResponseDto> findByStatuses(
       List<OperationStatus> statuses, Pageable pageable) {
@@ -65,8 +153,7 @@ public class OperationService {
       List<OperationItemDto> sortedDtos = sortDtoList(dtos, sort);
 
       // Calcular totalizadores usando a classe utilitária
-      OperationSummaryResponseDto summary =
-          OperationSummaryCalculator.calculateSummary(sortedDtos);
+      OperationSummaryResponseDto summary = OperationSummaryCalculator.calculateSummary(sortedDtos);
 
       // Criar uma nova página com os DTOs ordenados
       return new PageImpl<>(List.of(summary), pageable, page.getTotalElements());
@@ -80,8 +167,7 @@ public class OperationService {
           page.getContent().stream().map(this::mapToDto).collect(Collectors.toList());
 
       // Calcular totalizadores usando a classe utilitária
-      OperationSummaryResponseDto summary =
-          OperationSummaryCalculator.calculateSummary(dtos);
+      OperationSummaryResponseDto summary = OperationSummaryCalculator.calculateSummary(dtos);
 
       // Criar uma nova página
       return new PageImpl<>(List.of(summary), pageable, page.getTotalElements());
@@ -90,62 +176,44 @@ public class OperationService {
 
   // Método auxiliar para ordenar a lista de DTOs
   private List<OperationItemDto> sortDtoList(List<OperationItemDto> dtos, Sort sort) {
-    // Implementar a ordenação manual baseada nos campos do Sort
+    List<OperationItemDto> sortedDtos = dtos;
     for (Sort.Order order : sort) {
       String property = order.getProperty();
       boolean isAscending = order.getDirection().isAscending();
-
-      Comparator<OperationItemDto> comparator = createComparator(property, isAscending);
-      if (comparator != null) {
-        dtos.sort(comparator);
-      }
+      sortedDtos.sort(createComparator(property, isAscending));
     }
-
-    return dtos;
+    return sortedDtos;
   }
 
   // Método para criar um comparador baseado na propriedade
   private Comparator<OperationItemDto> createComparator(String property, boolean isAscending) {
-    Comparator<OperationItemDto> comparator = null;
-
+    Comparator<OperationItemDto> comparator;
     switch (property) {
-      case "optionSeriesCode":
+      case "optionSeriesCode": // Certifique-se de que o nome está correto aqui
+        comparator =
+            Comparator.comparing(
+                OperationItemDto::getOptionSeriesCode, String.CASE_INSENSITIVE_ORDER);
+        break;
+      case "analysisHouseName":
         comparator =
             Comparator.comparing(
                 dto ->
-                    dto.getOptionSeriesCode() != null ? dto.getOptionSeriesCode().toString() : "",
+                    dto.getAnalysisHouseName() != null
+                        ? dto.getAnalysisHouseName().toLowerCase()
+                        : "",
                 Comparator.nullsLast(String::compareTo));
         break;
-      case "entryDate":
+      case "brokerageName":
         comparator =
             Comparator.comparing(
-                OperationItemDto::getEntryDate, Comparator.nullsLast(LocalDate::compareTo));
+                dto -> dto.getBrokerageName() != null ? dto.getBrokerageName().toLowerCase() : "",
+                Comparator.nullsLast(String::compareTo));
         break;
-      case "exitDate":
+      case "baseAssetLogoUrl":
         comparator =
             Comparator.comparing(
-                OperationItemDto::getExitDate, Comparator.nullsLast(LocalDate::compareTo));
-        break;
-      case "entryTotalValue":
-        comparator =
-            Comparator.comparing(
-                OperationItemDto::getEntryTotalValue, Comparator.nullsLast(BigDecimal::compareTo));
-        break;
-      case "exitTotalValue":
-        comparator =
-            Comparator.comparing(
-                OperationItemDto::getExitTotalValue, Comparator.nullsLast(BigDecimal::compareTo));
-        break;
-      case "profitLoss":
-        comparator =
-            Comparator.comparing(
-                OperationItemDto::getProfitLoss, Comparator.nullsLast(BigDecimal::compareTo));
-        break;
-      case "profitLossPercentage":
-        comparator =
-            Comparator.comparing(
-                OperationItemDto::getProfitLossPercentage,
-                Comparator.nullsLast(BigDecimal::compareTo));
+                dto -> dto.getBaseAssetLogoUrl() != null ? dto.getBaseAssetLogoUrl() : "",
+                Comparator.nullsLast(String::compareTo));
         break;
       case "transactionType":
         comparator =
@@ -162,47 +230,41 @@ public class OperationService {
             Comparator.comparing(
                 OperationItemDto::getStatus, Comparator.nullsLast(Enum::compareTo));
         break;
-      case "analysisHouseName":
-        comparator =
-            Comparator.comparing(
-                OperationItemDto::getAnalysisHouseName, Comparator.nullsLast(String::compareTo));
-        break;
-      case "brokerageName":
-        comparator =
-            Comparator.comparing(
-                OperationItemDto::getBrokerageName, Comparator.nullsLast(String::compareTo));
-        break;
       case "optionType":
         comparator =
             Comparator.comparing(
                 OperationItemDto::getOptionType, Comparator.nullsLast(Enum::compareTo));
         break;
       default:
-        // Propriedade desconhecida, não ordenar
-        break;
+        // Para outras propriedades, tentar usar reflection
+        comparator = (o1, o2) -> 0; // Comparador neutro como fallback
     }
-
-    // Inverter a ordenação se for descendente
-    if (comparator != null && !isAscending) {
-      comparator = comparator.reversed();
-    }
-
-    return comparator;
+    return isAscending ? comparator : comparator.reversed();
   }
 
   private Specification<Operation> createSpecification(OperationFilterCriteria criteria) {
     Specification<Operation> spec = Specification.where(null);
 
-    // Adicionar usuário logado ao filtro
+    // Filtro por usuário logado
     User user = SecurityUtil.getLoggedUser();
     spec = spec.and((root, query, cb) -> cb.equal(root.get("user"), user));
 
-    // Aplicar filtros se fornecidos
+    // Filtro por status
     if (criteria.getStatus() != null && !criteria.getStatus().isEmpty()) {
       spec = spec.and((root, query, cb) -> root.get("status").in(criteria.getStatus()));
     }
 
-    // Filtros de data de entrada
+    // Filtro por código da série de opções (corrigido)
+    if (criteria.getOptionSeriesCode() != null && !criteria.getOptionSeriesCode().isEmpty()) {
+      spec =
+          spec.and(
+              (root, query, cb) ->
+                  cb.like(
+                      cb.lower(root.join("optionSeries").get("code")),
+                      "%" + criteria.getOptionSeriesCode().toLowerCase() + "%"));
+    }
+
+    // Filtro por data de entrada
     if (criteria.getEntryDateStart() != null) {
       spec =
           spec.and(
@@ -217,7 +279,7 @@ public class OperationService {
                   cb.lessThanOrEqualTo(root.get("entryDate"), criteria.getEntryDateEnd()));
     }
 
-    // Filtros de data de saída
+    // Filtro por data de saída
     if (criteria.getExitDateStart() != null) {
       spec =
           spec.and(
@@ -336,8 +398,7 @@ public class OperationService {
         operations.getContent().stream().map(this::mapToDto).collect(Collectors.toList());
 
     // Calcular totalizadores
-    OperationSummaryResponseDto summary =
-        OperationSummaryCalculator.calculateSummary(dtos);
+    OperationSummaryResponseDto summary = OperationSummaryCalculator.calculateSummary(dtos);
 
     // Retornar a página de resumo
     return new PageImpl<>(List.of(summary), pageable, operations.getTotalElements());

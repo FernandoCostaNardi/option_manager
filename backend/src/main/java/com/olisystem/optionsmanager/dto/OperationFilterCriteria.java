@@ -22,4 +22,5 @@ public class OperationFilterCriteria {
   private TransactionType transactionType;
   private TradeType tradeType;
   private OptionType optionType;
+  private String optionSeriesCode; // Certifique-se de que o nome está correto aqui (com 's')
 }

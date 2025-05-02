@@ -34,6 +34,10 @@ public class OptionSerieService {
     return optionSerieRepository.findById(UUID.fromString(id));
   }
 
+  public OptionSerie getOptionSerieByCode(String code) {
+    return optionSerieRepository.findByCode(code).orElse(null);
+  }
+
   public OptionSerie save(OptionSerie optionSerie) {
     return optionSerieRepository.save(optionSerie);
   }
@@ -69,9 +73,5 @@ public class OptionSerieService {
     BrapiClient brapiClient = new BrapiClient(BRAPI_TOKEN);
     JSONObject json = brapiClient.getQuoteJson(ticker);
     return AssetFactory.fromJson(json);
-  }
-
-  public OptionSerie getOptionSerieByCode(String optionSeriesCode) {
-    return optionSerieRepository.findByCode(optionSeriesCode).orElse(null);
   }
 }
