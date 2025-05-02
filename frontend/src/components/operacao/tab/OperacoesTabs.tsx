@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../ui/tabs';
 import { LoadingSpinner } from '../../LoadingSpinner';
 import { ErrorMessage } from '../../ErrorMessage';
@@ -7,6 +7,10 @@ import { OperacoesFinalizadasTable } from '../tables/OperacoesFinalizadasTable';
 import { Paginacao } from '../../Paginacao';
 import { OperacaoAtiva, OperacaoFinalizada, SortField, SortDirection } from '../../../types/operacao/operacoes.types';
 import { useNavigate } from 'react-router-dom';
+import { useFiltros } from '../../../hooks/operacao/useFiltros';
+import { OperacaoService } from '../../../services/operacaoService';
+import { Download } from 'lucide-react';
+import { jwtDecode } from 'jwt-decode';
 
 interface OperacoesTabsProps {
   activeTab: string;
@@ -58,6 +62,8 @@ export const OperacoesTabs: React.FC<OperacoesTabsProps> = ({
   renderFinalizadasCards
 }) => {
   const navigate = useNavigate();
+  const { filtros } = useFiltros();
+  const [exportLoading, setExportLoading] = useState(false);
   
   // Verificar se o erro está relacionado a token expirado
   useEffect(() => {
@@ -85,25 +91,65 @@ export const OperacoesTabs: React.FC<OperacoesTabsProps> = ({
   const handleTabChange = (value: string) => {
     // Verificar se o token existe
     const token = localStorage.getItem('token');
+    let tokenExpirado = false;
     if (!token) {
-      navigate('/login', { 
-        state: { 
+      tokenExpirado = true;
+    } else {
+      try {
+        const decoded: any = jwtDecode(token)
+        if (decoded.exp && Date.now() >= decoded.exp * 1000) {
+          tokenExpirado = true;
+        }
+      } catch (e) {
+        tokenExpirado = true;
+      }
+    }
+    if (tokenExpirado) {
+      localStorage.removeItem('token');
+      navigate('/login', {
+        state: {
           from: window.location.pathname,
-          message: 'Você precisa estar logado para acessar esta página.' 
-        } 
+          message: 'Sua sessão expirou. Por favor, faça login novamente.'
+        }
       });
       return;
     }
-    
-    // Se o token existir, mudar a aba
+    // Se o token existir e estiver válido, mudar a aba
     setActiveTab(value);
-    
     // Chamar a função correspondente para carregar os dados da aba
     if (value === 'ativas') {
       onPageChange(0); // Resetar para a primeira página
     } else if (value === 'finalizadas') {
       onPageChange(0); // Resetar para a primeira página
     }
+  };
+
+  // Função para exportar operações
+  const handleExport = async (formato: 'excel' | 'pdf', status: string[]) => {
+    try {
+      setExportLoading(true);
+      const blob = await OperacaoService.exportarOperacoes(filtros, status, formato);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = formato === 'excel' ? 'operacoes.xlsx' : 'operacoes.pdf';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      alert('Erro ao exportar operações.');
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
+  // Função para exportar operações
+  const handleExportAtivas = async (formato: 'excel' | 'pdf') => {
+    await handleExport(formato, ['ACTIVE']);
+  };
+  const handleExportFinalizadas = async (formato: 'excel' | 'pdf') => {
+    await handleExport(formato, ['WINNER', 'LOSER']);
   };
 
   return (
@@ -134,8 +180,39 @@ export const OperacoesTabs: React.FC<OperacoesTabsProps> = ({
             {renderAtivasCards && renderAtivasCards(loadingAtivas)}
             
             <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
-              <div className="px-6 py-4 border-b border-gray-100">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
                 <h2 className="font-semibold text-gray-800">Operações Ativas</h2>
+                <div className="relative">
+                  <button
+                    className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg shadow hover:bg-purple-700 transition"
+                    disabled={exportLoading}
+                    onClick={e => {
+                      const menu = document.getElementById('export-menu-ativas');
+                      if (menu) menu.classList.toggle('hidden');
+                    }}
+                  >
+                    <Download className="w-4 h-4" /> Exportar
+                  </button>
+                  <div
+                    id="export-menu-ativas"
+                    className="hidden absolute right-0 mt-2 w-32 bg-white border rounded shadow z-10"
+                  >
+                    <button
+                      className="block w-full text-left px-4 py-2 hover:bg-gray-100"
+                      onClick={() => {
+                        handleExportAtivas('excel');
+                        document.getElementById('export-menu-ativas')?.classList.add('hidden');
+                      }}
+                    >Exportar Excel</button>
+                    <button
+                      className="block w-full text-left px-4 py-2 hover:bg-gray-100"
+                      onClick={() => {
+                        handleExportAtivas('pdf');
+                        document.getElementById('export-menu-ativas')?.classList.add('hidden');
+                      }}
+                    >Exportar PDF</button>
+                  </div>
+                </div>
               </div>
               <OperacoesAtivasTable
                 operacoes={operacoesAtivas}
@@ -170,8 +247,39 @@ export const OperacoesTabs: React.FC<OperacoesTabsProps> = ({
             {renderFinalizadasCards && renderFinalizadasCards(loadingFinalizadas)}
             
             <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
-              <div className="px-6 py-4 border-b border-gray-100">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
                 <h2 className="font-semibold text-gray-800">Operações Finalizadas</h2>
+                <div className="relative">
+                  <button
+                    className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg shadow hover:bg-purple-700 transition"
+                    disabled={exportLoading}
+                    onClick={e => {
+                      const menu = document.getElementById('export-menu-finalizadas');
+                      if (menu) menu.classList.toggle('hidden');
+                    }}
+                  >
+                    <Download className="w-4 h-4" /> Exportar
+                  </button>
+                  <div
+                    id="export-menu-finalizadas"
+                    className="hidden absolute right-0 mt-2 w-32 bg-white border rounded shadow z-10"
+                  >
+                    <button
+                      className="block w-full text-left px-4 py-2 hover:bg-gray-100"
+                      onClick={() => {
+                        handleExportFinalizadas('excel');
+                        document.getElementById('export-menu-finalizadas')?.classList.add('hidden');
+                      }}
+                    >Exportar Excel</button>
+                    <button
+                      className="block w-full text-left px-4 py-2 hover:bg-gray-100"
+                      onClick={() => {
+                        handleExportFinalizadas('pdf');
+                        document.getElementById('export-menu-finalizadas')?.classList.add('hidden');
+                      }}
+                    >Exportar PDF</button>
+                  </div>
+                </div>
               </div>
               <OperacoesFinalizadasTable
                 operacoes={operacoesFinalizadas}

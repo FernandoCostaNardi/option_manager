@@ -5,7 +5,7 @@ export interface OperacaoAtiva {
     exitDate: string;
     analysisHouseName: string;
     brokerageName: string;
-    optionSerieCode: string;
+    optionSeriesCode: string;
     baseAssetLogoUrl: string;
     quantity: number;
     entryUnitPrice: number;
@@ -22,6 +22,7 @@ export interface OperacaoAtiva {
     optionSerieCode: string;
     id: string;
     type: string;
+    optionSeriesCode: string;
     entryDate: string;
     exitDate: string;
     entryUnitPrice: number;
@@ -69,5 +70,4 @@ export interface OperacaoAtiva {
     tradeType: string | null;
     status: string | null;
     entryTotalValue: number | null;
-
   }

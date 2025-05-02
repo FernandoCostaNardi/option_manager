@@ -14,7 +14,8 @@ export const useFiltros = () => {
     transactionType: null,
     optionType: null,
     tradeType: null,
-    status: null
+    status: null,
+    entryTotalValue: null
   });
 
   const limparFiltros = useCallback(() => {
@@ -28,7 +29,8 @@ export const useFiltros = () => {
       transactionType: null,
       optionType: null,
       tradeType: null,
-      status: null
+      status: null,
+      entryTotalValue: null
     });
   }, []);
 

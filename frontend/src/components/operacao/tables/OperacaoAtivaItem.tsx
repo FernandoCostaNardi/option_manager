@@ -38,9 +38,9 @@ export const OperacaoAtivaItem: React.FC<OperacaoAtivaItemProps> = ({
       <td className="px-6 py-4 whitespace-nowrap">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center">
-            <img src={operacao.baseAssetLogoUrl} alt={operacao.optionSerieCode} className="h-8 w-8 rounded-full object-contain" />
+            <img src={operacao.baseAssetLogoUrl} alt={operacao.optionSeriesCode} className="h-8 w-8 rounded-full object-contain" />
           </div>
-          <span className="text-sm font-semibold text-gray-900">{operacao.optionSerieCode}</span>
+          <span className="text-sm font-semibold text-gray-900">{operacao.optionSeriesCode}</span>
         </div>
       </td>
       <td className="px-4 py-3 text-sm text-gray-700 text-center">

@@ -103,11 +103,11 @@ export function OperacaoFinalizadaItem({ operacao, onView, onRemove, onViewTarge
           {operacao.baseAssetLogoUrl && (
             <img 
               src={operacao.baseAssetLogoUrl} 
-              alt={operacao.optionSerieCode} 
+              alt={operacao.optionSeriesCode || '-'}
               className="h-8 w-8 rounded-full object-contain"
             />
           )}
-          {operacao.optionSerieCode || '-'}
+          {operacao.optionSeriesCode || '-'}
         </div>
       </td>
       <td className="px-4 py-3 text-sm text-gray-700 text-center">
