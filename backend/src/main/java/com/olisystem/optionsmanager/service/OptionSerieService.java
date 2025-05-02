@@ -34,10 +34,6 @@ public class OptionSerieService {
     return optionSerieRepository.findById(UUID.fromString(id));
   }
 
-  public Optional<OptionSerie> findByCode(String code) {
-    return optionSerieRepository.findByCode(code);
-  }
-
   public OptionSerie save(OptionSerie optionSerie) {
     return optionSerieRepository.save(optionSerie);
   }

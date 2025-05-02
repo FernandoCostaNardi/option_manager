@@ -7,7 +7,6 @@ import com.olisystem.optionsmanager.model.OperationStatus;
 import com.olisystem.optionsmanager.model.OptionType;
 import com.olisystem.optionsmanager.model.TradeType;
 import com.olisystem.optionsmanager.model.TransactionType;
-import com.olisystem.optionsmanager.service.OperationService;
 import java.time.LocalDate;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;

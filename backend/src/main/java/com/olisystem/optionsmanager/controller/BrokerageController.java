@@ -38,15 +38,10 @@ public class BrokerageController {
 
   @GetMapping("/{id}")
   public ResponseEntity<BrokerageResponseDto> getById(@PathVariable UUID id) {
-    try {
-      UUID brokerageId = id;
-      return brokerageService
-          .findById(brokerageId)
-          .map(brokerage -> ResponseEntity.ok(BrokerageMapper.toDto(brokerage)))
-          .orElse(ResponseEntity.notFound().build());
-    } catch (NumberFormatException e) {
-      return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
-    }
+    return brokerageService
+        .findById(id)
+        .map(brokerage -> ResponseEntity.ok(BrokerageMapper.toDto(brokerage)))
+        .orElse(ResponseEntity.notFound().build());
   }
 
   @PutMapping("/{id}")
@@ -100,15 +95,14 @@ public class BrokerageController {
   @DeleteMapping("/{id}")
   public ResponseEntity<Void> delete(@PathVariable UUID id) {
     try {
-      UUID brokerageId = id;
-      if (brokerageService.findById(brokerageId).isPresent()) {
-        brokerageService.deleteById(brokerageId);
+      if (brokerageService.findById(id).isPresent()) {
+        brokerageService.deleteById(id);
         return ResponseEntity.noContent().build();
       } else {
         return ResponseEntity.notFound().build();
       }
-    } catch (NumberFormatException e) {
-      return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
+    } catch (Exception e) {
+      return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
     }
   }
 }
