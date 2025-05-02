@@ -97,6 +97,13 @@ export const OperacoesTabs: React.FC<OperacoesTabsProps> = ({
     
     // Se o token existir, mudar a aba
     setActiveTab(value);
+    
+    // Chamar a função correspondente para carregar os dados da aba
+    if (value === 'ativas') {
+      onPageChange(0); // Resetar para a primeira página
+    } else if (value === 'finalizadas') {
+      onPageChange(0); // Resetar para a primeira página
+    }
   };
 
   return (

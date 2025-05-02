@@ -60,7 +60,8 @@ export function Operacoes() {
     activeTab,
     setActiveTab,
     carregarOperacoesAtivas,
-    carregarOperacoesFinalizadas
+    carregarOperacoesFinalizadas,
+    dashboardData
   } = useOperacoes({
     currentPage,
     pageSize,
@@ -73,9 +74,18 @@ export function Operacoes() {
   
   // Função para aplicar filtros
   const aplicarFiltros = () => {
-    resetPage();
-    carregarOperacoesAtivas();
-    carregarOperacoesFinalizadas();
+    // Resetar para a primeira página
+    setCurrentPage(0);
+    
+    // Usar setTimeout para garantir que a atualização do estado seja concluída
+    setTimeout(() => {
+      // Chamar apenas a função correspondente à aba ativa
+      if (activeTab === "ativas") {
+        carregarOperacoesAtivas();
+      } else if (activeTab === "finalizadas") {
+        carregarOperacoesFinalizadas();
+      }
+    }, 0);
   };
   
   // Handlers para ações da tabela
@@ -135,69 +145,6 @@ export function Operacoes() {
     fecharModalFinalizarOperacao();
   };
   
-  // Cálculos para os dashboards
-  const dashboardData = useMemo(() => {
-    // Dados para operações ativas
-    if (activeTab === "ativas" && !loadingAtivas && operacoesAtivas) {
-      // Quantidade total de operações ativas
-      const totalOperacoes = totalItems;
-      
-      // Contagem de PUTs e CALLs
-      const totalPuts = operacoesAtivas.filter(op => op.optionType === 'PUT').length;
-      const totalCalls = operacoesAtivas.filter(op => op.optionType === 'CALL').length;
-      
-      // Soma do valor total de todas as operações
-      const valorTotal = operacoesAtivas.reduce((total, op) => total + (op.entryTotalValue || 0), 0);
-      
-      return {
-        totalOperacoes,
-        totalPuts,
-        totalCalls,
-        valorTotal
-      };
-    }
-    
-    // Dados para operações finalizadas
-    if (activeTab === "finalizadas" && !loadingFinalizadas && operacoesFinalizadas) {
-      // Contagem de operações ganhadoras e perdedoras
-      const totalGanhadoras = operacoesFinalizadas.filter(op => op.status === 'WINNER').length;
-      const totalPerdedoras = operacoesFinalizadas.filter(op => op.status === 'LOSER').length;
-      
-      // Contagem de SwingTrade e DayTrade
-      const totalSwingTrade = operacoesFinalizadas.filter(op => op.tradeType === 'SWING').length;
-      const totalDayTrade = operacoesFinalizadas.filter(op => op.tradeType === 'DAY').length;
-      
-      // Cálculo de resultados
-      const resultadoGanhos = operacoesFinalizadas
-        .filter(op => op.profitLoss && op.profitLoss > 0)
-        .reduce((total, op) => total + (op.profitLoss || 0), 0);
-      
-      const resultadoPerdas = operacoesFinalizadas
-        .filter(op => op.profitLoss && op.profitLoss < 0)
-        .reduce((total, op) => total + (op.profitLoss || 0), 0);
-      
-      const resultadoTotal = resultadoGanhos + resultadoPerdas;
-      
-      // Cálculo de percentual
-      const totalInvestido = operacoesFinalizadas.reduce((total, op) => total + (op.entryTotalValue || 0), 0);
-      const percentualTotal = totalInvestido > 0 ? (resultadoTotal / totalInvestido) * 100 : 0;
-      
-      return {
-        totalGanhadoras,
-        totalPerdedoras,
-        totalSwingTrade,
-        totalDayTrade,
-        resultadoGanhos,
-        resultadoPerdas,
-        resultadoTotal,
-        percentualTotal
-      };
-    }
-    
-    // Valor padrão
-    return {};
-  }, [activeTab, operacoesAtivas, operacoesFinalizadas, loadingAtivas, loadingFinalizadas, totalItems]);
-  
   // Componente de Dashboard Card
   const DashboardCard = ({ icon, title, value, color }: { icon: React.ReactNode, title: string, value: string | number, color: string }) => (
     <div className="bg-white rounded-lg shadow-sm overflow-hidden">
@@ -256,19 +203,19 @@ export function Operacoes() {
       <DashboardCard 
         icon={<ListChecks className="h-6 w-6 text-blue-500" />}
         title="Operações Ativas"
-        value={isLoading ? "..." : dashboardData.totalOperacoes || 0}
+        value={isLoading ? "..." : dashboardData.totalActiveOperations || 0}
         color="bg-blue-100"
       />
       <DashboardCard 
         icon={<BarChart className="h-6 w-6 text-purple-500" />}
         title="CALL / PUT"
-        value={isLoading ? "..." : `${dashboardData.totalCalls || 0} / ${dashboardData.totalPuts || 0}`}
+        value={isLoading ? "..." : `${dashboardData.totalCallOperations || 0} / ${dashboardData.totalPutOperations || 0}`}
         color="bg-purple-100"
       />
       <DashboardCard 
         icon={<DollarSign className="h-6 w-6 text-green-500" />}
         title="Valor Total"
-        value={isLoading ? "..." : formatarMoeda(dashboardData.valorTotal || 0)}
+        value={isLoading ? "..." : formatarMoeda(dashboardData.totalEntryValue || 0)}
         color="bg-green-100"
       />
     </div>
@@ -280,43 +227,39 @@ export function Operacoes() {
       <DashboardCard 
         icon={<ListChecks className="h-6 w-6 text-blue-500" />}
         title="Ganhadoras / Perdedoras"
-        value={isLoading ? "..." : `${dashboardData.totalGanhadoras || 0} / ${dashboardData.totalPerdedoras || 0}`}
+        value={isLoading ? "..." : `${dashboardData.totalWinningOperations || 0} / ${dashboardData.totalLosingOperations || 0}`}
         color="bg-blue-100"
       />
       <DashboardCard 
         icon={<BarChart className="h-6 w-6 text-purple-500" />}
         title="SwingTrade / DayTrade"
-        value={isLoading ? "..." : `${dashboardData.totalSwingTrade || 0} / ${dashboardData.totalDayTrade || 0}`}
+        value={isLoading ? "..." : `${dashboardData.totalSwingTradeOperations || 0} / ${dashboardData.totalDayTradeOperations || 0}`}
         color="bg-purple-100"
       />
       <DashboardCardWithSecondary 
         icon={<DollarSign className="h-6 w-6 text-green-500" />}
         title="Resultado Total"
-        primaryValue={isLoading ? "..." : formatarMoeda(dashboardData.resultadoTotal || 0)}
+        primaryValue={isLoading ? "..." : formatarMoeda(dashboardData.totalProfitLoss || 0)}
         secondaryValue={isLoading ? "..." : (
-          (dashboardData.resultadoTotal || 0) >= 0 
-            ? `Ganhos: ${formatarMoeda(dashboardData.resultadoGanhos || 0)}`
-            : `Perdas: ${formatarMoeda(Math.abs(dashboardData.resultadoPerdas || 0))}`
+          (dashboardData.totalProfitLoss || 0) >= 0 
+            ? `Ganhos: ${formatarMoeda(dashboardData.totalProfitLoss || 0)}`
+            : `Perdas: ${formatarMoeda(Math.abs(dashboardData.totalProfitLoss || 0))}`
         )}
-        isPrimaryPositive={!isLoading && (dashboardData.resultadoTotal || 0) >= 0}
-        isSecondaryPositive={!isLoading && (
-          (dashboardData.resultadoTotal || 0) >= 0 
-            ? true 
-            : false
-        )}
+        isPrimaryPositive={!isLoading && (dashboardData.totalProfitLoss || 0) >= 0}
+        isSecondaryPositive={!isLoading && (dashboardData.totalProfitLoss || 0) >= 0}
         color="bg-green-100"
       />
       <DashboardCardWithSecondary 
         icon={<Percent className="h-6 w-6 text-blue-500" />}
         title="% Total"
-        primaryValue={isLoading ? "..." : `${(dashboardData.percentualTotal || 0).toFixed(2)}%`}
+        primaryValue={isLoading ? "..." : `${(dashboardData.totalProfitLossPercentage || 0).toFixed(2)}%`}
         secondaryValue={isLoading ? "..." : (
-          (dashboardData.percentualTotal || 0) >= 0 
+          (dashboardData.totalProfitLossPercentage || 0) >= 0 
             ? "Rentabilidade positiva" 
             : "Rentabilidade negativa"
         )}
-        isPrimaryPositive={!isLoading && (dashboardData.percentualTotal || 0) >= 0}
-        isSecondaryPositive={!isLoading && (dashboardData.percentualTotal || 0) >= 0}
+        isPrimaryPositive={!isLoading && (dashboardData.totalProfitLossPercentage || 0) >= 0}
+        isSecondaryPositive={!isLoading && (dashboardData.totalProfitLossPercentage || 0) >= 0}
         color="bg-blue-100"
       />
     </div>

@@ -65,21 +65,31 @@ export const FiltrosAccordion: React.FC<FiltrosAccordionProps> = ({
       entryDateEnd: entryDateRange[1] ? formatDateToString(entryDateRange[1]) : null,
       exitDateStart: exitDateRange[0] ? formatDateToString(exitDateRange[0]) : null,
       exitDateEnd: exitDateRange[1] ? formatDateToString(exitDateRange[1]) : null,
-      transactionType: filtrosTemp.transactionType // Garantindo que o tipo de transação seja incluído
+      transactionType: filtrosTemp.transactionType, 
+      optionType: filtrosTemp.optionType,
+      status: activeTab === "finalizadas" ? (filtrosTemp.status || "WINNER,LOSER") : null
     };
     
+    console.log('Filtros aplicados:', updatedFiltros); // Log para debug
+    
+    // Primeiro atualize o estado local
     setFiltrosTemp(updatedFiltros);
-    setFiltros(updatedFiltros); // Atualiza os filtros reais com os temporários
-    aplicarFiltros(); // Aplica os filtros (atualiza a tabela)
-    setAcordeonAberto(false); // Fecha o acordeon
+    
+    // Depois atualize os filtros reais
+    setFiltros(updatedFiltros);
+    
+    // Aplique os filtros imediatamente
+    setTimeout(() => {
+      aplicarFiltros();
+      setAcordeonAberto(false);
+    }, 0);
   };
 
-  // Função para limpar os filtros temporários e aplicar
   const handleLimparFiltros = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     
-    // Limpa os filtros temporários
-    setFiltrosTemp({
+    // Crie um objeto de filtros limpo
+    const filtrosLimpos = {
       entryDateStart: null,
       entryDateEnd: null,
       exitDateStart: null,
@@ -89,18 +99,24 @@ export const FiltrosAccordion: React.FC<FiltrosAccordionProps> = ({
       transactionType: null,
       optionType: null,
       tradeType: null,
-      status: null
-    });
+      entryTotalValue: null,
+      status: activeTab === "finalizadas" ? "WINNER,LOSER" : null
+    };
+    
+    // Limpa os filtros temporários
+    setFiltrosTemp(filtrosLimpos);
     
     // Limpa os ranges de data
     setEntryDateRange([null, null]);
     setExitDateRange([null, null]);
     
     // Limpa os filtros reais
-    limparFiltros();
+    setFiltros(filtrosLimpos);
     
-    // Aplica os filtros (atualiza a tabela)
-    aplicarFiltros();
+    // Aplica os filtros imediatamente
+    setTimeout(() => {
+      aplicarFiltros();
+    }, 0);
   };
 
   // Função para carregar corretoras
