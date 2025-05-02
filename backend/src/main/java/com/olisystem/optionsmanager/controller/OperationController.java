@@ -11,12 +11,17 @@ import com.olisystem.optionsmanager.service.OperationService;
 import java.time.LocalDate;
 import java.util.Collections;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -28,6 +33,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api")
 public class OperationController {
+
+  private static final Logger log = LoggerFactory.getLogger(OperationController.class);
 
   @Autowired private OperationService operationService;
 
@@ -97,5 +104,119 @@ public class OperationController {
     Page<OperationSummaryResponseDto> result =
         operationService.findByFilters(filterCriteria, pageable);
     return ResponseEntity.ok(result);
+  }
+
+  @GetMapping("/operations/export/excel")
+  public ResponseEntity<byte[]> exportOperationsToExcel(
+      @RequestParam(value = "status[]", required = false) List<OperationStatus> status,
+      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+          LocalDate entryDateStart,
+      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+          LocalDate entryDateEnd,
+      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+          LocalDate exitDateStart,
+      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+          LocalDate exitDateEnd,
+      @RequestParam(required = false) String analysisHouseName,
+      @RequestParam(required = false) String brokerageName,
+      @RequestParam(required = false) TransactionType transactionType,
+      @RequestParam(required = false) TradeType tradeType,
+      @RequestParam(required = false) OptionType optionType,
+      @RequestParam(required = false) String optionSeriesCode) {
+
+    log.info("Status recebido: {}", status);
+
+    List<OperationStatus> finalStatusList;
+    if (status != null && !status.isEmpty()) {
+      finalStatusList = status;
+      log.info("Usando status fornecido: {}", finalStatusList);
+    } else {
+      log.info("Nenhum status fornecido, usando ACTIVE como padrão");
+      finalStatusList = Collections.singletonList(OperationStatus.ACTIVE);
+    }
+
+    OperationFilterCriteria filterCriteria =
+        OperationFilterCriteria.builder()
+            .status(finalStatusList)
+            .entryDateStart(entryDateStart)
+            .entryDateEnd(entryDateEnd)
+            .exitDateStart(exitDateStart)
+            .exitDateEnd(exitDateEnd)
+            .analysisHouseName(analysisHouseName)
+            .brokerageName(brokerageName)
+            .transactionType(transactionType)
+            .tradeType(tradeType)
+            .optionType(optionType)
+            .optionSeriesCode(optionSeriesCode)
+            .build();
+
+    log.info("Critérios de filtro: {}", filterCriteria);
+
+    byte[] excelBytes = operationService.generateExcelReport(filterCriteria);
+
+    HttpHeaders headers = new HttpHeaders();
+    headers.setContentType(
+        MediaType.parseMediaType(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
+    headers.setContentDispositionFormData("attachment", "operations.xlsx");
+    headers.setCacheControl("must-revalidate, post-check=0, pre-check=0");
+
+    return new ResponseEntity<>(excelBytes, headers, HttpStatus.OK);
+  }
+
+  @GetMapping("/operations/export/pdf")
+  public ResponseEntity<byte[]> exportOperationsToPdf(
+      @RequestParam(value = "status[]", required = false) List<OperationStatus> status,
+      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+          LocalDate entryDateStart,
+      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+          LocalDate entryDateEnd,
+      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+          LocalDate exitDateStart,
+      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+          LocalDate exitDateEnd,
+      @RequestParam(required = false) String analysisHouseName,
+      @RequestParam(required = false) String brokerageName,
+      @RequestParam(required = false) TransactionType transactionType,
+      @RequestParam(required = false) TradeType tradeType,
+      @RequestParam(required = false) OptionType optionType,
+      @RequestParam(required = false) String optionSeriesCode) {
+
+    log.info("Status recebido para PDF: {}", status);
+
+    List<OperationStatus> finalStatusList;
+    if (status != null && !status.isEmpty()) {
+      finalStatusList = status;
+      log.info("Usando status fornecido para PDF: {}", finalStatusList);
+    } else {
+      log.info("Nenhum status fornecido para PDF, usando ACTIVE como padrão");
+      finalStatusList = Collections.singletonList(OperationStatus.ACTIVE);
+    }
+
+    OperationFilterCriteria filterCriteria =
+        OperationFilterCriteria.builder()
+            .status(finalStatusList)
+            .entryDateStart(entryDateStart)
+            .entryDateEnd(entryDateEnd)
+            .exitDateStart(exitDateStart)
+            .exitDateEnd(exitDateEnd)
+            .analysisHouseName(analysisHouseName)
+            .brokerageName(brokerageName)
+            .transactionType(transactionType)
+            .tradeType(tradeType)
+            .optionType(optionType)
+            .optionSeriesCode(optionSeriesCode)
+            .build();
+
+    log.info("Critérios de filtro para PDF: {}", filterCriteria);
+
+    byte[] pdfBytes = operationService.generatePdfReport(filterCriteria);
+
+    HttpHeaders headers = new HttpHeaders();
+    headers.setContentType(MediaType.APPLICATION_PDF);
+    headers.setContentDispositionFormData("attachment", "operations.pdf");
+    headers.setCacheControl("must-revalidate, post-check=0, pre-check=0");
+
+    return new ResponseEntity<>(pdfBytes, headers, HttpStatus.OK);
   }
 }

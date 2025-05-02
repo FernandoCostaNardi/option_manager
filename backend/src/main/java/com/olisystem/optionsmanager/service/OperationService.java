@@ -1,5 +1,8 @@
 package com.olisystem.optionsmanager.service;
 
+import com.itextpdf.text.*;
+import com.itextpdf.text.Font.FontFamily;
+import com.itextpdf.text.pdf.*;
 import com.olisystem.optionsmanager.dto.OperationDataRequest;
 import com.olisystem.optionsmanager.dto.OperationFilterCriteria;
 import com.olisystem.optionsmanager.dto.OperationItemDto;
@@ -18,6 +21,7 @@ import com.olisystem.optionsmanager.repository.OperationTargetRepository;
 import com.olisystem.optionsmanager.repository.OptionSerieRepository;
 import com.olisystem.optionsmanager.util.OperationSummaryCalculator;
 import com.olisystem.optionsmanager.util.SecurityUtil;
+import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Comparator;
@@ -25,6 +29,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import lombok.extern.log4j.Log4j2;
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -428,5 +434,295 @@ public class OperationService {
         .profitLossPercentage(op.getProfitLossPercentage())
         .baseAssetLogoUrl(op.getOptionSeries().getAsset().getUrlLogo())
         .build();
+  }
+
+  public byte[] generateExcelReport(OperationFilterCriteria filterCriteria) {
+    // Buscar todas as operações que correspondem aos critérios de filtro
+    // Não usamos paginação aqui para exportar todos os dados
+    Pageable unpaged = Pageable.unpaged();
+    Page<OperationSummaryResponseDto> result = findByFilters(filterCriteria, unpaged);
+    List<OperationItemDto> operations = result.getContent().get(0).getOperations();
+
+    try (Workbook workbook = new XSSFWorkbook();
+        ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+
+      Sheet sheet = workbook.createSheet("Operações");
+
+      // Estilo para o cabeçalho
+      org.apache.poi.ss.usermodel.Font headerFont = workbook.createFont();
+      headerFont.setBold(true);
+      CellStyle headerCellStyle = workbook.createCellStyle();
+      headerCellStyle.setFont(headerFont);
+
+      // Criar cabeçalho
+      Row headerRow = sheet.createRow(0);
+      String[] columns = {
+        "Código",
+        "Casa de Análise",
+        "Corretora",
+        "Tipo de Transação",
+        "Data de Entrada",
+        "Data de Saída",
+        "Status",
+        "Quantidade",
+        "Preço Unitário Entrada",
+        "Valor Total Entrada",
+        "Preço Unitário Saída",
+        "Valor Total Saída",
+        "Lucro/Prejuízo",
+        "Lucro/Prejuízo %"
+      };
+
+      for (int i = 0; i < columns.length; i++) {
+        Cell cell = headerRow.createCell(i);
+        cell.setCellValue(columns[i]);
+        cell.setCellStyle(headerCellStyle);
+      }
+
+      // Preencher dados
+      int rowNum = 1;
+      for (OperationItemDto operation : operations) {
+        Row row = sheet.createRow(rowNum++);
+
+        row.createCell(0).setCellValue(operation.getOptionSeriesCode());
+        row.createCell(1)
+            .setCellValue(
+                operation.getAnalysisHouseName() != null ? operation.getAnalysisHouseName() : "");
+        row.createCell(2).setCellValue(operation.getBrokerageName());
+        row.createCell(3)
+            .setCellValue(
+                operation.getTransactionType() != null
+                    ? operation.getTransactionType().toString()
+                    : "");
+        row.createCell(4)
+            .setCellValue(
+                operation.getEntryDate() != null ? operation.getEntryDate().toString() : "");
+        row.createCell(5)
+            .setCellValue(
+                operation.getExitDate() != null ? operation.getExitDate().toString() : "");
+        row.createCell(6)
+            .setCellValue(operation.getStatus() != null ? operation.getStatus().toString() : "");
+        row.createCell(7)
+            .setCellValue(operation.getQuantity() != null ? operation.getQuantity() : 0);
+        row.createCell(8)
+            .setCellValue(
+                operation.getEntryUnitPrice() != null
+                    ? operation.getEntryUnitPrice().doubleValue()
+                    : 0);
+        row.createCell(9)
+            .setCellValue(
+                operation.getEntryTotalValue() != null
+                    ? operation.getEntryTotalValue().doubleValue()
+                    : 0);
+        row.createCell(10)
+            .setCellValue(
+                operation.getExitUnitPrice() != null
+                    ? operation.getExitUnitPrice().doubleValue()
+                    : 0);
+        row.createCell(11)
+            .setCellValue(
+                operation.getExitTotalValue() != null
+                    ? operation.getExitTotalValue().doubleValue()
+                    : 0);
+        row.createCell(12)
+            .setCellValue(
+                operation.getProfitLoss() != null ? operation.getProfitLoss().doubleValue() : 0);
+        row.createCell(13)
+            .setCellValue(
+                operation.getProfitLossPercentage() != null
+                    ? operation.getProfitLossPercentage().doubleValue()
+                    : 0);
+      }
+
+      // Adicionar linha de resumo
+      Row summaryRow = sheet.createRow(rowNum + 1);
+      CellStyle boldStyle = workbook.createCellStyle();
+      org.apache.poi.ss.usermodel.Font boldFont = workbook.createFont();
+      boldFont.setBold(true);
+      boldStyle.setFont(boldFont);
+
+      Cell summaryLabelCell = summaryRow.createCell(0);
+      summaryLabelCell.setCellValue("RESUMO");
+      summaryLabelCell.setCellStyle(boldStyle);
+
+      Row totalEntryRow = sheet.createRow(rowNum + 2);
+      totalEntryRow.createCell(0).setCellValue("Valor Total de Entrada:");
+      Cell totalEntryCell = totalEntryRow.createCell(1);
+      totalEntryCell.setCellValue(result.getContent().get(0).getTotalEntryValue().doubleValue());
+
+      Row totalProfitRow = sheet.createRow(rowNum + 3);
+      totalProfitRow.createCell(0).setCellValue("Lucro/Prejuízo Total:");
+      Cell totalProfitCell = totalProfitRow.createCell(1);
+      totalProfitCell.setCellValue(result.getContent().get(0).getTotalProfitLoss().doubleValue());
+
+      Row totalPercentRow = sheet.createRow(rowNum + 4);
+      totalPercentRow.createCell(0).setCellValue("Lucro/Prejuízo Total %:");
+      Cell totalPercentCell = totalPercentRow.createCell(1);
+      totalPercentCell.setCellValue(
+          result.getContent().get(0).getTotalProfitLossPercentage().doubleValue());
+
+      // Ajustar largura das colunas
+      for (int i = 0; i < columns.length; i++) {
+        sheet.autoSizeColumn(i);
+      }
+
+      workbook.write(out);
+      return out.toByteArray();
+    } catch (Exception e) {
+      log.error("Erro ao gerar relatório Excel", e);
+      throw new RuntimeException("Erro ao gerar relatório Excel: " + e.getMessage());
+    }
+  }
+
+  public byte[] generatePdfReport(OperationFilterCriteria filterCriteria) {
+    // Buscar todas as operações que correspondem aos critérios de filtro
+    // Não usamos paginação aqui para exportar todos os dados
+    Pageable unpaged = Pageable.unpaged();
+    Page<OperationSummaryResponseDto> result = findByFilters(filterCriteria, unpaged);
+    List<OperationItemDto> operations = result.getContent().get(0).getOperations();
+
+    try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+      Document document = new Document(PageSize.A4.rotate());
+      PdfWriter.getInstance(document, out);
+      document.open();
+
+      // Título
+      com.itextpdf.text.Font titleFont =
+          new com.itextpdf.text.Font(FontFamily.HELVETICA, 18, com.itextpdf.text.Font.BOLD);
+      Paragraph title = new Paragraph("Relatório de Operações", titleFont);
+      title.setAlignment(Element.ALIGN_CENTER);
+      document.add(title);
+      document.add(Chunk.NEWLINE);
+
+      // Tabela
+      PdfPTable table = new PdfPTable(14);
+      table.setWidthPercentage(100);
+
+      // Cabeçalho
+      com.itextpdf.text.Font headerFont =
+          new com.itextpdf.text.Font(FontFamily.HELVETICA, 10, com.itextpdf.text.Font.BOLD);
+      String[] columns = {
+        "Código",
+        "Casa de Análise",
+        "Corretora",
+        "Tipo de Transação",
+        "Data de Entrada",
+        "Data de Saída",
+        "Status",
+        "Quantidade",
+        "Preço Unit. Entrada",
+        "Valor Total Entrada",
+        "Preço Unit. Saída",
+        "Valor Total Saída",
+        "Lucro/Prejuízo",
+        "Lucro/Prejuízo %"
+      };
+
+      for (String column : columns) {
+        PdfPCell cell = new PdfPCell(new Phrase(column, headerFont));
+        cell.setHorizontalAlignment(Element.ALIGN_CENTER);
+        cell.setBackgroundColor(BaseColor.LIGHT_GRAY);
+        table.addCell(cell);
+      }
+
+      // Dados
+      com.itextpdf.text.Font dataFont = new com.itextpdf.text.Font(FontFamily.HELVETICA, 8);
+      for (OperationItemDto operation : operations) {
+        table.addCell(new Phrase(operation.getOptionSeriesCode(), dataFont));
+        table.addCell(
+            new Phrase(
+                operation.getAnalysisHouseName() != null ? operation.getAnalysisHouseName() : "",
+                dataFont));
+        table.addCell(new Phrase(operation.getBrokerageName(), dataFont));
+        table.addCell(
+            new Phrase(
+                operation.getTransactionType() != null
+                    ? operation.getTransactionType().toString()
+                    : "",
+                dataFont));
+        table.addCell(
+            new Phrase(
+                operation.getEntryDate() != null ? operation.getEntryDate().toString() : "",
+                dataFont));
+        table.addCell(
+            new Phrase(
+                operation.getExitDate() != null ? operation.getExitDate().toString() : "",
+                dataFont));
+        table.addCell(
+            new Phrase(
+                operation.getStatus() != null ? operation.getStatus().toString() : "", dataFont));
+        table.addCell(
+            new Phrase(
+                operation.getQuantity() != null ? operation.getQuantity().toString() : "0",
+                dataFont));
+        table.addCell(
+            new Phrase(
+                operation.getEntryUnitPrice() != null
+                    ? operation.getEntryUnitPrice().toString()
+                    : "0",
+                dataFont));
+        table.addCell(
+            new Phrase(
+                operation.getEntryTotalValue() != null
+                    ? operation.getEntryTotalValue().toString()
+                    : "0",
+                dataFont));
+        table.addCell(
+            new Phrase(
+                operation.getExitUnitPrice() != null
+                    ? operation.getExitUnitPrice().toString()
+                    : "0",
+                dataFont));
+        table.addCell(
+            new Phrase(
+                operation.getExitTotalValue() != null
+                    ? operation.getExitTotalValue().toString()
+                    : "0",
+                dataFont));
+        table.addCell(
+            new Phrase(
+                operation.getProfitLoss() != null ? operation.getProfitLoss().toString() : "0",
+                dataFont));
+        table.addCell(
+            new Phrase(
+                operation.getProfitLossPercentage() != null
+                    ? operation.getProfitLossPercentage().toString()
+                    : "0",
+                dataFont));
+      }
+
+      document.add(table);
+      document.add(Chunk.NEWLINE);
+
+      // Resumo
+      com.itextpdf.text.Font summaryFont =
+          new com.itextpdf.text.Font(FontFamily.HELVETICA, 12, com.itextpdf.text.Font.BOLD);
+      Paragraph summary = new Paragraph("RESUMO", summaryFont);
+      document.add(summary);
+
+      Paragraph totalEntry =
+          new Paragraph(
+              "Valor Total de Entrada: "
+                  + result.getContent().get(0).getTotalEntryValue().toString());
+      document.add(totalEntry);
+
+      Paragraph totalProfit =
+          new Paragraph(
+              "Lucro/Prejuízo Total: "
+                  + result.getContent().get(0).getTotalProfitLoss().toString());
+      document.add(totalProfit);
+
+      Paragraph totalPercent =
+          new Paragraph(
+              "Lucro/Prejuízo Total %: "
+                  + result.getContent().get(0).getTotalProfitLossPercentage().toString());
+      document.add(totalPercent);
+
+      document.close();
+      return out.toByteArray();
+    } catch (Exception e) {
+      log.error("Erro ao gerar relatório PDF", e);
+      throw new RuntimeException("Erro ao gerar relatório PDF: " + e.getMessage());
+    }
   }
 }
