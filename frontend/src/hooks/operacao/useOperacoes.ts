@@ -47,7 +47,11 @@ export const useOperacoes = ({
           exitDateStart: filtros.exitDateStart,
           exitDateEnd: filtros.exitDateEnd,
           analysisHouseName: filtros.analysisHouseName,
-          brokerageName: filtros.brokerageName
+          brokerageName: filtros.brokerageName,
+          transactionType: filtros.transactionType,
+          optionType: filtros.optionType,
+          tradeType: filtros.tradeType
+          // Não incluímos status aqui pois estamos buscando apenas operações ativas
         },
         headers: token ? { Authorization: `Bearer ${token}` } : undefined
       });
@@ -63,6 +67,7 @@ export const useOperacoes = ({
     }
   }, [currentPage, pageSize, sortField, sortDirection, filtros, setTotalPages, setTotalItems]);
 
+  // Certifique-se de que a função de carregamento das operações finalizadas está mapeando corretamente os dados
   const carregarOperacoesFinalizadas = useCallback(async () => {
     if (loadingFinalizadas) return;
     
@@ -71,9 +76,12 @@ export const useOperacoes = ({
   
     try {
       const token = localStorage.getItem('token');
+      // Determina o status a ser enviado na requisição
+      const statusParam = filtros.status || 'WINNER,LOSER';
+      
       const response = await api.get('/operations', {
         params: { 
-          status: 'WINNER,LOSER',
+          status: statusParam,
           page: currentPage,
           size: pageSize,
           sort: sortField ? `${sortField},${sortDirection}` : undefined,
@@ -82,17 +90,29 @@ export const useOperacoes = ({
           exitDateStart: filtros.exitDateStart,
           exitDateEnd: filtros.exitDateEnd,
           analysisHouseName: filtros.analysisHouseName,
-          brokerageName: filtros.brokerageName
+          brokerageName: filtros.brokerageName,
+          transactionType: filtros.transactionType,
+          optionType: filtros.optionType,
+          tradeType: filtros.tradeType
         },
         headers: token ? { Authorization: `Bearer ${token}` } : undefined
       });
       
-      setOperacoesFinalizadas(response.data.content || response.data);
-      setTotalPages(response.data.totalPages || 1);
-      setTotalItems(response.data.totalElements || response.data.length);
+      // Certifique-se de que os dados estão sendo mapeados corretamente
+      const data = response.data;
+      
+      // Verifique se a resposta tem o formato esperado
+      if (data && data.content) {
+        setOperacoesFinalizadas(data.content);
+        setTotalPages(data.totalPages);
+        setTotalItems(data.totalElements);
+      } else {
+        console.error('Formato de resposta inesperado:', data);
+        setError('Erro ao carregar operações finalizadas: formato de resposta inválido');
+      }
     } catch (error) {
       console.error('Erro ao carregar operações finalizadas:', error);
-      setError('Não foi possível carregar as operações finalizadas. Tente novamente mais tarde.');
+      setError('Erro ao carregar operações finalizadas');
     } finally {
       setLoadingFinalizadas(false);
     }

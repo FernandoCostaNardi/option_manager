@@ -2,10 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Filter, ChevronDown, ChevronUp, X, Loader2 } from 'lucide-react';
 import { FiltrosOperacao } from '../../../types/operacao/operacoes.types';
 import api from '../../../services/api';
-import DatePicker, { registerLocale } from 'react-datepicker';
-import {ptBR} from 'date-fns/locale/pt-BR';
 import "react-datepicker/dist/react-datepicker.css";
 import "../../../styles/datepicker-custom.css"; // Importe os estilos personalizados
+import DatePicker from 'react-datepicker';
 
 interface FiltrosAccordionProps {
   acordeonAberto: boolean;
@@ -16,6 +15,7 @@ interface FiltrosAccordionProps {
   obterTextoFiltrosAtivos: () => string;
   limparFiltros: () => void;
   aplicarFiltros: () => void;
+  activeTab: string; // Adicionando a aba ativa como prop
 }
 
 export const FiltrosAccordion: React.FC<FiltrosAccordionProps> = ({
@@ -26,7 +26,8 @@ export const FiltrosAccordion: React.FC<FiltrosAccordionProps> = ({
   temFiltrosAtivos,
   obterTextoFiltrosAtivos,
   limparFiltros,
-  aplicarFiltros
+  aplicarFiltros,
+  activeTab // Recebendo a aba ativa
 }) => {
   // Estado local para armazenar os filtros temporários
   const [filtrosTemp, setFiltrosTemp] = useState<FiltrosOperacao>(filtros);
@@ -63,7 +64,8 @@ export const FiltrosAccordion: React.FC<FiltrosAccordionProps> = ({
       entryDateStart: entryDateRange[0] ? formatDateToString(entryDateRange[0]) : null,
       entryDateEnd: entryDateRange[1] ? formatDateToString(entryDateRange[1]) : null,
       exitDateStart: exitDateRange[0] ? formatDateToString(exitDateRange[0]) : null,
-      exitDateEnd: exitDateRange[1] ? formatDateToString(exitDateRange[1]) : null
+      exitDateEnd: exitDateRange[1] ? formatDateToString(exitDateRange[1]) : null,
+      transactionType: filtrosTemp.transactionType // Garantindo que o tipo de transação seja incluído
     };
     
     setFiltrosTemp(updatedFiltros);
@@ -83,7 +85,11 @@ export const FiltrosAccordion: React.FC<FiltrosAccordionProps> = ({
       exitDateStart: null,
       exitDateEnd: null,
       analysisHouseName: null,
-      brokerageName: null
+      brokerageName: null,
+      transactionType: null,
+      optionType: null,
+      tradeType: null,
+      status: null
     });
     
     // Limpa os ranges de data
@@ -157,6 +163,72 @@ export const FiltrosAccordion: React.FC<FiltrosAccordionProps> = ({
     }
   }, [acordeonAberto]);
 
+  // Função para traduzir o tipo de transação para exibição
+  const traduzirTipoTransacao = (tipo: string | null): string => {
+    if (!tipo) return '';
+    switch (tipo) {
+      case 'BUY': return 'COMPRA';
+      case 'SELL': return 'VENDA';
+      default: return tipo;
+    }
+  };
+
+  // Função para converter o tipo de transação de exibição para API
+  const converterTipoTransacao = (tipoExibicao: string): string | null => {
+    if (!tipoExibicao) return null;
+    switch (tipoExibicao) {
+      case 'COMPRA': return 'BUY';
+      case 'VENDA': return 'SELL';
+      default: return null;
+    }
+  };
+
+  // Adicione as funções para traduzir e converter os novos tipos de filtros
+  const traduzirTipoOpcao = (tipo: string | null): string => {
+    if (!tipo) return '';
+    return tipo; // Já está em formato legível (PUT ou CALL)
+  };
+  
+  // Função para traduzir o tipo de trade para exibição
+  const traduzirTipoTrade = (tipo: string | null): string => {
+    if (!tipo) return '';
+    switch (tipo) {
+      case 'SWING': return 'SwingTrade';
+      case 'DAY': return 'DayTrade';
+      default: return tipo;
+    }
+  };
+  
+  // Função para converter o tipo de trade de exibição para API
+  const converterTipoTrade = (tipoExibicao: string): string | null => {
+    if (!tipoExibicao) return null;
+    switch (tipoExibicao) {
+      case 'SwingTrade': return 'SWING';
+      case 'DayTrade': return 'DAY';
+      default: return null;
+    }
+  };
+  
+  // Função para traduzir o status para exibição
+  const traduzirStatus = (status: string | null): string => {
+    if (!status) return '';
+    switch (status) {
+      case 'WINNER': return 'Ganhadora';
+      case 'LOSER': return 'Perdedora';
+      default: return status;
+    }
+  };
+  
+  // Função para converter o status de exibição para API
+  const converterStatus = (statusExibicao: string): string | null => {
+    if (!statusExibicao) return null;
+    switch (statusExibicao) {
+      case 'Ganhadora': return 'WINNER';
+      case 'Perdedora': return 'LOSER';
+      default: return null;
+    }
+  };
+
   return (
     <div className="mb-6 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
       <div 
@@ -214,27 +286,111 @@ export const FiltrosAccordion: React.FC<FiltrosAccordionProps> = ({
               />
             </div>
             
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Período de Saída
-              </label>
-              <DatePicker
-                selectsRange={true}
-                startDate={exitDateRange[0]}
-                endDate={exitDateRange[1]}
-                onChange={(update) => {
-                  setExitDateRange(update);
-                }}
-                isClearable={true}
-                locale="pt-BR"
-                dateFormat="dd/MM/yyyy"
-                placeholderText="Selecione o período de saída"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-purple-500"
-              />
-            </div>
+            {/* Período de Saída - Mostrar apenas na aba de operações finalizadas */}
+            {activeTab === "finalizadas" && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Período de Saída
+                </label>
+                <DatePicker
+                  selectsRange={true}
+                  startDate={exitDateRange[0]}
+                  endDate={exitDateRange[1]}
+                  onChange={(update) => {
+                    setExitDateRange(update);
+                  }}
+                  isClearable={true}
+                  locale="pt-BR"
+                  dateFormat="dd/MM/yyyy"
+                  placeholderText="Selecione o período de saída"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-purple-500"
+                />
+              </div>
+            )}
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+            {/* Tipo de Transação - Mostrar apenas na aba de operações ativas */}
+            {activeTab === "ativas" && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Tipo de Transação
+                </label>
+                <select
+                  value={filtrosTemp.transactionType ? traduzirTipoTransacao(filtrosTemp.transactionType) : ''}
+                  onChange={(e) => setFiltrosTemp({
+                    ...filtrosTemp, 
+                    transactionType: converterTipoTransacao(e.target.value)
+                  })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-purple-500 appearance-none"
+                >
+                  <option value="">Todos</option>
+                  <option value="COMPRA">COMPRA</option>
+                  <option value="VENDA">VENDA</option>
+                </select>
+              </div>
+            )}
+            
+            {/* Tipo de Opção - Mostrar em ambas as abas */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Tipo de Opção
+              </label>
+              <select
+                value={filtrosTemp.optionType || ''}
+                onChange={(e) => setFiltrosTemp({...filtrosTemp, optionType: e.target.value || null})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-purple-500 appearance-none"
+              >
+                <option value="">Todos</option>
+                <option value="CALL">CALL</option>
+                <option value="PUT">PUT</option>
+              </select>
+            </div>
+            
+            {/* Tipo de Trade - Mostrar apenas na aba de operações finalizadas */}
+            {activeTab === "finalizadas" && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Tipo de Trade
+                </label>
+                <select
+                  value={filtrosTemp.tradeType ? traduzirTipoTrade(filtrosTemp.tradeType) : ''}
+                  onChange={(e) => setFiltrosTemp({
+                    ...filtrosTemp, 
+                    tradeType: converterTipoTrade(e.target.value)
+                  })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-purple-500 appearance-none"
+                >
+                  <option value="">Todos</option>
+                  <option value="SwingTrade">SwingTrade</option>
+                  <option value="DayTrade">DayTrade</option>
+                </select>
+              </div>
+            )}
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+            {/* Status - Mostrar apenas na aba de operações finalizadas */}
+            {activeTab === "finalizadas" && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Status
+                </label>
+                <select
+                  value={filtrosTemp.status ? traduzirStatus(filtrosTemp.status) : ''}
+                  onChange={(e) => setFiltrosTemp({
+                    ...filtrosTemp, 
+                    status: converterStatus(e.target.value)
+                  })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-purple-500 appearance-none"
+                >
+                  <option value="">Todos</option>
+                  <option value="Ganhadora">Ganhadora</option>
+                  <option value="Perdedora">Perdedora</option>
+                </select>
+              </div>
+            )}
+            
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Casa de Análise
@@ -290,25 +446,10 @@ export const FiltrosAccordion: React.FC<FiltrosAccordionProps> = ({
             </div>
           </div>
           
-          {error && (
-            <div className="mt-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm flex items-center">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-              </svg>
-              {error}
-            </div>
-          )}
-          
-          <div className="mt-4 flex justify-end">
-            <button
-              onClick={() => handleLimparFiltros()}
-              className="px-4 py-2 text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200 mr-2"
-            >
-              Limpar
-            </button>
+          <div className="flex justify-end mt-6">
             <button
               onClick={handleAplicarFiltros}
-              className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700"
+              className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors"
             >
               Aplicar Filtros
             </button>

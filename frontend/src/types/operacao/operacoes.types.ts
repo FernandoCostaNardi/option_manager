@@ -1,6 +1,7 @@
 export interface OperacaoAtiva {
     id: string;
     entryDate: string;
+    transactionType: string;
     exitDate: string;
     analysisHouseName: string;
     brokerageName: string;
@@ -14,18 +15,46 @@ export interface OperacaoAtiva {
     profitLoss: number;
     profitLossPercentage: number;
     status: string;
+    optionType: string;
   }
   
-  export interface OperacaoFinalizada extends OperacaoAtiva {
-    dataSaida: string;
-    status: 'Vencedor' | 'Perdedor';
-    valorUnitarioSaida: number;
-    valorTotalSaida: number;
-    valorLucroPrejuizo: number;
-    percentualLucroPrejuizo: number;
+  export interface OperacaoFinalizada {
+    optionSerieCode: string;
+    id: string;
+    type: string;
+    entryDate: string;
+    exitDate: string;
+    entryUnitPrice: number;
+    entryTotalValue: number;
+    exitUnitPrice: number;
+    exitTotalValue: number;
+    result: number | null;
+    status: string;
+    analysisHouseName: string | null;
+    brokerageName: string | null;
+    profitLoss: number | null;
+    profitLossPercentage: number | null;
+    baseAssetLogoUrl: string | null;
+    tradeType: string;
+    transactionType: string;
+    optionType: string;
   }
   
-  export type SortField = 'optionSerieCode' | 'entryDate' | 'entryTotalValue' | null;
+  export type SortField = 
+    | 'optionSerieCode' 
+    | 'optionType' 
+    | 'transactionType' 
+    | 'entryDate' 
+    | 'exitDate' 
+    | 'entryUnitPrice' 
+    | 'exitUnitPrice' 
+    | 'profitLoss'
+    | 'profitLossPercentage'
+    | 'entryTotalValue'
+    | 'analysisHouseName' 
+    | 'brokerageName'
+    | 'tradeType'  // Adicionando o campo tradeType
+    | 'status';    // Adicionando o campo status
   export type SortDirection = 'asc' | 'desc';
   
   export interface FiltrosOperacao {
@@ -35,4 +64,10 @@ export interface OperacaoAtiva {
     exitDateEnd: string | null;
     analysisHouseName: string | null;
     brokerageName: string | null;
+    transactionType: string | null;
+    optionType: string | null;
+    tradeType: string | null;
+    status: string | null;
+    entryTotalValue: number | null;
+
   }

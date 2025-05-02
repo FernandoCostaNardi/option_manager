@@ -1,6 +1,9 @@
 package com.olisystem.optionsmanager.dto;
 
 import com.olisystem.optionsmanager.model.OperationStatus;
+import com.olisystem.optionsmanager.model.OptionType;
+import com.olisystem.optionsmanager.model.TradeType;
+import com.olisystem.optionsmanager.model.TransactionType;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.UUID;
@@ -12,6 +15,9 @@ import lombok.Data;
 public class OperationSummaryResponseDto {
   private UUID id;
   private String optionSerieCode;
+  private OptionType optionType;
+  private TransactionType transactionType;
+  private TradeType tradeType;
   private LocalDate entryDate;
   private LocalDate exitDate;
   private OperationStatus status;

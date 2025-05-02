@@ -38,6 +38,22 @@ export const OperacoesAtivasTable: React.FC<OperacoesAtivasTableProps> = ({
               </span>
             </th>
             <th 
+              className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
+              onClick={() => onSort('optionType')}
+            >
+              <span className="flex items-center justify-center">
+                Tipo <SortIcon currentField={sortField} field="optionType" direction={sortDirection} />
+              </span>
+            </th>
+            <th 
+              className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+              onClick={() => onSort('transactionType')}
+            >
+              <span className="flex items-center justify-center">
+                Tipo de transação <SortIcon currentField={sortField} field="transactionType" direction={sortDirection} />
+              </span>
+            </th>
+            <th 
               className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
               onClick={() => onSort('entryDate')}
             >

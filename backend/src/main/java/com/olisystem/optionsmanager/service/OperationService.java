@@ -4,7 +4,6 @@ import com.olisystem.optionsmanager.dto.OperationDataRequest;
 import com.olisystem.optionsmanager.dto.OperationFilterCriteria;
 import com.olisystem.optionsmanager.dto.OperationSummaryResponseDto;
 import com.olisystem.optionsmanager.model.*;
-import com.olisystem.optionsmanager.model.OperationStatus;
 import com.olisystem.optionsmanager.repository.*;
 import com.olisystem.optionsmanager.util.SecurityUtil;
 import java.math.BigDecimal;
@@ -74,6 +73,9 @@ public class OperationService {
     }
 
     operation.setTransactionType(request.getTransactionType());
+    if (request.getExitDate() != null) {
+      operation.setTradeType(calculateTradeType(request.getEntryDate(), request.getExitDate()));
+    }
     operation.setEntryDate(request.getEntryDate());
     operation.setExitDate(request.getExitDate());
     operation.setQuantity(request.getQuantity());
@@ -106,6 +108,17 @@ public class OperationService {
     }
   }
 
+  private TradeType calculateTradeType(LocalDate entryDate, LocalDate exitDate) {
+    if (entryDate != null && exitDate != null) {
+      if (entryDate.isBefore(exitDate)) {
+        return TradeType.SWING;
+      }
+      return TradeType.DAY;
+    }
+    // Retorno padrão para quando as datas são nulas
+    return null;
+  }
+
   public Page<OperationSummaryResponseDto> findByStatuses(
       List<OperationStatus> statuses, Pageable pageable) {
     // Verificar se há ordenação por campos que não existem na entidade
@@ -130,6 +143,7 @@ public class OperationService {
                     return OperationSummaryResponseDto.builder()
                         .id(op.getId())
                         .optionSerieCode(op.getOptionSeries().getCode().toUpperCase())
+                        .optionType(op.getOptionSeries().getType())
                         .entryDate(op.getEntryDate())
                         .exitDate(op.getExitDate())
                         .status(op.getStatus())
@@ -142,6 +156,8 @@ public class OperationService {
                         .entryTotalValue(op.getEntryTotalValue())
                         .exitUnitPrice(op.getExitUnitPrice())
                         .exitTotalValue(op.getExitTotalValue())
+                        .profitLoss(op.getProfitLoss())
+                        .profitLossPercentage(op.getProfitLossPercentage())
                         .baseAssetLogoUrl(op.getOptionSeries().getAsset().getUrlLogo())
                         .build();
                   })
@@ -162,6 +178,7 @@ public class OperationService {
           (Operation op) -> {
             return OperationSummaryResponseDto.builder()
                 .optionSerieCode(op.getOptionSeries().getCode().toUpperCase())
+                .optionType(op.getOptionSeries().getType())
                 .entryDate(op.getEntryDate())
                 .exitDate(op.getExitDate())
                 .status(op.getStatus())
@@ -173,6 +190,8 @@ public class OperationService {
                 .entryTotalValue(op.getEntryTotalValue())
                 .exitUnitPrice(op.getExitUnitPrice())
                 .exitTotalValue(op.getExitTotalValue())
+                .profitLoss(op.getProfitLoss())
+                .profitLossPercentage(op.getProfitLossPercentage())
                 .baseAssetLogoUrl(op.getOptionSeries().getAsset().getUrlLogo())
                 .build();
           });
@@ -244,6 +263,41 @@ public class OperationService {
                 OperationSummaryResponseDto::getProfitLossPercentage,
                 Comparator.nullsLast(BigDecimal::compareTo));
         break;
+      case "transactionType":
+        comparator =
+            Comparator.comparing(
+                OperationSummaryResponseDto::getTransactionType,
+                Comparator.nullsLast(TransactionType::compareTo));
+        break;
+      case "tradeType":
+        comparator =
+            Comparator.comparing(
+                OperationSummaryResponseDto::getTradeType,
+                Comparator.nullsLast(TradeType::compareTo));
+        break;
+      case "status":
+        comparator =
+            Comparator.comparing(
+                OperationSummaryResponseDto::getStatus,
+                Comparator.nullsLast(OperationStatus::compareTo));
+        break;
+      case "analysisHouseName":
+        comparator =
+            Comparator.comparing(
+                OperationSummaryResponseDto::getAnalysisHouseName,
+                Comparator.nullsLast(String::compareTo));
+        break;
+      case "brokerageName":
+        comparator =
+            Comparator.comparing(
+                OperationSummaryResponseDto::getBrokerageName,
+                Comparator.nullsLast(String::compareTo));
+        break;
+      case "optionType":
+        comparator =
+            Comparator.comparing(
+                OperationSummaryResponseDto::getOptionType,
+                Comparator.nullsLast(OptionType::compareTo));
       default:
         // Propriedade desconhecida, não ordenar
         break;
@@ -268,7 +322,11 @@ public class OperationService {
         if (order.getProperty().equals("optionSerieCode")
             || order.getProperty().equals("analysisHouseName")
             || order.getProperty().equals("brokerageName")
-            || order.getProperty().equals("baseAssetLogoUrl")) {
+            || order.getProperty().equals("baseAssetLogoUrl")
+            || order.getProperty().equals("transactionType")
+            || order.getProperty().equals("tradeType")
+            || order.getProperty().equals("status")
+            || order.getProperty().equals("optionType")) {
           hasCustomSort = true;
           break;
         }
@@ -351,22 +409,29 @@ public class OperationService {
                   cb.lessThanOrEqualTo(root.get("exitDate"), criteria.getExitDateEnd()));
     }
 
-    if (criteria.getAnalysisHouseName() != null && !criteria.getAnalysisHouseName().isEmpty()) {
+    // Filtro por tipo de transação
+    if (criteria.getTransactionType() != null) {
       spec =
           spec.and(
               (root, query, cb) ->
-                  cb.like(
-                      cb.lower(root.get("analysisHouse").get("name")),
-                      "%" + criteria.getAnalysisHouseName().toLowerCase() + "%"));
+                  cb.equal(root.get("transactionType"), criteria.getTransactionType()));
     }
 
-    if (criteria.getBrokerageName() != null && !criteria.getBrokerageName().isEmpty()) {
+    // Filtro por tipo de trade
+    if (criteria.getTradeType() != null) {
+      spec =
+          spec.and((root, query, cb) -> cb.equal(root.get("tradeType"), criteria.getTradeType()));
+    }
+
+    // Filtro por tipo de opção (corrigido)
+    if (criteria.getOptionType() != null) {
       spec =
           spec.and(
               (root, query, cb) ->
-                  cb.like(
-                      cb.lower(root.get("brokerage").get("name")),
-                      "%" + criteria.getBrokerageName().toLowerCase() + "%"));
+                  cb.equal(root.join("optionSeries").get("type"), criteria.getOptionType()));
+    }
+    if (criteria.getStatus() != null && !criteria.getStatus().isEmpty()) {
+      spec = spec.and((root, query, cb) -> root.get("status").in(criteria.getStatus()));
     }
 
     return spec;
@@ -376,6 +441,9 @@ public class OperationService {
   private OperationSummaryResponseDto mapToDto(Operation op) {
     return OperationSummaryResponseDto.builder()
         .optionSerieCode(op.getOptionSeries().getCode())
+        .optionType(op.getOptionSeries().getType())
+        .transactionType(op.getTransactionType())
+        .tradeType(op.getTradeType())
         .entryDate(op.getEntryDate())
         .exitDate(op.getExitDate())
         .status(op.getStatus())
@@ -386,6 +454,8 @@ public class OperationService {
         .entryTotalValue(op.getEntryTotalValue())
         .exitUnitPrice(op.getExitUnitPrice())
         .exitTotalValue(op.getExitTotalValue())
+        .profitLoss(op.getProfitLoss())
+        .profitLossPercentage(op.getProfitLossPercentage())
         .baseAssetLogoUrl(op.getOptionSeries().getAsset().getUrlLogo())
         .build();
   }
@@ -397,75 +467,9 @@ public class OperationService {
       String property = order.getProperty();
       boolean isAscending = order.getDirection().isAscending();
 
-      Comparator<OperationSummaryResponseDto> comparator = null;
-
-      switch (property) {
-        case "optionSerieCode":
-          comparator =
-              Comparator.comparing(
-                  OperationSummaryResponseDto::getOptionSerieCode,
-                  Comparator.nullsLast(String::compareTo));
-          break;
-        case "entryDate":
-          comparator =
-              Comparator.comparing(
-                  OperationSummaryResponseDto::getEntryDate,
-                  Comparator.nullsLast(LocalDate::compareTo));
-          break;
-        case "exitDate":
-          comparator =
-              Comparator.comparing(
-                  OperationSummaryResponseDto::getExitDate,
-                  Comparator.nullsLast(LocalDate::compareTo));
-          break;
-        case "analysisHouseName":
-          comparator =
-              Comparator.comparing(
-                  OperationSummaryResponseDto::getAnalysisHouseName,
-                  Comparator.nullsLast(String::compareTo));
-          break;
-        case "brokerageName":
-          comparator =
-              Comparator.comparing(
-                  OperationSummaryResponseDto::getBrokerageName,
-                  Comparator.nullsLast(String::compareTo));
-          break;
-        case "entryTotalValue":
-          comparator =
-              Comparator.comparing(
-                  OperationSummaryResponseDto::getEntryTotalValue,
-                  Comparator.nullsLast(BigDecimal::compareTo));
-          break;
-        case "exitTotalValue":
-          comparator =
-              Comparator.comparing(
-                  OperationSummaryResponseDto::getExitTotalValue,
-                  Comparator.nullsLast(BigDecimal::compareTo));
-          break;
-        case "profitLoss":
-          comparator =
-              Comparator.comparing(
-                  OperationSummaryResponseDto::getProfitLoss,
-                  Comparator.nullsLast(BigDecimal::compareTo));
-          break;
-        case "profitLossPercentage":
-          comparator =
-              Comparator.comparing(
-                  OperationSummaryResponseDto::getProfitLossPercentage,
-                  Comparator.nullsLast(BigDecimal::compareTo));
-          break;
-        default:
-          // Propriedade desconhecida, não ordenar
-          break;
-      }
-
+      Comparator<OperationSummaryResponseDto> comparator = createComparator(property, isAscending);
       if (comparator != null) {
-        if (!isAscending) {
-          comparator = comparator.reversed();
-        }
-
-        final Comparator<OperationSummaryResponseDto> finalComparator = comparator;
-        dtos = dtos.stream().sorted(finalComparator).collect(Collectors.toList());
+        dtos.sort(comparator);
       }
     }
 

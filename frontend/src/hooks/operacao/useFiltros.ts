@@ -10,7 +10,11 @@ export const useFiltros = () => {
     exitDateStart: null,
     exitDateEnd: null,
     analysisHouseName: null,
-    brokerageName: null
+    brokerageName: null,
+    transactionType: null,
+    optionType: null,
+    tradeType: null,
+    status: null
   });
 
   const limparFiltros = useCallback(() => {
@@ -20,7 +24,11 @@ export const useFiltros = () => {
       exitDateStart: null,
       exitDateEnd: null,
       analysisHouseName: null,
-      brokerageName: null
+      brokerageName: null,
+      transactionType: null,
+      optionType: null,
+      tradeType: null,
+      status: null
     });
   }, []);
 
@@ -64,6 +72,24 @@ export const useFiltros = () => {
       filtrosAtivos.push(`Corretora: ${filtros.brokerageName}`);
     }
     
+    if (filtros.transactionType) {
+      const tipoTraduzido = filtros.transactionType === 'BUY' ? 'COMPRA' : 'VENDA';
+      filtrosAtivos.push(`Tipo: ${tipoTraduzido}`);
+    }
+    
+    if (filtros.optionType) {
+      filtrosAtivos.push(`Tipo de Opção: ${filtros.optionType}`);
+    }
+    
+    if (filtros.tradeType) {
+      const tipoTradeTraduzido = filtros.tradeType === 'SWING' ? 'SwingTrade' : 'DayTrade';
+      filtrosAtivos.push(`Tipo de Trade: ${tipoTradeTraduzido}`);
+    }
+    
+    if (filtros.status) {
+      const statusTraduzido = filtros.status === 'WINNER' ? 'Ganhadora' : 'Perdedora';
+      filtrosAtivos.push(`Status: ${statusTraduzido}`);
+    }
     return filtrosAtivos.join(' | ');
   };
 

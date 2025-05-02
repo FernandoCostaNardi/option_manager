@@ -32,6 +32,10 @@ public class Operation {
   @Column(nullable = false)
   private TransactionType transactionType;
 
+  @Enumerated(EnumType.STRING)
+  @Column(nullable = false)
+  private TradeType tradeType;
+
   @Column(nullable = false)
   private LocalDate entryDate;
 
@@ -54,9 +58,9 @@ public class Operation {
 
   private BigDecimal exitTotalValue;
 
-  private BigDecimal adjustedAveragePrice;
+  private BigDecimal profitLoss;
 
-  private BigDecimal averagePriceAdjustmentValue;
+  private BigDecimal profitLossPercentage;
 
   @ManyToOne
   @JoinColumn(name = "user_id")

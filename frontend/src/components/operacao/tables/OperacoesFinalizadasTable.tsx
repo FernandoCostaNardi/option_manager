@@ -1,30 +1,37 @@
 import React from 'react';
 import { OperacaoFinalizada, SortField, SortDirection } from '../../../types/operacao/operacoes.types';
-import { SortIcon } from '../../SortIcon';
 import { OperacaoFinalizadaItem } from './OperacaoFinalizadaItem';
+import { Loader2 } from 'lucide-react';
+import { SortIcon } from '../../SortIcon';
 
 interface OperacoesFinalizadasTableProps {
   operacoes: OperacaoFinalizada[];
+  loading: boolean;
+  onView: (id: string) => void;
+  onRemove: (id: string) => void;
+  onViewTargets: (id: string) => void;
+  onSort: (field: SortField) => void;
   sortField: SortField;
   sortDirection: SortDirection;
-  onSort: (field: SortField) => void;
-  onView: (id: string) => void;
 }
 
-export const OperacoesFinalizadasTable: React.FC<OperacoesFinalizadasTableProps> = ({
+export function OperacoesFinalizadasTable({
   operacoes,
-  sortField,
-  sortDirection,
+  loading,
+  onView,
+  onRemove,
+  onViewTargets,
   onSort,
-  onView
-}) => {
+  sortField,
+  sortDirection
+}: OperacoesFinalizadasTableProps) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full">
+    <div className="overflow-x-auto rounded-lg border border-gray-100">
+      <table className="min-w-full divide-y divide-gray-100">
         <thead className="bg-gray-50">
           <tr>
             <th 
-              className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+              className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
               onClick={() => onSort('optionSerieCode')}
             >
               <span className="flex items-center justify-center">
@@ -32,53 +39,123 @@ export const OperacoesFinalizadasTable: React.FC<OperacoesFinalizadasTableProps>
               </span>
             </th>
             <th 
-              className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+              className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
+              onClick={() => onSort('optionType')}
+            >
+              <span className="flex items-center justify-center">
+                Tipo <SortIcon currentField={sortField} field="optionType" direction={sortDirection} />
+              </span>
+            </th>
+            <th 
+              className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
               onClick={() => onSort('entryDate')}
             >
               <span className="flex items-center justify-center">
                 Data Entrada <SortIcon currentField={sortField} field="entryDate" direction={sortDirection} />
               </span>
             </th>
-            <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Data Saída
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Casa de Análise
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Corretora
-            </th>
-            <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Quantidade
-            </th>
             <th 
-              className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-              onClick={() => onSort('entryTotalValue')}
+              className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
+              onClick={() => onSort('exitDate')}
             >
               <span className="flex items-center justify-center">
-                Valor Total <SortIcon currentField={sortField} field="entryTotalValue" direction={sortDirection} />
+                Data Saída <SortIcon currentField={sortField} field="exitDate" direction={sortDirection} />
               </span>
             </th>
-            <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Resultado
+            <th 
+              className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
+              onClick={() => onSort('tradeType')}
+            >
+              <span className="flex items-center justify-center">
+                Tipo de trade <SortIcon currentField={sortField} field="tradeType" direction={sortDirection} />
+              </span>
             </th>
-            <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+            <th 
+              className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
+              onClick={() => onSort('entryUnitPrice')}
+            >
+              <span className="flex items-center justify-center">
+                Preço Entrada <SortIcon currentField={sortField} field="entryUnitPrice" direction={sortDirection} />
+              </span>
+            </th>
+            <th 
+              className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
+              onClick={() => onSort('exitUnitPrice')}
+            >
+              <span className="flex items-center justify-center">
+                Preço Saída <SortIcon currentField={sortField} field="exitUnitPrice" direction={sortDirection} />
+              </span>
+            </th>
+            <th 
+              className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
+              onClick={() => onSort('profitLoss')}
+            >
+              <span className="flex items-center justify-end">
+                Resultado <SortIcon currentField={sortField} field="profitLoss" direction={sortDirection} />
+              </span>
+            </th>
+            <th 
+              className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
+              onClick={() => onSort('profitLossPercentage')}
+            >
+              <span className="flex items-center justify-center">
+                % <SortIcon currentField={sortField} field="profitLossPercentage" direction={sortDirection} />
+              </span>
+            </th>
+            <th 
+              className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
+              onClick={() => onSort('status')}
+            >
+              <span className="flex items-center justify-center">
+                Status <SortIcon currentField={sortField} field="status" direction={sortDirection} />
+              </span>
+            </th>
+            <th 
+              className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
+              onClick={() => onSort('analysisHouseName')}
+            >
+              <span className="flex items-center">
+                Casa de Análise <SortIcon currentField={sortField} field="analysisHouseName" direction={sortDirection} />
+              </span>
+            </th>
+            <th 
+              className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-50"
+              onClick={() => onSort('brokerageName')}
+            >
+              <span className="flex items-center">
+                Corretora <SortIcon currentField={sortField} field="brokerageName" direction={sortDirection} />
+              </span>
+            </th>
+            <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
               Ações
             </th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-200">
-          {operacoes.length === 0 ? (
+        <tbody className="bg-white divide-y divide-gray-100">
+          {loading ? (
             <tr>
-              <td colSpan={9} className="text-center py-6 text-gray-500">Nenhuma operação finalizada encontrada.</td>
+              <td colSpan={13} className="px-4 py-8 text-center">
+                <div className="flex items-center justify-center">
+                  <Loader2 className="w-6 h-6 text-purple-600 animate-spin mr-2" />
+                  <span className="text-gray-500">Carregando operações...</span>
+                </div>
+              </td>
+            </tr>
+          ) : operacoes.length === 0 ? (
+            <tr>
+              <td colSpan={13} className="px-4 py-8 text-center text-gray-500">
+                Nenhuma operação finalizada encontrada.
+              </td>
             </tr>
           ) : (
             operacoes.map((operacao, index) => (
               <OperacaoFinalizadaItem
                 key={operacao.id}
                 operacao={operacao}
-                isAlternate={index % 2 === 1}
                 onView={onView}
+                onRemove={onRemove}
+                onViewTargets={onViewTargets}
+                index={index}
               />
             ))
           )}
@@ -86,4 +163,4 @@ export const OperacoesFinalizadasTable: React.FC<OperacoesFinalizadasTableProps>
       </table>
     </div>
   );
-};
+}

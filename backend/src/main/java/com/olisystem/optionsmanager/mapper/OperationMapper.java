@@ -27,8 +27,6 @@ public class OperationMapper {
         .entryTotalValue(dto.getEntryTotalValue())
         .exitUnitPrice(dto.getExitUnitPrice())
         .exitTotalValue(dto.getExitTotalValue())
-        .adjustedAveragePrice(dto.getAdjustedAveragePrice())
-        .averagePriceAdjustmentValue(dto.getAveragePriceAdjustmentValue())
         .build();
   }
 
@@ -52,8 +50,6 @@ public class OperationMapper {
         .entryTotalValue(entity.getEntryTotalValue())
         .exitUnitPrice(entity.getExitUnitPrice())
         .exitTotalValue(entity.getExitTotalValue())
-        .adjustedAveragePrice(entity.getAdjustedAveragePrice())
-        .averagePriceAdjustmentValue(entity.getAveragePriceAdjustmentValue())
         .build();
   }
 }

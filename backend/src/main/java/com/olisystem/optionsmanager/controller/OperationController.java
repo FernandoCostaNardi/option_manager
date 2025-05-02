@@ -4,6 +4,9 @@ import com.olisystem.optionsmanager.dto.OperationDataRequest;
 import com.olisystem.optionsmanager.dto.OperationFilterCriteria;
 import com.olisystem.optionsmanager.dto.OperationSummaryResponseDto;
 import com.olisystem.optionsmanager.model.OperationStatus;
+import com.olisystem.optionsmanager.model.OptionType;
+import com.olisystem.optionsmanager.model.TradeType;
+import com.olisystem.optionsmanager.model.TransactionType;
 import com.olisystem.optionsmanager.service.OperationService;
 import java.time.LocalDate;
 import java.util.List;
@@ -49,6 +52,9 @@ public class OperationController {
           LocalDate exitDateEnd,
       @RequestParam(required = false) String analysisHouseName,
       @RequestParam(required = false) String brokerageName,
+      @RequestParam(required = false) TransactionType transactionType,
+      @RequestParam(required = false) TradeType tradeType,
+      @RequestParam(required = false) OptionType optionType,
       @PageableDefault(size = 5) Pageable pageable) {
 
     OperationFilterCriteria filterCriteria =
@@ -60,6 +66,9 @@ public class OperationController {
             .exitDateEnd(exitDateEnd)
             .analysisHouseName(analysisHouseName)
             .brokerageName(brokerageName)
+            .transactionType(transactionType)
+            .tradeType(tradeType)
+            .optionType(optionType)
             .build();
 
     Page<OperationSummaryResponseDto> result =
