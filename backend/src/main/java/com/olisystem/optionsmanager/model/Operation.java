@@ -65,4 +65,11 @@ public class Operation {
   @ManyToOne
   @JoinColumn(name = "user_id")
   private User user; // Reference to the logged-in user
+
+  public BigDecimal getResult() {
+    if (exitTotalValue != null && entryTotalValue != null) {
+      return exitTotalValue.subtract(entryTotalValue);
+    }
+    return null;
+  }
 }

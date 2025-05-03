@@ -7,6 +7,7 @@ import com.olisystem.optionsmanager.dto.OperationDataRequest;
 import com.olisystem.optionsmanager.dto.OperationFilterCriteria;
 import com.olisystem.optionsmanager.dto.OperationItemDto;
 import com.olisystem.optionsmanager.dto.OperationSummaryResponseDto;
+import com.olisystem.optionsmanager.exception.ResourceNotFoundException;
 import com.olisystem.optionsmanager.model.AnalysisHouse;
 import com.olisystem.optionsmanager.model.Asset;
 import com.olisystem.optionsmanager.model.Brokerage;
@@ -19,16 +20,22 @@ import com.olisystem.optionsmanager.model.User;
 import com.olisystem.optionsmanager.repository.OperationRepository;
 import com.olisystem.optionsmanager.repository.OperationTargetRepository;
 import com.olisystem.optionsmanager.repository.OptionSerieRepository;
+import com.olisystem.optionsmanager.service.mapper.OperationMapper;
+import com.olisystem.optionsmanager.service.report.OperationReportService;
+import com.olisystem.optionsmanager.service.validation.OperationValidator;
 import com.olisystem.optionsmanager.util.OperationSummaryCalculator;
 import com.olisystem.optionsmanager.util.SecurityUtil;
 import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import jakarta.persistence.criteria.Predicate;
 import lombok.extern.log4j.Log4j2;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
@@ -52,8 +59,12 @@ public class OperationService {
   @Autowired private AnalysisHouseService analysisHouseService;
   @Autowired private BrokerageService brokerageService;
   @Autowired private OperationTargetRepository operationTargetRepository;
+  @Autowired private OperationValidator operationValidator;
+  @Autowired private OperationMapper operationMapper;
+  @Autowired private OperationReportService operationReportService;
 
   public void createOperation(OperationDataRequest request) {
+    operationValidator.validateCreate(request);
 
     if (request.getId() != null) {
       updateOperation(request.getId(), request);
@@ -255,166 +266,80 @@ public class OperationService {
     return isAscending ? comparator : comparator.reversed();
   }
 
-  private Specification<Operation> createSpecification(OperationFilterCriteria criteria) {
-    Specification<Operation> spec = Specification.where(null);
-
-    // Filtro por usuário logado
-    User user = SecurityUtil.getLoggedUser();
-    spec = spec.and((root, query, cb) -> cb.equal(root.get("user"), user));
-
-    // Filtro por status
-    if (criteria.getStatus() != null && !criteria.getStatus().isEmpty()) {
-      spec = spec.and((root, query, cb) -> root.get("status").in(criteria.getStatus()));
-    }
-
-    // Filtro por código da série de opções (corrigido)
-    if (criteria.getOptionSeriesCode() != null && !criteria.getOptionSeriesCode().isEmpty()) {
-      spec =
-          spec.and(
-              (root, query, cb) ->
-                  cb.like(
-                      cb.lower(root.join("optionSeries").get("code")),
-                      "%" + criteria.getOptionSeriesCode().toLowerCase() + "%"));
-    }
-
-    // Filtro por data de entrada
-    if (criteria.getEntryDateStart() != null) {
-      spec =
-          spec.and(
-              (root, query, cb) ->
-                  cb.greaterThanOrEqualTo(root.get("entryDate"), criteria.getEntryDateStart()));
-    }
-
-    if (criteria.getEntryDateEnd() != null) {
-      spec =
-          spec.and(
-              (root, query, cb) ->
-                  cb.lessThanOrEqualTo(root.get("entryDate"), criteria.getEntryDateEnd()));
-    }
-
-    // Filtro por data de saída
-    if (criteria.getExitDateStart() != null) {
-      spec =
-          spec.and(
-              (root, query, cb) ->
-                  cb.greaterThanOrEqualTo(root.get("exitDate"), criteria.getExitDateStart()));
-    }
-
-    if (criteria.getExitDateEnd() != null) {
-      spec =
-          spec.and(
-              (root, query, cb) ->
-                  cb.lessThanOrEqualTo(root.get("exitDate"), criteria.getExitDateEnd()));
-    }
-
-    // Filtro por tipo de transação
-    if (criteria.getTransactionType() != null) {
-      spec =
-          spec.and(
-              (root, query, cb) ->
-                  cb.equal(root.get("transactionType"), criteria.getTransactionType()));
-    }
-
-    // Filtro por tipo de trade
-    if (criteria.getTradeType() != null) {
-      spec =
-          spec.and((root, query, cb) -> cb.equal(root.get("tradeType"), criteria.getTradeType()));
-    }
-
-    // Filtro por tipo de opção
-    if (criteria.getOptionType() != null) {
-      spec =
-          spec.and(
-              (root, query, cb) ->
-                  cb.equal(root.join("optionSeries").get("type"), criteria.getOptionType()));
-    }
-
-    // Filtros adicionais para análise e corretora se forem adicionados
-    if (criteria.getAnalysisHouseName() != null && !criteria.getAnalysisHouseName().isEmpty()) {
-      spec =
-          spec.and(
-              (root, query, cb) ->
-                  cb.like(
-                      cb.lower(root.join("analysisHouse").get("name")),
-                      "%" + criteria.getAnalysisHouseName().toLowerCase() + "%"));
-    }
-
-    if (criteria.getBrokerageName() != null && !criteria.getBrokerageName().isEmpty()) {
-      spec =
-          spec.and(
-              (root, query, cb) ->
-                  cb.like(
-                      cb.lower(root.join("brokerage").get("name")),
-                      "%" + criteria.getBrokerageName().toLowerCase() + "%"));
-    }
-
-    return spec;
-  }
-
   public Page<OperationSummaryResponseDto> findByFilters(
       OperationFilterCriteria criteria, Pageable pageable) {
-
-    // Verificar se há ordenação por campos que não existem na entidade
-    if (pageable.getSort().isSorted()) {
-      // Verificar se algum dos campos de ordenação é um campo derivado
-      boolean hasCustomSort = false;
-      for (Sort.Order order : pageable.getSort()) {
-        if (order.getProperty().equals("optionSeriesCode")
-            || order.getProperty().equals("analysisHouseName")
-            || order.getProperty().equals("brokerageName")
-            || order.getProperty().equals("baseAssetLogoUrl")
-            || order.getProperty().equals("transactionType")
-            || order.getProperty().equals("tradeType")
-            || order.getProperty().equals("status")
-            || order.getProperty().equals("optionType")) {
-          hasCustomSort = true;
-          break;
-        }
-      }
-
-      if (hasCustomSort) {
-        // Extrair a ordenação original
-        Sort sort = pageable.getSort();
-
-        // Criar um novo Pageable sem ordenação
-        Pageable pageableWithoutSort =
-            PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
-
-        // Aplicar filtros
-        Specification<Operation> spec = createSpecification(criteria);
-
-        // Buscar as operações sem ordenação
-        Page<Operation> page = operationRepository.findAll(spec, pageableWithoutSort);
-
-        // Converter para DTOs
-        List<OperationItemDto> dtos =
-            page.getContent().stream().map(this::mapToDto).collect(Collectors.toList());
-
-        // Ordenar manualmente a lista de DTOs
-        List<OperationItemDto> sortedDtos = sortDtoList(dtos, sort);
-
-        // Calcular totalizadores usando a classe utilitária
-        OperationSummaryResponseDto summary =
-            OperationSummaryCalculator.calculateSummary(sortedDtos);
-
-        // Criar uma nova página com os DTOs ordenados
-        return new PageImpl<>(List.of(summary), pageable, page.getTotalElements());
-      }
-    }
-
-    // Se não houver ordenação personalizada, usar o fluxo normal
     Specification<Operation> spec = createSpecification(criteria);
-    Page<Operation> operations = operationRepository.findAll(spec, pageable);
-
-    // Mapear para DTOs
-    List<OperationItemDto> dtos =
-        operations.getContent().stream().map(this::mapToDto).collect(Collectors.toList());
-
-    // Calcular totalizadores
+    Page<Operation> page = operationRepository.findAll(spec, pageable);
+    
+    List<OperationItemDto> dtos = page.getContent().stream()
+        .map(operationMapper::toDto)
+        .collect(Collectors.toList());
+    
     OperationSummaryResponseDto summary = OperationSummaryCalculator.calculateSummary(dtos);
+    return new PageImpl<>(Collections.singletonList(summary), pageable, page.getTotalElements());
+  }
 
-    // Retornar a página de resumo
-    return new PageImpl<>(List.of(summary), pageable, operations.getTotalElements());
+  private Specification<Operation> createSpecification(OperationFilterCriteria criteria) {
+    return (root, query, cb) -> {
+      List<Predicate> predicates = new ArrayList<>();
+      
+      // Filtro por usuário
+      predicates.add(cb.equal(root.get("user"), SecurityUtil.getLoggedUser()));
+      
+      // Filtro por status
+      if (criteria.getStatus() != null && !criteria.getStatus().isEmpty()) {
+        predicates.add(root.get("status").in(criteria.getStatus()));
+      }
+      
+      // Filtro por datas
+      if (criteria.getEntryDateStart() != null) {
+        predicates.add(cb.greaterThanOrEqualTo(root.get("entryDate"), criteria.getEntryDateStart()));
+      }
+      if (criteria.getEntryDateEnd() != null) {
+        predicates.add(cb.lessThanOrEqualTo(root.get("entryDate"), criteria.getEntryDateEnd()));
+      }
+      if (criteria.getExitDateStart() != null) {
+        predicates.add(cb.greaterThanOrEqualTo(root.get("exitDate"), criteria.getExitDateStart()));
+      }
+      if (criteria.getExitDateEnd() != null) {
+        predicates.add(cb.lessThanOrEqualTo(root.get("exitDate"), criteria.getExitDateEnd()));
+      }
+      
+      // Filtro por casa de análise
+      if (criteria.getAnalysisHouseName() != null && !criteria.getAnalysisHouseName().isEmpty()) {
+        predicates.add(cb.like(cb.lower(root.get("analysisHouse").get("name")), 
+            "%" + criteria.getAnalysisHouseName().toLowerCase() + "%"));
+      }
+      
+      // Filtro por corretora
+      if (criteria.getBrokerageName() != null && !criteria.getBrokerageName().isEmpty()) {
+        predicates.add(cb.like(cb.lower(root.get("brokerage").get("name")), 
+            "%" + criteria.getBrokerageName().toLowerCase() + "%"));
+      }
+      
+      // Filtro por tipo de transação
+      if (criteria.getTransactionType() != null) {
+        predicates.add(cb.equal(root.get("transactionType"), criteria.getTransactionType()));
+      }
+      
+      // Filtro por tipo de trade
+      if (criteria.getTradeType() != null) {
+        predicates.add(cb.equal(root.get("tradeType"), criteria.getTradeType()));
+      }
+      
+      // Filtro por tipo de opção
+      if (criteria.getOptionType() != null) {
+        predicates.add(cb.equal(root.get("optionSeries").get("type"), criteria.getOptionType()));
+      }
+      
+      // Filtro por código da série
+      if (criteria.getOptionSeriesCode() != null && !criteria.getOptionSeriesCode().isEmpty()) {
+        predicates.add(cb.like(cb.lower(root.get("optionSeries").get("code")), 
+            "%" + criteria.getOptionSeriesCode().toLowerCase() + "%"));
+      }
+      
+      return cb.and(predicates.toArray(new Predicate[0]));
+    };
   }
 
   private OperationItemDto mapToDto(Operation op) {
@@ -446,375 +371,71 @@ public class OperationService {
   }
 
   public byte[] generateExcelReport(OperationFilterCriteria filterCriteria) {
-    // Buscar todas as operações que correspondem aos critérios de filtro
-    // Não usamos paginação aqui para exportar todos os dados
-    Pageable unpaged = Pageable.unpaged();
-    Page<OperationSummaryResponseDto> result = findByFilters(filterCriteria, unpaged);
-    List<OperationItemDto> operations = result.getContent().get(0).getOperations();
-
-    try (Workbook workbook = new XSSFWorkbook();
-        ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-
-      Sheet sheet = workbook.createSheet("Operações");
-
-      // Estilo para o cabeçalho
-      org.apache.poi.ss.usermodel.Font headerFont = workbook.createFont();
-      headerFont.setBold(true);
-      CellStyle headerCellStyle = workbook.createCellStyle();
-      headerCellStyle.setFont(headerFont);
-
-      // Criar cabeçalho
-      Row headerRow = sheet.createRow(0);
-      String[] columns = {
-        "Código",
-        "Casa de Análise",
-        "Corretora",
-        "Tipo de Transação",
-        "Data de Entrada",
-        "Data de Saída",
-        "Status",
-        "Quantidade",
-        "Preço Unitário Entrada",
-        "Valor Total Entrada",
-        "Preço Unitário Saída",
-        "Valor Total Saída",
-        "Lucro/Prejuízo",
-        "Lucro/Prejuízo %"
-      };
-
-      for (int i = 0; i < columns.length; i++) {
-        Cell cell = headerRow.createCell(i);
-        cell.setCellValue(columns[i]);
-        cell.setCellStyle(headerCellStyle);
-      }
-
-      // Preencher dados
-      int rowNum = 1;
-      for (OperationItemDto operation : operations) {
-        Row row = sheet.createRow(rowNum++);
-
-        row.createCell(0).setCellValue(operation.getOptionSeriesCode());
-        row.createCell(1)
-            .setCellValue(
-                operation.getAnalysisHouseName() != null ? operation.getAnalysisHouseName() : "");
-        row.createCell(2).setCellValue(operation.getBrokerageName());
-        row.createCell(3)
-            .setCellValue(
-                operation.getTransactionType() != null
-                    ? operation.getTransactionType().toString()
-                    : "");
-        row.createCell(4)
-            .setCellValue(
-                operation.getEntryDate() != null ? operation.getEntryDate().toString() : "");
-        row.createCell(5)
-            .setCellValue(
-                operation.getExitDate() != null ? operation.getExitDate().toString() : "");
-        row.createCell(6)
-            .setCellValue(operation.getStatus() != null ? operation.getStatus().toString() : "");
-        row.createCell(7)
-            .setCellValue(operation.getQuantity() != null ? operation.getQuantity() : 0);
-        row.createCell(8)
-            .setCellValue(
-                operation.getEntryUnitPrice() != null
-                    ? operation.getEntryUnitPrice().doubleValue()
-                    : 0);
-        row.createCell(9)
-            .setCellValue(
-                operation.getEntryTotalValue() != null
-                    ? operation.getEntryTotalValue().doubleValue()
-                    : 0);
-        row.createCell(10)
-            .setCellValue(
-                operation.getExitUnitPrice() != null
-                    ? operation.getExitUnitPrice().doubleValue()
-                    : 0);
-        row.createCell(11)
-            .setCellValue(
-                operation.getExitTotalValue() != null
-                    ? operation.getExitTotalValue().doubleValue()
-                    : 0);
-        row.createCell(12)
-            .setCellValue(
-                operation.getProfitLoss() != null ? operation.getProfitLoss().doubleValue() : 0);
-        row.createCell(13)
-            .setCellValue(
-                operation.getProfitLossPercentage() != null
-                    ? operation.getProfitLossPercentage().doubleValue()
-                    : 0);
-      }
-
-      // Adicionar linha de resumo
-      Row summaryRow = sheet.createRow(rowNum + 1);
-      CellStyle boldStyle = workbook.createCellStyle();
-      org.apache.poi.ss.usermodel.Font boldFont = workbook.createFont();
-      boldFont.setBold(true);
-      boldStyle.setFont(boldFont);
-
-      Cell summaryLabelCell = summaryRow.createCell(0);
-      summaryLabelCell.setCellValue("RESUMO");
-      summaryLabelCell.setCellStyle(boldStyle);
-
-      Row totalEntryRow = sheet.createRow(rowNum + 2);
-      totalEntryRow.createCell(0).setCellValue("Valor Total de Entrada:");
-      Cell totalEntryCell = totalEntryRow.createCell(1);
-      totalEntryCell.setCellValue(result.getContent().get(0).getTotalEntryValue().doubleValue());
-
-      Row totalProfitRow = sheet.createRow(rowNum + 3);
-      totalProfitRow.createCell(0).setCellValue("Lucro/Prejuízo Total:");
-      Cell totalProfitCell = totalProfitRow.createCell(1);
-      totalProfitCell.setCellValue(result.getContent().get(0).getTotalProfitLoss().doubleValue());
-
-      Row totalPercentRow = sheet.createRow(rowNum + 4);
-      totalPercentRow.createCell(0).setCellValue("Lucro/Prejuízo Total %:");
-      Cell totalPercentCell = totalPercentRow.createCell(1);
-      totalPercentCell.setCellValue(
-          result.getContent().get(0).getTotalProfitLossPercentage().doubleValue());
-
-      // Ajustar largura das colunas
-      for (int i = 0; i < columns.length; i++) {
-        sheet.autoSizeColumn(i);
-      }
-
-      workbook.write(out);
-      return out.toByteArray();
-    } catch (Exception e) {
-      log.error("Erro ao gerar relatório Excel", e);
-      throw new RuntimeException("Erro ao gerar relatório Excel: " + e.getMessage());
-    }
+    return operationReportService.generateExcelReport(filterCriteria);
   }
 
   public byte[] generatePdfReport(OperationFilterCriteria filterCriteria) {
-    // Buscar todas as operações que correspondem aos critérios de filtro
-    // Não usamos paginação aqui para exportar todos os dados
-    Pageable unpaged = Pageable.unpaged();
-    Page<OperationSummaryResponseDto> result = findByFilters(filterCriteria, unpaged);
-    List<OperationItemDto> operations = result.getContent().get(0).getOperations();
-
-    try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-      Document document = new Document(PageSize.A4.rotate());
-      PdfWriter.getInstance(document, out);
-      document.open();
-
-      // Título
-      com.itextpdf.text.Font titleFont =
-          new com.itextpdf.text.Font(FontFamily.HELVETICA, 18, com.itextpdf.text.Font.BOLD);
-      Paragraph title = new Paragraph("Relatório de Operações", titleFont);
-      title.setAlignment(Element.ALIGN_CENTER);
-      document.add(title);
-      document.add(Chunk.NEWLINE);
-
-      // Tabela
-      PdfPTable table = new PdfPTable(14);
-      table.setWidthPercentage(100);
-
-      // Cabeçalho
-      com.itextpdf.text.Font headerFont =
-          new com.itextpdf.text.Font(FontFamily.HELVETICA, 10, com.itextpdf.text.Font.BOLD);
-      String[] columns = {
-        "Código",
-        "Casa de Análise",
-        "Corretora",
-        "Tipo de Transação",
-        "Data de Entrada",
-        "Data de Saída",
-        "Status",
-        "Quantidade",
-        "Preço Unit. Entrada",
-        "Valor Total Entrada",
-        "Preço Unit. Saída",
-        "Valor Total Saída",
-        "Lucro/Prejuízo",
-        "Lucro/Prejuízo %"
-      };
-
-      for (String column : columns) {
-        PdfPCell cell = new PdfPCell(new Phrase(column, headerFont));
-        cell.setHorizontalAlignment(Element.ALIGN_CENTER);
-        cell.setBackgroundColor(BaseColor.LIGHT_GRAY);
-        table.addCell(cell);
-      }
-
-      // Dados
-      com.itextpdf.text.Font dataFont = new com.itextpdf.text.Font(FontFamily.HELVETICA, 8);
-      for (OperationItemDto operation : operations) {
-        table.addCell(new Phrase(operation.getOptionSeriesCode(), dataFont));
-        table.addCell(
-            new Phrase(
-                operation.getAnalysisHouseName() != null ? operation.getAnalysisHouseName() : "",
-                dataFont));
-        table.addCell(new Phrase(operation.getBrokerageName(), dataFont));
-        table.addCell(
-            new Phrase(
-                operation.getTransactionType() != null
-                    ? operation.getTransactionType().toString()
-                    : "",
-                dataFont));
-        table.addCell(
-            new Phrase(
-                operation.getEntryDate() != null ? operation.getEntryDate().toString() : "",
-                dataFont));
-        table.addCell(
-            new Phrase(
-                operation.getExitDate() != null ? operation.getExitDate().toString() : "",
-                dataFont));
-        table.addCell(
-            new Phrase(
-                operation.getStatus() != null ? operation.getStatus().toString() : "", dataFont));
-        table.addCell(
-            new Phrase(
-                operation.getQuantity() != null ? operation.getQuantity().toString() : "0",
-                dataFont));
-        table.addCell(
-            new Phrase(
-                operation.getEntryUnitPrice() != null
-                    ? operation.getEntryUnitPrice().toString()
-                    : "0",
-                dataFont));
-        table.addCell(
-            new Phrase(
-                operation.getEntryTotalValue() != null
-                    ? operation.getEntryTotalValue().toString()
-                    : "0",
-                dataFont));
-        table.addCell(
-            new Phrase(
-                operation.getExitUnitPrice() != null
-                    ? operation.getExitUnitPrice().toString()
-                    : "0",
-                dataFont));
-        table.addCell(
-            new Phrase(
-                operation.getExitTotalValue() != null
-                    ? operation.getExitTotalValue().toString()
-                    : "0",
-                dataFont));
-        table.addCell(
-            new Phrase(
-                operation.getProfitLoss() != null ? operation.getProfitLoss().toString() : "0",
-                dataFont));
-        table.addCell(
-            new Phrase(
-                operation.getProfitLossPercentage() != null
-                    ? operation.getProfitLossPercentage().toString()
-                    : "0",
-                dataFont));
-      }
-
-      document.add(table);
-      document.add(Chunk.NEWLINE);
-
-      // Resumo
-      com.itextpdf.text.Font summaryFont =
-          new com.itextpdf.text.Font(FontFamily.HELVETICA, 12, com.itextpdf.text.Font.BOLD);
-      Paragraph summary = new Paragraph("RESUMO", summaryFont);
-      document.add(summary);
-
-      Paragraph totalEntry =
-          new Paragraph(
-              "Valor Total de Entrada: "
-                  + result.getContent().get(0).getTotalEntryValue().toString());
-      document.add(totalEntry);
-
-      Paragraph totalProfit =
-          new Paragraph(
-              "Lucro/Prejuízo Total: "
-                  + result.getContent().get(0).getTotalProfitLoss().toString());
-      document.add(totalProfit);
-
-      Paragraph totalPercent =
-          new Paragraph(
-              "Lucro/Prejuízo Total %: "
-                  + result.getContent().get(0).getTotalProfitLossPercentage().toString());
-      document.add(totalPercent);
-
-      document.close();
-      return out.toByteArray();
-    } catch (Exception e) {
-      log.error("Erro ao gerar relatório PDF", e);
-      throw new RuntimeException("Erro ao gerar relatório PDF: " + e.getMessage());
-    }
+    return operationReportService.generatePdfReport(filterCriteria);
   }
 
   public void updateOperation(UUID id, OperationDataRequest request) {
-    // Busca a operação existente
-    Operation operation =
-        operationRepository
-            .findById(id)
-            .orElseThrow(() -> new RuntimeException("Operação não encontrada"));
-
-    // Atualiza os dados básicos da operação
-    if (request.getAnalysisHouseId() != null) {
-      Optional<AnalysisHouse> analysisHouseOpt =
-          analysisHouseService.findById(request.getAnalysisHouseId());
-      analysisHouseOpt.ifPresent(operation::setAnalysisHouse);
-    }
-
+    operationValidator.validateUpdate(request);
+    
+    Operation operation = operationRepository.findById(id)
+        .orElseThrow(() -> new ResourceNotFoundException("Operação não encontrada"));
+    
+    // Atualiza os campos básicos
     operation.setTransactionType(request.getTransactionType());
-    if (request.getExitDate() != null) {
-      operation.setTradeType(calculateTradeType(request.getEntryDate(), request.getExitDate()));
-    }
     operation.setEntryDate(request.getEntryDate());
     operation.setExitDate(request.getExitDate());
     operation.setQuantity(request.getQuantity());
     operation.setEntryUnitPrice(request.getEntryUnitPrice());
-    operation.setEntryTotalValue(
-        request.getEntryUnitPrice().multiply(BigDecimal.valueOf(request.getQuantity())));
-
+    operation.setEntryTotalValue(request.getEntryUnitPrice().multiply(BigDecimal.valueOf(request.getQuantity())));
+    
+    // Atualiza o tipo de trade se necessário
+    if (request.getExitDate() != null) {
+      operation.setTradeType(calculateTradeType(request.getEntryDate(), request.getExitDate()));
+    }
+    
+    // Atualiza a corretora
+    if (request.getBrokerageId() != null) {
+      Brokerage brokerage = brokerageService.getBrokerageById(request.getBrokerageId());
+      operation.setBrokerage(brokerage);
+    }
+    
+    // Atualiza a casa de análise
+    if (request.getAnalysisHouseId() != null) {
+      Optional<AnalysisHouse> analysisHouseOpt = analysisHouseService.findById(request.getAnalysisHouseId());
+      analysisHouseOpt.ifPresent(operation::setAnalysisHouse);
+    }
+    
     // Salva a operação atualizada
-    final Operation savedOperation = operationRepository.save(operation);
-
+    operationRepository.save(operation);
+    
     // Atualiza os targets
-    updateOperationTargets(savedOperation, request.getTargets());
+    if (request.getTargets() != null) {
+      updateOperationTargets(operation, request.getTargets());
+    }
   }
 
   private void updateOperationTargets(Operation operation, List<OperationTarget> newTargets) {
-    // Busca os targets existentes
-    List<OperationTarget> existingTargets =
-        operationTargetRepository.findByOperation_Id(operation.getId());
-
-    if (newTargets == null || newTargets.isEmpty()) {
-      // Se não houver novos targets, remove todos os existentes
-      operationTargetRepository.deleteAll(existingTargets);
-      return;
-    }
-
-    // Remove os targets que não estão mais na lista
-    existingTargets.stream()
-        .filter(
-            existingTarget ->
-                newTargets.stream()
-                    .noneMatch(
-                        newTarget ->
-                            newTarget.getSequence() == existingTarget.getSequence()
-                                && newTarget.getType() == existingTarget.getType()))
-        .forEach(operationTargetRepository::delete);
-
-    // Atualiza ou adiciona os novos targets
-    newTargets.forEach(
-        newTarget -> {
-          // Procura um target existente com a mesma sequência e tipo
-          Optional<OperationTarget> existingTargetOpt =
-              existingTargets.stream()
-                  .filter(
-                      existingTarget ->
-                          existingTarget.getSequence() == newTarget.getSequence()
-                              && existingTarget.getType() == newTarget.getType())
-                  .findFirst();
-
-          if (existingTargetOpt.isPresent()) {
-            // Se encontrou, atualiza o valor
-            OperationTarget existingTarget = existingTargetOpt.get();
-            existingTarget.setValue(newTarget.getValue());
-            operationTargetRepository.save(existingTarget);
-          } else {
-            // Se não encontrou, cria um novo
+    // Remove os targets existentes
+    operationTargetRepository.deleteByOperation(operation);
+    
+    // Salva os novos targets
+    if (!newTargets.isEmpty()) {
+      List<OperationTarget> targets = newTargets.stream()
+          .map(targetDto -> {
             OperationTarget target = new OperationTarget();
-            target.setSequence(newTarget.getSequence());
-            target.setType(newTarget.getType());
-            target.setValue(newTarget.getValue());
+            target.setSequence(targetDto.getSequence());
+            target.setType(targetDto.getType());
+            target.setValue(targetDto.getValue());
             target.setOperation(operation);
-            operationTargetRepository.save(target);
-          }
-        });
+            return target;
+          })
+          .collect(Collectors.toList());
+      
+      operationTargetRepository.saveAll(targets);
+    }
   }
 }

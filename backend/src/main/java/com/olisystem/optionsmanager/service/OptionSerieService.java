@@ -8,9 +8,9 @@ import com.olisystem.optionsmanager.model.AssetType;
 import com.olisystem.optionsmanager.model.OptionSerie;
 import com.olisystem.optionsmanager.parser.AssetFactory;
 import com.olisystem.optionsmanager.repository.OptionSerieRepository;
+import com.olisystem.optionsmanager.util.UuidUtil;
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 import lombok.extern.log4j.Log4j2;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,7 +31,7 @@ public class OptionSerieService {
   }
 
   public Optional<OptionSerie> findById(String id) {
-    return optionSerieRepository.findById(UUID.fromString(id));
+    return optionSerieRepository.findById(UuidUtil.parseUuid(id));
   }
 
   public OptionSerie getOptionSerieByCode(String code) {
@@ -43,7 +43,7 @@ public class OptionSerieService {
   }
 
   public void deleteById(String id) {
-    optionSerieRepository.deleteById(UUID.fromString(id));
+    optionSerieRepository.deleteById(UuidUtil.parseUuid(id));
   }
 
   public OptionDataResponseDto buscarOpcaoInfo(String codigoOpcao) throws Exception {
