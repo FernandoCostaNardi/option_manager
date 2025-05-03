@@ -27,6 +27,7 @@ import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.stream.Collectors;
 import lombok.extern.log4j.Log4j2;
 import org.apache.poi.ss.usermodel.*;
@@ -53,6 +54,12 @@ public class OperationService {
   @Autowired private OperationTargetRepository operationTargetRepository;
 
   public void createOperation(OperationDataRequest request) {
+
+    if (request.getId() != null) {
+      updateOperation(request.getId(), request);
+      return;
+    }
+
     log.info("indo buscar o : " + request.getBaseAssetCode());
     // 1. Busca ou salva o Asset
     Asset asset = assetService.getAssetByCode(request.getBaseAssetCode());
@@ -424,7 +431,9 @@ public class OperationService {
         .exitDate(op.getExitDate())
         .status(op.getStatus())
         .analysisHouseName(op.getAnalysisHouse() != null ? op.getAnalysisHouse().getName() : null)
+        .analysisHouseId(op.getAnalysisHouse() != null ? op.getAnalysisHouse().getId() : null)
         .brokerageName(op.getBrokerage() != null ? op.getBrokerage().getName() : null)
+        .brokerageId(op.getBrokerage() != null ? op.getBrokerage().getId() : null)
         .quantity(op.getQuantity())
         .entryUnitPrice(op.getEntryUnitPrice())
         .entryTotalValue(op.getEntryTotalValue())
@@ -724,5 +733,88 @@ public class OperationService {
       log.error("Erro ao gerar relatório PDF", e);
       throw new RuntimeException("Erro ao gerar relatório PDF: " + e.getMessage());
     }
+  }
+
+  public void updateOperation(UUID id, OperationDataRequest request) {
+    // Busca a operação existente
+    Operation operation =
+        operationRepository
+            .findById(id)
+            .orElseThrow(() -> new RuntimeException("Operação não encontrada"));
+
+    // Atualiza os dados básicos da operação
+    if (request.getAnalysisHouseId() != null) {
+      Optional<AnalysisHouse> analysisHouseOpt =
+          analysisHouseService.findById(request.getAnalysisHouseId());
+      analysisHouseOpt.ifPresent(operation::setAnalysisHouse);
+    }
+
+    operation.setTransactionType(request.getTransactionType());
+    if (request.getExitDate() != null) {
+      operation.setTradeType(calculateTradeType(request.getEntryDate(), request.getExitDate()));
+    }
+    operation.setEntryDate(request.getEntryDate());
+    operation.setExitDate(request.getExitDate());
+    operation.setQuantity(request.getQuantity());
+    operation.setEntryUnitPrice(request.getEntryUnitPrice());
+    operation.setEntryTotalValue(
+        request.getEntryUnitPrice().multiply(BigDecimal.valueOf(request.getQuantity())));
+
+    // Salva a operação atualizada
+    final Operation savedOperation = operationRepository.save(operation);
+
+    // Atualiza os targets
+    updateOperationTargets(savedOperation, request.getTargets());
+  }
+
+  private void updateOperationTargets(Operation operation, List<OperationTarget> newTargets) {
+    // Busca os targets existentes
+    List<OperationTarget> existingTargets =
+        operationTargetRepository.findByOperation_Id(operation.getId());
+
+    if (newTargets == null || newTargets.isEmpty()) {
+      // Se não houver novos targets, remove todos os existentes
+      operationTargetRepository.deleteAll(existingTargets);
+      return;
+    }
+
+    // Remove os targets que não estão mais na lista
+    existingTargets.stream()
+        .filter(
+            existingTarget ->
+                newTargets.stream()
+                    .noneMatch(
+                        newTarget ->
+                            newTarget.getSequence() == existingTarget.getSequence()
+                                && newTarget.getType() == existingTarget.getType()))
+        .forEach(operationTargetRepository::delete);
+
+    // Atualiza ou adiciona os novos targets
+    newTargets.forEach(
+        newTarget -> {
+          // Procura um target existente com a mesma sequência e tipo
+          Optional<OperationTarget> existingTargetOpt =
+              existingTargets.stream()
+                  .filter(
+                      existingTarget ->
+                          existingTarget.getSequence() == newTarget.getSequence()
+                              && existingTarget.getType() == newTarget.getType())
+                  .findFirst();
+
+          if (existingTargetOpt.isPresent()) {
+            // Se encontrou, atualiza o valor
+            OperationTarget existingTarget = existingTargetOpt.get();
+            existingTarget.setValue(newTarget.getValue());
+            operationTargetRepository.save(existingTarget);
+          } else {
+            // Se não encontrou, cria um novo
+            OperationTarget target = new OperationTarget();
+            target.setSequence(newTarget.getSequence());
+            target.setType(newTarget.getType());
+            target.setValue(newTarget.getValue());
+            target.setOperation(operation);
+            operationTargetRepository.save(target);
+          }
+        });
   }
 }

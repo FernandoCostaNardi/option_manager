@@ -26,7 +26,7 @@ public class OperationTargetController {
    * @param operationId ID da operação
    * @return Lista de targets e stoploss da operação
    */
-  @GetMapping("/{operationId}/targets")
+  @GetMapping("operations/{operationId}/targets")
   public ResponseEntity<List<OperationTargetResponseDto>> getOperationTargets(
       @PathVariable UUID operationId) {
     List<OperationTarget> targets = operationTargetService.findByOperationId(operationId);
