@@ -9,7 +9,7 @@ interface OperacoesAtivasTableProps {
   sortDirection: SortDirection;
   onSort: (field: SortField) => void;
   onEdit: (id: string) => void;
-  onFinalize: (id: string) => void;
+  onFinalize: (operacao: OperacaoAtiva) => void;
   onRemove: (id: string) => void;
   onViewTargets: (id: string) => void;
 }

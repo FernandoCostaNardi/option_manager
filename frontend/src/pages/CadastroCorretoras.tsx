@@ -118,10 +118,15 @@ export function CadastroCorretoras() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState<string | undefined>(undefined);
   const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false); // Novo estado para controlar o loading
+
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   // Função para buscar corretoras
   const fetchBrokerages = async (currentPage: number = page) => {
     console.log("Buscando corretoras da página:", currentPage);
+    setLoading(true); // Inicia o loading
     try {
       const data: BrokeragePaginated = await BrokerageService.getBrokerages(currentPage, 10);
       console.log("Dados recebidos:", data);
@@ -134,6 +139,8 @@ export function CadastroCorretoras() {
       setBrokerages([]);
       // Manter totalPages como 1 mesmo em caso de erro
       setTotalPages(1);
+    } finally {
+      setLoading(false); // Finaliza o loading independente do resultado
     }
   };
 
@@ -141,9 +148,6 @@ export function CadastroCorretoras() {
     setEditId(id);
     setModalOpen(true);
   };
-
-  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const handleDelete = async (id: string) => {
     setDeleteId(id);
@@ -187,7 +191,7 @@ export function CadastroCorretoras() {
           onClick={() => { setModalOpen(true); setEditId(undefined); } }
           className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-lg hover:from-blue-700 hover:to-indigo-800 shadow-sm flex items-center gap-2"
         >
-          <Plus size={18} /> {/* Add the Plus icon here */}
+          <Plus size={18} />
           <span>Nova Corretora</span>
         </button>
       </header>
@@ -195,10 +199,17 @@ export function CadastroCorretoras() {
       <CadastroCorretoraModal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        onSuccess={() => fetchBrokerages(page)} // Recarregar página atual ao ter sucesso
+        onSuccess={() => fetchBrokerages(page)}
         brokerageId={editId} />
 
-      {brokerages.length === 0 ? (
+      {loading ? (
+        <div className="bg-white rounded-xl shadow-sm p-10 text-center border border-gray-100">
+          <div className="flex flex-col items-center justify-center">
+            <Loader2 className="w-10 h-10 text-purple-600 animate-spin mb-4" />
+            <p className="text-gray-500">Carregando corretoras...</p>
+          </div>
+        </div>
+      ) : brokerages.length === 0 ? (
         <div className="bg-white rounded-xl shadow-sm p-10 text-center border border-gray-100">
           <p className="text-gray-500">Nenhuma corretora cadastrada ainda.</p>
         </div>

@@ -4,7 +4,9 @@ export interface OperacaoAtiva {
     transactionType: string;
     exitDate: string;
     analysisHouseName: string;
+    analysisHouseId: string;
     brokerageName: string;
+    brokerageId: string;
     optionSeriesCode: string;
     baseAssetLogoUrl: string;
     quantity: number;
@@ -16,6 +18,11 @@ export interface OperacaoAtiva {
     profitLossPercentage: number;
     status: string;
     optionType: string;
+    targets?: {
+      type: 'TARGET' | 'STOP_LOSS';
+      sequence: number;
+      value: number;
+    }[];
   }
   
   export interface OperacaoFinalizada {

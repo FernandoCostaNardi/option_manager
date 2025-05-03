@@ -4,7 +4,7 @@ import axios from 'axios';
 
 interface FinalizarOperacaoModalProps {
   isOpen: boolean;
-  operacaoId: string | null;
+  operacao: any | null;
   onClose: () => void;
   onSuccess: () => void;
 }
@@ -21,9 +21,9 @@ interface OperacaoAtiva {
   valorTotal: number;
 }
 
-export function FinalizarOperacaoModal({ isOpen, operacaoId, onClose, onSuccess }: FinalizarOperacaoModalProps) {
+export function FinalizarOperacaoModal({ isOpen, operacao, onClose, onSuccess }: FinalizarOperacaoModalProps) {
   // Estado para os detalhes da operação
-  const [operacao, setOperacao] = useState<OperacaoAtiva | null>(null);
+  const [operacaoAtiva, setOperacaoAtiva] = useState<OperacaoAtiva | null>(null);
   
   // Estados para os campos do formulário
   const [status, setStatus] = useState<'Vencedor' | 'Perdedor'>('Vencedor');
@@ -35,71 +35,31 @@ export function FinalizarOperacaoModal({ isOpen, operacaoId, onClose, onSuccess 
   const [salvando, setSalvando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Carregar os detalhes da operação ao abrir o modal
+  // Preencher campos ao abrir o modal
   useEffect(() => {
-    if (isOpen && operacaoId) {
-      carregarOperacao();
-    }
-  }, [isOpen, operacaoId]);
-
-  // Função para carregar os detalhes da operação
-  const carregarOperacao = async () => {
-    if (!operacaoId) return;
-    
-    setCarregando(true);
-    setError(null);
-    
-    try {
-      // Simulação de chamada de API para facilitar teste
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      // Dados mockados para demonstração
-      const operacaoMockada: OperacaoAtiva = {
-        id: operacaoId,
-        dataEntrada: '2023-07-10',
-        casaAnalise: 'Nord Research',
-        corretora: 'Rico',
-        opcao: 'ITUB4',
-        logoEmpresa: 'https://logodownload.org/wp-content/uploads/2016/09/itau-logo-1-1.png',
-        quantidade: 200,
-        valorUnitario: 28.30,
-        valorTotal: 5660.00
-      };
-      
-      setOperacao(operacaoMockada);
-      
-      // Inicializar com a data atual formatada para o input date
+    if (isOpen && operacao) {
+      setStatus('Vencedor');
+      setValorUnitarioSaida('');
+      // Data de saída padrão: hoje
       const hoje = new Date();
-      const dataFormatada = hoje.toISOString().split('T')[0];
-      setDataSaida(dataFormatada);
-    } catch (error) {
-      console.error('Erro ao carregar operação:', error);
-      setError('Não foi possível carregar os detalhes da operação. Tente novamente.');
-    } finally {
-      setCarregando(false);
+      setDataSaida(hoje.toISOString().split('T')[0]);
     }
-  };
+  }, [isOpen, operacao]);
 
   // Função para salvar a finalização da operação
   const salvarFinalizacao = async () => {
     if (!operacao) return;
-    
     if (!valorUnitarioSaida || !dataSaida) {
       setError('Por favor, preencha todos os campos.');
       return;
     }
-    
     setSalvando(true);
     setError(null);
-    
     try {
       // Simulação de chamada de API para facilitar teste
       await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Sucesso - notificar o componente pai
       onSuccess();
     } catch (error) {
-      console.error('Erro ao finalizar operação:', error);
       setError('Não foi possível finalizar a operação. Tente novamente.');
     } finally {
       setSalvando(false);
@@ -109,12 +69,10 @@ export function FinalizarOperacaoModal({ isOpen, operacaoId, onClose, onSuccess 
   // Cálculo dos valores de saída
   const calcularValores = () => {
     if (!operacao || !valorUnitarioSaida) return null;
-    
     const valorUnitarioSaidaNum = parseFloat(valorUnitarioSaida);
-    const valorTotalSaida = operacao.quantidade * valorUnitarioSaidaNum;
-    const valorLucroPrejuizo = valorTotalSaida - operacao.valorTotal;
-    const percentualLucroPrejuizo = (valorLucroPrejuizo / operacao.valorTotal) * 100;
-    
+    const valorTotalSaida = operacao.quantity * valorUnitarioSaidaNum;
+    const valorLucroPrejuizo = valorTotalSaida - operacao.entryTotalValue;
+    const percentualLucroPrejuizo = (valorLucroPrejuizo / operacao.entryTotalValue) * 100;
     return {
       valorTotalSaida,
       valorLucroPrejuizo,
@@ -122,7 +80,6 @@ export function FinalizarOperacaoModal({ isOpen, operacaoId, onClose, onSuccess 
     };
   };
 
-  // Função para formatar valores em reais
   const formatarMoeda = (valor: number) => {
     return valor.toLocaleString('pt-BR', {
       style: 'currency',
@@ -130,10 +87,7 @@ export function FinalizarOperacaoModal({ isOpen, operacaoId, onClose, onSuccess 
     });
   };
 
-  // Se o modal não estiver aberto, não renderiza nada
-  if (!isOpen) return null;
-
-  // Calcular os valores
+  if (!isOpen || !operacao) return null;
   const valores = calcularValores();
 
   return (
@@ -181,29 +135,33 @@ export function FinalizarOperacaoModal({ isOpen, operacaoId, onClose, onSuccess 
               {/* Detalhes da operação */}
               <div className="space-y-4">
                 <div className="flex items-center gap-3">
-                  <img src={operacao.logoEmpresa} alt={operacao.opcao} className="h-10 w-10 rounded-full object-contain" />
+                  <img src={operacao.baseAssetLogoUrl} alt={operacao.optionSeriesCode} className="h-10 w-10 rounded-full object-contain" />
                   <div>
-                    <h3 className="font-bold text-lg">{operacao.opcao}</h3>
-                    <p className="text-sm text-gray-500">{operacao.corretora}</p>
+                    <h3 className="font-bold text-lg">{operacao.optionSeriesCode}</h3>
+                    <p className="text-sm text-gray-500">{operacao.brokerageName}</p>
                   </div>
                 </div>
                 
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <p className="text-gray-500">Quantidade</p>
-                    <p className="font-medium">{operacao.quantidade}</p>
+                    <p className="font-medium">{operacao.quantity}</p>
                   </div>
                   <div>
                     <p className="text-gray-500">Valor de Entrada</p>
-                    <p className="font-medium">{formatarMoeda(operacao.valorUnitario)}</p>
+                    <p className="font-medium">{formatarMoeda(operacao.entryTotalValue)}</p>
                   </div>
                   <div>
-                    <p className="text-gray-500">Valor Total Investido</p>
-                    <p className="font-medium">{formatarMoeda(operacao.valorTotal)}</p>
+                    <p className="text-gray-500">Preço Unitário de Entrada</p>
+                    <p className="font-medium">{formatarMoeda(operacao.entryUnitPrice)}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Tipo de Opção</p>
+                    <p className="font-medium">{operacao.optionType}</p>
                   </div>
                   <div>
                     <p className="text-gray-500">Data de Entrada</p>
-                    <p className="font-medium">{new Date(operacao.dataEntrada).toLocaleDateString('pt-BR')}</p>
+                    <p className="font-medium">{new Date(operacao.entryDate).toLocaleDateString('pt-BR')}</p>
                   </div>
                 </div>
               </div>
@@ -243,42 +201,9 @@ export function FinalizarOperacaoModal({ isOpen, operacaoId, onClose, onSuccess 
                   />
                 </div>
                 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Resultado da Operação
-                  </label>
-                  <div className="flex gap-4 mt-2">
-                    <label className={`flex items-center cursor-pointer p-3 rounded-lg border ${status === 'Vencedor' ? 'border-green-500 bg-green-50' : 'border-gray-300'}`}>
-                      <input
-                        type="radio"
-                        name="status"
-                        value="Vencedor"
-                        checked={status === 'Vencedor'}
-                        onChange={() => setStatus('Vencedor')}
-                        className="hidden"
-                      />
-                      <CheckCircle className={`w-5 h-5 mr-2 ${status === 'Vencedor' ? 'text-green-500' : 'text-gray-400'}`} />
-                      <span className={status === 'Vencedor' ? 'text-green-700' : 'text-gray-600'}>Vencedor</span>
-                    </label>
-                    
-                    <label className={`flex items-center cursor-pointer p-3 rounded-lg border ${status === 'Perdedor' ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}>
-                      <input
-                        type="radio"
-                        name="status"
-                        value="Perdedor"
-                        checked={status === 'Perdedor'}
-                        onChange={() => setStatus('Perdedor')}
-                        className="hidden"
-                      />
-                      <XCircle className={`w-5 h-5 mr-2 ${status === 'Perdedor' ? 'text-red-500' : 'text-gray-400'}`} />
-                      <span className={status === 'Perdedor' ? 'text-red-700' : 'text-gray-600'}>Perdedor</span>
-                    </label>
-                  </div>
-                </div>
-                
-                {/* Resumo dos valores calculados */}
-                {valores && (
-                  <div className="p-4 bg-gray-50 rounded-lg space-y-2">
+                {/* Seção de resultado da operação - só aparece se valorUnitarioSaida estiver preenchido */}
+                {valorUnitarioSaida && valores && (
+                  <div className="p-4 bg-purple-50 rounded-lg space-y-2">
                     <div className="flex justify-between">
                       <span className="text-gray-500">Valor Total de Saída:</span>
                       <span className="font-medium">{formatarMoeda(valores.valorTotalSaida)}</span>

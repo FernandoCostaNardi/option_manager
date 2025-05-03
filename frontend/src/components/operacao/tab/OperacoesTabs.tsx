@@ -11,6 +11,7 @@ import { useFiltros } from '../../../hooks/operacao/useFiltros';
 import { OperacaoService } from '../../../services/operacaoService';
 import { Download } from 'lucide-react';
 import { jwtDecode } from 'jwt-decode';
+import { FinalizarOperacaoModal } from '../modals/FinalizarOperacaoModal';
 
 interface OperacoesTabsProps {
   activeTab: string;
@@ -64,6 +65,8 @@ export const OperacoesTabs: React.FC<OperacoesTabsProps> = ({
   const navigate = useNavigate();
   const { filtros } = useFiltros();
   const [exportLoading, setExportLoading] = useState(false);
+  const [modalFinalizarOperacaoAberto, setModalFinalizarOperacaoAberto] = useState(false);
+  const [operacaoParaFinalizar, setOperacaoParaFinalizar] = useState<OperacaoAtiva | null>(null);
   
   // Verificar se o erro está relacionado a token expirado
   useEffect(() => {
@@ -152,156 +155,186 @@ export const OperacoesTabs: React.FC<OperacoesTabsProps> = ({
     await handleExport(formato, ['WINNER', 'LOSER']);
   };
 
+  // Handler para abrir modal de finalização com a operação selecionada
+  const handleFinalizar = (operacao: OperacaoAtiva) => {
+    console.log('Finalizar operação:', operacao);
+    setOperacaoParaFinalizar(operacao);
+    setModalFinalizarOperacaoAberto(true);
+  };
+  const fecharModalFinalizarOperacao = () => {
+    setModalFinalizarOperacaoAberto(false);
+    setOperacaoParaFinalizar(null);
+  };
+  const handleFinalizarOperacaoSucesso = () => {
+    // Aqui você pode recarregar as operações se necessário
+    fecharModalFinalizarOperacao();
+  };
+
+  // Log de depuração para renderização do modal
+  console.log('Render modal:', modalFinalizarOperacaoAberto, operacaoParaFinalizar);
+
   return (
-    <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-      <TabsList className="mb-4">
-        <TabsTrigger 
-          value="ativas" 
-          className={`px-4 py-2 ${activeTab === 'ativas' ? 'bg-purple-100' : ''}`}
-        >
-          Operações Ativas
-        </TabsTrigger>
-        <TabsTrigger 
-          value="finalizadas" 
-          className={`px-4 py-2 ${activeTab === 'finalizadas' ? 'bg-purple-100' : ''}`}
-        >
-          Operações Finalizadas
-        </TabsTrigger>
-      </TabsList>
-      
-      <TabsContent value="ativas">
-        {loadingAtivas ? (
-          <LoadingSpinner message="Carregando operações ativas..." />
-        ) : error && !error.includes('token') && !error.includes('unauthorized') && !error.includes('401') ? (
-          <ErrorMessage message={error} />
-        ) : (
-          <>
-            {/* Renderizar os cards de dashboard para operações ativas */}
-            {renderAtivasCards && renderAtivasCards(loadingAtivas)}
-            
-            <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-                <h2 className="font-semibold text-gray-800">Operações Ativas</h2>
-                <div className="relative">
-                  <button
-                    className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg shadow hover:bg-purple-700 transition"
-                    disabled={exportLoading}
-                    onClick={e => {
-                      const menu = document.getElementById('export-menu-ativas');
-                      if (menu) menu.classList.toggle('hidden');
-                    }}
-                  >
-                    <Download className="w-4 h-4" /> Exportar
-                  </button>
-                  <div
-                    id="export-menu-ativas"
-                    className="hidden absolute right-0 mt-2 w-32 bg-white border rounded shadow z-10"
-                  >
+    <>
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+        <TabsList className="mb-4">
+          <TabsTrigger 
+            value="ativas" 
+            className={`px-4 py-2 ${activeTab === 'ativas' ? 'bg-purple-100' : ''}`}
+          >
+            Operações Ativas
+          </TabsTrigger>
+          <TabsTrigger 
+            value="finalizadas" 
+            className={`px-4 py-2 ${activeTab === 'finalizadas' ? 'bg-purple-100' : ''}`}
+          >
+            Operações Finalizadas
+          </TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="ativas">
+          {loadingAtivas ? (
+            <LoadingSpinner message="Carregando operações ativas..." />
+          ) : error && !error.includes('token') && !error.includes('unauthorized') && !error.includes('401') ? (
+            <ErrorMessage message={error} />
+          ) : (
+            <>
+              {/* Renderizar os cards de dashboard para operações ativas */}
+              {renderAtivasCards && renderAtivasCards(loadingAtivas)}
+              
+              <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+                  <h2 className="font-semibold text-gray-800">Operações Ativas</h2>
+                  <div className="relative">
                     <button
-                      className="block w-full text-left px-4 py-2 hover:bg-gray-100"
-                      onClick={() => {
-                        handleExportAtivas('excel');
-                        document.getElementById('export-menu-ativas')?.classList.add('hidden');
+                      className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg shadow hover:bg-purple-700 transition"
+                      disabled={exportLoading}
+                      onClick={e => {
+                        const menu = document.getElementById('export-menu-ativas');
+                        if (menu) menu.classList.toggle('hidden');
                       }}
-                    >Exportar Excel</button>
-                    <button
-                      className="block w-full text-left px-4 py-2 hover:bg-gray-100"
-                      onClick={() => {
-                        handleExportAtivas('pdf');
-                        document.getElementById('export-menu-ativas')?.classList.add('hidden');
-                      }}
-                    >Exportar PDF</button>
+                    >
+                      <Download className="w-4 h-4" /> Exportar
+                    </button>
+                    <div
+                      id="export-menu-ativas"
+                      className="hidden absolute right-0 mt-2 w-32 bg-white border rounded shadow z-10"
+                    >
+                      <button
+                        className="block w-full text-left px-4 py-2 hover:bg-gray-100"
+                        onClick={() => {
+                          handleExportAtivas('excel');
+                          document.getElementById('export-menu-ativas')?.classList.add('hidden');
+                        }}
+                      >Exportar Excel</button>
+                      <button
+                        className="block w-full text-left px-4 py-2 hover:bg-gray-100"
+                        onClick={() => {
+                          handleExportAtivas('pdf');
+                          document.getElementById('export-menu-ativas')?.classList.add('hidden');
+                        }}
+                      >Exportar PDF</button>
+                    </div>
                   </div>
                 </div>
+                <OperacoesAtivasTable
+                  operacoes={operacoesAtivas}
+                  sortField={sortField}
+                  sortDirection={sortDirection}
+                  onSort={onSort}
+                  onEdit={onEdit}
+                  onFinalize={handleFinalizar}
+                  onRemove={onRemove}
+                  onViewTargets={onViewTargets}
+                />
+                <Paginacao
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  totalItems={totalItems}
+                  pageSize={pageSize}
+                  onPageChange={onPageChange}
+                />
               </div>
-              <OperacoesAtivasTable
-                operacoes={operacoesAtivas}
-                sortField={sortField}
-                sortDirection={sortDirection}
-                onSort={onSort}
-                onEdit={onEdit}
-                onFinalize={onFinalize}
-                onRemove={onRemove}
-                onViewTargets={onViewTargets}
-              />
-              <Paginacao
-                currentPage={currentPage}
-                totalPages={totalPages}
-                totalItems={totalItems}
-                pageSize={pageSize}
-                onPageChange={onPageChange}
-              />
-            </div>
-          </>
-        )}
-      </TabsContent>
-      
-      <TabsContent value="finalizadas">
-        {loadingFinalizadas ? (
-          <LoadingSpinner message="Carregando operações finalizadas..." />
-        ) : error && !error.includes('token') && !error.includes('unauthorized') && !error.includes('401') ? (
-          <ErrorMessage message={error} />
-        ) : (
-          <>
-            {/* Renderizar os cards de dashboard para operações finalizadas */}
-            {renderFinalizadasCards && renderFinalizadasCards(loadingFinalizadas)}
-            
-            <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-                <h2 className="font-semibold text-gray-800">Operações Finalizadas</h2>
-                <div className="relative">
-                  <button
-                    className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg shadow hover:bg-purple-700 transition"
-                    disabled={exportLoading}
-                    onClick={e => {
-                      const menu = document.getElementById('export-menu-finalizadas');
-                      if (menu) menu.classList.toggle('hidden');
-                    }}
-                  >
-                    <Download className="w-4 h-4" /> Exportar
-                  </button>
-                  <div
-                    id="export-menu-finalizadas"
-                    className="hidden absolute right-0 mt-2 w-32 bg-white border rounded shadow z-10"
-                  >
+            </>
+          )}
+        </TabsContent>
+        
+        <TabsContent value="finalizadas">
+          {loadingFinalizadas ? (
+            <LoadingSpinner message="Carregando operações finalizadas..." />
+          ) : error && !error.includes('token') && !error.includes('unauthorized') && !error.includes('401') ? (
+            <ErrorMessage message={error} />
+          ) : (
+            <>
+              {/* Renderizar os cards de dashboard para operações finalizadas */}
+              {renderFinalizadasCards && renderFinalizadasCards(loadingFinalizadas)}
+              
+              <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+                  <h2 className="font-semibold text-gray-800">Operações Finalizadas</h2>
+                  <div className="relative">
                     <button
-                      className="block w-full text-left px-4 py-2 hover:bg-gray-100"
-                      onClick={() => {
-                        handleExportFinalizadas('excel');
-                        document.getElementById('export-menu-finalizadas')?.classList.add('hidden');
+                      className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg shadow hover:bg-purple-700 transition"
+                      disabled={exportLoading}
+                      onClick={e => {
+                        const menu = document.getElementById('export-menu-finalizadas');
+                        if (menu) menu.classList.toggle('hidden');
                       }}
-                    >Exportar Excel</button>
-                    <button
-                      className="block w-full text-left px-4 py-2 hover:bg-gray-100"
-                      onClick={() => {
-                        handleExportFinalizadas('pdf');
-                        document.getElementById('export-menu-finalizadas')?.classList.add('hidden');
-                      }}
-                    >Exportar PDF</button>
+                    >
+                      <Download className="w-4 h-4" /> Exportar
+                    </button>
+                    <div
+                      id="export-menu-finalizadas"
+                      className="hidden absolute right-0 mt-2 w-32 bg-white border rounded shadow z-10"
+                    >
+                      <button
+                        className="block w-full text-left px-4 py-2 hover:bg-gray-100"
+                        onClick={() => {
+                          handleExportFinalizadas('excel');
+                          document.getElementById('export-menu-finalizadas')?.classList.add('hidden');
+                        }}
+                      >Exportar Excel</button>
+                      <button
+                        className="block w-full text-left px-4 py-2 hover:bg-gray-100"
+                        onClick={() => {
+                          handleExportFinalizadas('pdf');
+                          document.getElementById('export-menu-finalizadas')?.classList.add('hidden');
+                        }}
+                      >Exportar PDF</button>
+                    </div>
                   </div>
                 </div>
+                <OperacoesFinalizadasTable
+                  operacoes={operacoesFinalizadas}
+                  loading={loadingFinalizadas}
+                  sortField={sortField}
+                  sortDirection={sortDirection}
+                  onSort={onSort}
+                  onView={onView}
+                  onRemove={onRemove}
+                  onViewTargets={onViewTargets}
+                />
+                <Paginacao
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  totalItems={totalItems}
+                  pageSize={pageSize}
+                  onPageChange={onPageChange}
+                />
               </div>
-              <OperacoesFinalizadasTable
-                operacoes={operacoesFinalizadas}
-                loading={loadingFinalizadas}
-                sortField={sortField}
-                sortDirection={sortDirection}
-                onSort={onSort}
-                onView={onView}
-                onRemove={onRemove}
-                onViewTargets={onViewTargets}
-              />
-              <Paginacao
-                currentPage={currentPage}
-                totalPages={totalPages}
-                totalItems={totalItems}
-                pageSize={pageSize}
-                onPageChange={onPageChange}
-              />
-            </div>
-          </>
-        )}
-      </TabsContent>
-    </Tabs>
+            </>
+          )}
+        </TabsContent>
+      </Tabs>
+      <FinalizarOperacaoModal
+        isOpen={modalFinalizarOperacaoAberto}
+        operacao={operacaoParaFinalizar}
+        onClose={fecharModalFinalizarOperacao}
+        onSuccess={handleFinalizarOperacaoSucesso}
+      />
+    </>
   );
 };
+
+
+ 
+

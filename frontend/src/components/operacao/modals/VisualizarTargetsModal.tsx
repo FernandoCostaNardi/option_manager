@@ -42,16 +42,11 @@ export function VisualizarTargetsModal({ isOpen, operationId, onClose }: Visuali
     setError(null);
     
     try {
-      console.log('Fazendo requisição para:', `/${operationId}/targets`);
-      const token = localStorage.getItem('token');
-      const response = await api.get(`/${operationId}/targets`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined
-      });
-      console.log('Resposta da API:', response.data);
-      setTargets(response.data || []);
+      const response = await api.get(`/operations/${operationId}/targets`);
+      setTargets(response.data);
     } catch (error) {
       console.error('Erro ao carregar targets:', error);
-      setError('Não foi possível carregar os targets da operação. Tente novamente.');
+      setError('Não foi possível carregar os targets da operação.');
     } finally {
       setLoading(false);
     }

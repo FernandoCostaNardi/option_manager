@@ -11,6 +11,7 @@ import { useFiltros } from '../../hooks/operacao/useFiltros';
 import { useOperacoes } from '../../hooks/operacao/useOperacoes';
 import { formatarMoeda } from '../../utils/formatadores';
 import { BarChart, DollarSign, ListChecks, Percent } from 'lucide-react';
+import { OperacaoAtiva } from '../../types/operacao/operacoes.types';
 
 export function Operacoes() {
   // Estado para modais
@@ -19,6 +20,7 @@ export function Operacoes() {
   const [operacaoParaFinalizar, setOperacaoParaFinalizar] = useState<string | null>(null);
   const [modalVisualizarTargetsAberto, setModalVisualizarTargetsAberto] = useState(false);
   const [operacaoParaVisualizarTargets, setOperacaoParaVisualizarTargets] = useState<string | null>(null);
+  const [operacaoParaEditar, setOperacaoParaEditar] = useState<OperacaoAtiva | null>(null);
   
   // Hook de filtros
   const {
@@ -90,8 +92,12 @@ export function Operacoes() {
   
   // Handlers para ações da tabela
   const handleEditar = (id: string) => {
-    // Implementação da edição
-    console.log(`Editando operação ${id}`);
+    // Encontrar a operação pelo ID
+    const operacao = operacoesAtivas.find(op => op.id === id);
+    if (operacao) {
+      setOperacaoParaEditar(operacao);
+      setModalNovaOperacaoAberto(true);
+    }
   };
   
   const handleRemover = (id: string) => {
@@ -311,12 +317,13 @@ export function Operacoes() {
         isOpen={modalNovaOperacaoAberto}
         onClose={fecharModalNovaOperacao}
         onSuccess={handleNovaOperacaoSucesso}
+        operacaoExistente={operacaoParaEditar}
       />
       
       {/* Modal de Finalizar Operação */}
       <FinalizarOperacaoModal
         isOpen={modalFinalizarOperacaoAberto}
-        operacaoId={operacaoParaFinalizar}
+        operacao={operacaoParaFinalizar}
         onClose={fecharModalFinalizarOperacao}
         onSuccess={handleFinalizarOperacaoSucesso}
       />

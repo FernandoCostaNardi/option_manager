@@ -7,7 +7,7 @@ interface OperacaoAtivaItemProps {
   operacao: OperacaoAtiva;
   isAlternate: boolean;
   onEdit: (id: string) => void;
-  onFinalize: (id: string) => void;
+  onFinalize: (operacao: OperacaoAtiva) => void;
   onRemove: (id: string) => void;
   onViewTargets: (id: string) => void;
 }
@@ -92,7 +92,7 @@ export const OperacaoAtivaItem: React.FC<OperacaoAtivaItemProps> = ({
           <Edit className="h-5 w-5" />
         </button>
         <button
-          onClick={() => onFinalize(operacao.id)}
+          onClick={() => onFinalize(operacao)}
           className="text-green-600 hover:text-green-900 p-1 hover:bg-green-50 rounded-full transition-colors"
           title="Finalizar"
         >

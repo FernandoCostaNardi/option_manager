@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { X, Loader2, Plus, Edit, Trash } from 'lucide-react';
 import api from '../../../services/api';
+import { OperacaoAtiva } from '../../../types/operacao/operacoes.types';
 
 interface NovaOperacaoModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  operacaoExistente?: OperacaoAtiva;
 }
 
 interface OptionData {
@@ -19,7 +21,7 @@ interface OptionData {
   baseAssetType: string;
 }
 
-export function NovaOperacaoModal({ isOpen, onClose, onSuccess }: NovaOperacaoModalProps) {
+export function NovaOperacaoModal({ isOpen, onClose, onSuccess, operacaoExistente }: NovaOperacaoModalProps) {
   // Estado para controlar o passo atual
   const [passoAtual, setPassoAtual] = useState(1);
   
@@ -50,16 +52,93 @@ export function NovaOperacaoModal({ isOpen, onClose, onSuccess }: NovaOperacaoMo
   
   // Estado para controle de carregamento e erros
   const [loading, setLoading] = useState(false);
+  const [loadingTargets, setLoadingTargets] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  
-// Adicionar novo estado para o tipo de operação (Compra ou Venda)
-const [tipoOperacao, setTipoOperacao] = useState<'BUY' | 'SELL' | ''>('');
-// Novo estado para a data de entrada
-const [dataEntrada, setDataEntrada] = useState(() => {
-  const hoje = new Date();
-  return hoje.toISOString().split('T')[0];
-});
+  // Adicionar novo estado para o tipo de operação (Compra ou Venda)
+  const [tipoOperacao, setTipoOperacao] = useState<'BUY' | 'SELL' | ''>('');
+  // Novo estado para a data de entrada
+  const [dataEntrada, setDataEntrada] = useState(() => {
+    const hoje = new Date();
+    return hoje.toISOString().split('T')[0];
+  });
+
+  // Função para buscar targets da operação
+  const buscarTargets = async (operationId: string) => {
+    setLoadingTargets(true);
+    try {
+      const response = await api.get(`/operations/${operationId}/targets`);
+      const targetsFormatados = response.data.map((target: any) => ({
+        type: target.type,
+        sequence: target.sequence,
+        value: target.value.toString(),
+        editing: false
+      }));
+      setTargets(targetsFormatados);
+    } catch (error) {
+      console.error('Erro ao buscar targets:', error);
+      setError('Não foi possível carregar os targets da operação.');
+    } finally {
+      setLoadingTargets(false);
+    }
+  };
+
+  // Efeito para preencher os campos quando uma operação existente é fornecida
+  useEffect(() => {
+    if (operacaoExistente) {
+      setCodigoOpcao(operacaoExistente.optionSeriesCode);
+      setTipoOperacao(operacaoExistente.transactionType as 'BUY' | 'SELL');
+      
+      // Formatar a data de entrada para o formato esperado pelo input type="date"
+      const dataEntradaFormatada = new Date(operacaoExistente.entryDate).toISOString().split('T')[0];
+      setDataEntrada(dataEntradaFormatada);
+      
+      setQuantidade(operacaoExistente.quantity.toString());
+      setValorUnitario(operacaoExistente.entryUnitPrice.toString());
+      setTemCasaAnalise(!!operacaoExistente.analysisHouseName);
+      setCorretoraSelecionada(operacaoExistente.brokerageId);
+      setCasaAnaliseSelecionada(operacaoExistente.analysisHouseId || '');
+      
+      // Buscar dados da opção
+      buscarDadosOpcao(operacaoExistente.optionSeriesCode);
+      
+      // Carregar corretoras e casas de análise
+      carregarCorretoras();
+      if (operacaoExistente.analysisHouseName) {
+        carregarCasasAnalise();
+      }
+    }
+  }, [operacaoExistente]);
+
+  // Efeito para carregar targets quando chegar no passo 4
+  useEffect(() => {
+    if (passoAtual === 4 && operacaoExistente?.id) {
+      buscarTargets(operacaoExistente.id);
+    }
+  }, [passoAtual, operacaoExistente]);
+
+  // Função para buscar dados da opção com código pré-definido
+  const buscarDadosOpcao = async (codigo?: string) => {
+    const codigoParaBuscar = codigo || codigoOpcao;
+    if (!codigoParaBuscar.trim()) {
+      setError('Por favor, informe o código da opção');
+      return;
+    }
+    
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const response = await api.get(`/option-series/${codigoParaBuscar.trim().toLowerCase()}`);
+      setDadosOpcao(response.data);    
+      setPassoAtual(2);
+    } catch (error) {
+      console.error('Erro ao buscar dados da opção:', error);
+      setError('Não foi possível encontrar os dados da opção. Verifique o código e tente novamente.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Função para adicionar ou editar target/stop loss
   const adicionarOuEditarTarget = () => {
@@ -129,29 +208,6 @@ const [dataEntrada, setDataEntrada] = useState(() => {
   const handleClose = () => {
     limparFormulario();
     onClose();
-  };
-
-  // Função para buscar dados da opção
-  const buscarDadosOpcao = async () => {
-    if (!codigoOpcao.trim()) {
-      setError('Por favor, informe o código da opção');
-      return;
-    }
-    
-    setLoading(true);
-    setError(null);
-    
-    try {
-      // Usar a instância do axios com interceptor
-      const response = await api.get(`/option-series/${codigoOpcao.trim().toLowerCase()}`);
-      setDadosOpcao(response.data);    
-      setPassoAtual(2);
-    } catch (error) {
-      console.error('Erro ao buscar dados da opção:', error);
-      setError('Não foi possível encontrar os dados da opção. Verifique o código e tente novamente.');
-    } finally {
-      setLoading(false);
-    }
   };
 
   // Função para avançar para o próximo passo
@@ -262,7 +318,7 @@ const [dataEntrada, setDataEntrada] = useState(() => {
     try {
       // Monta o DTO conforme OperationDataRequest
       const payload = {
-        // id: pode ser omitido para criação, ou gere um UUID se necessário
+        id: operacaoExistente?.id,
         baseAssetCode: dadosOpcao.baseAsset,
         baseAssetName: dadosOpcao.baseAssetName,
         baseAssetType: dadosOpcao.baseAssetType,
@@ -283,13 +339,14 @@ const [dataEntrada, setDataEntrada] = useState(() => {
         analysisHouseId: temCasaAnalise ? casaAnaliseSelecionada : undefined,
         transactionType: tipoOperacao,
         entryDate: dataEntrada,
-        exitDate: null, // ou defina conforme sua lógica
+        exitDate: operacaoExistente?.exitDate || null,
         quantity: parseInt(quantidade),
         entryUnitPrice: parseFloat(valorUnitario)
       };
   
       const token = localStorage.getItem('token');
-      await api.post('http://localhost:8080/api/operations', payload, {
+      
+      await api.post('/operations', payload, {
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {})
@@ -657,123 +714,134 @@ const [dataEntrada, setDataEntrada] = useState(() => {
               <div className="space-y-6">
                 <h3 className="text-lg font-semibold mb-4">Targets e Stop Loss</h3>
                 
-                {/* Formulário para adicionar targets/stop loss */}
-                <div className="flex flex-col sm:flex-row gap-4 mb-4">
-                  <div className="sm:w-1/3">
-                    <select
-                      className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent appearance-none bg-white"
-                      value={targetType}
-                      onChange={e => setTargetType(e.target.value as 'TARGET' | 'STOP_LOSS')}
-                      disabled={editingIndex !== null && targets[editingIndex || 0]?.type === 'STOP_LOSS'}
-                    >
-                      <option value="TARGET">Target</option>
-                      <option 
-                        value="STOP_LOSS" 
-                        disabled={targets.some(t => t.type === 'STOP_LOSS') && editingIndex === null}
-                      >
-                        Stop Loss
-                      </option>
-                    </select>
-                  </div>
-                  
-                  <div className="sm:w-1/3">
-                    <input
-                      type="number"
-                      className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                      placeholder="Valor (R$)"
-                      value={targetValue}
-                      onChange={e => setTargetValue(e.target.value)}
-                      step="0.01"
-                      min="0.01"
-                    />
-                  </div>
-                  
-                  <div className="flex gap-2 sm:w-1/3">
-                    <button
-                      className="flex-1 p-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center justify-center"
-                      onClick={adicionarOuEditarTarget}
-                      disabled={!targetValue}
-                    >
-                      {editingIndex !== null ? (
-                        <>
-                          <Edit className="w-4 h-4 mr-1" /> Atualizar
-                        </>
-                      ) : (
-                        <>
-                          <Plus className="w-4 h-4 mr-1" /> Adicionar
-                        </>
-                      )}
-                    </button>
-                    
-                    {editingIndex !== null && (
-                      <button 
-                        className="p-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
-                        onClick={cancelarEdicaoTarget}
-                      >
-                        Cancelar
-                      </button>
-                    )}
-                  </div>
-                </div>
-                
-                {/* Lista de targets/stop loss */}
-                {targets.length > 0 ? (
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full bg-white rounded-lg shadow">
-                      <thead>
-                        <tr className="bg-gray-100 text-gray-700">
-                          <th className="px-4 py-2 text-left">Tipo</th>
-                          <th className="px-4 py-2 text-right">Valor</th>
-                          <th className="px-4 py-2 text-center">Ações</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {targets.map((target, idx) => (
-                          <tr key={idx} className="border-b hover:bg-gray-50">
-                            <td className="px-4 py-2">
-                              {target.type === 'TARGET' ? (
-                                <span className="text-green-600 font-medium">Target {target.sequence}</span>
-                              ) : (
-                                <span className="text-red-600 font-medium">Stop Loss</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-2 text-right">
-                              {parseFloat(target.value).toLocaleString('pt-BR', { 
-                                style: 'currency', 
-                                currency: 'BRL' 
-                              })}
-                            </td>
-                            <td className="px-4 py-2 flex gap-2 justify-center">
-                              <button 
-                                title="Editar" 
-                                className="p-1 rounded hover:bg-gray-100"
-                                onClick={() => editarTarget(idx)}
-                                disabled={editingIndex !== null}
-                              >
-                                <Edit className="w-4 h-4 text-blue-600" />
-                              </button>
-                              <button 
-                                title="Remover" 
-                                className="p-1 rounded hover:bg-gray-100"
-                                onClick={() => {
-                                  const novosTargets = [...targets];
-                                  novosTargets.splice(idx, 1);
-                                  setTargets(novosTargets);
-                                }}
-                                disabled={editingIndex !== null}
-                              >
-                                <Trash className="w-4 h-4 text-red-600" />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                {loadingTargets ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="flex items-center space-x-2">
+                      <Loader2 className="w-6 h-6 text-purple-600 animate-spin" />
+                      <span className="text-gray-600">Carregando targets...</span>
+                    </div>
                   </div>
                 ) : (
-                  <div className="text-center py-6 bg-gray-50 rounded-lg text-gray-500">
-                    Nenhum target ou stop loss adicionado ainda.
-                  </div>
+                  <>
+                    {/* Formulário para adicionar targets/stop loss */}
+                    <div className="flex flex-col sm:flex-row gap-4 mb-4">
+                      <div className="sm:w-1/3">
+                        <select
+                          className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent appearance-none bg-white"
+                          value={targetType}
+                          onChange={e => setTargetType(e.target.value as 'TARGET' | 'STOP_LOSS')}
+                          disabled={editingIndex !== null && targets[editingIndex || 0]?.type === 'STOP_LOSS'}
+                        >
+                          <option value="TARGET">Target</option>
+                          <option 
+                            value="STOP_LOSS" 
+                            disabled={targets.some(t => t.type === 'STOP_LOSS') && editingIndex === null}
+                          >
+                            Stop Loss
+                          </option>
+                        </select>
+                      </div>
+                      
+                      <div className="sm:w-1/3">
+                        <input
+                          type="number"
+                          className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                          placeholder="Valor (R$)"
+                          value={targetValue}
+                          onChange={e => setTargetValue(e.target.value)}
+                          step="0.01"
+                          min="0.01"
+                        />
+                      </div>
+                      
+                      <div className="flex gap-2 sm:w-1/3">
+                        <button
+                          className="flex-1 p-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center justify-center"
+                          onClick={adicionarOuEditarTarget}
+                          disabled={!targetValue}
+                        >
+                          {editingIndex !== null ? (
+                            <>
+                              <Edit className="w-4 h-4 mr-1" /> Atualizar
+                            </>
+                          ) : (
+                            <>
+                              <Plus className="w-4 h-4 mr-1" /> Adicionar
+                            </>
+                          )}
+                        </button>
+                        
+                        {editingIndex !== null && (
+                          <button 
+                            className="p-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
+                            onClick={cancelarEdicaoTarget}
+                          >
+                            Cancelar
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* Lista de targets/stop loss */}
+                    {targets.length > 0 ? (
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full bg-white rounded-lg shadow">
+                          <thead>
+                            <tr className="bg-gray-100 text-gray-700">
+                              <th className="px-4 py-2 text-left">Tipo</th>
+                              <th className="px-4 py-2 text-right">Valor</th>
+                              <th className="px-4 py-2 text-center">Ações</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {targets.map((target, idx) => (
+                              <tr key={idx} className="border-b hover:bg-gray-50">
+                                <td className="px-4 py-2">
+                                  {target.type === 'TARGET' ? (
+                                    <span className="text-green-600 font-medium">Target {target.sequence}</span>
+                                  ) : (
+                                    <span className="text-red-600 font-medium">Stop Loss</span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-2 text-right">
+                                  {parseFloat(target.value).toLocaleString('pt-BR', { 
+                                    style: 'currency', 
+                                    currency: 'BRL' 
+                                  })}
+                                </td>
+                                <td className="px-4 py-2 flex gap-2 justify-center">
+                                  <button 
+                                    title="Editar" 
+                                    className="p-1 rounded hover:bg-gray-100"
+                                    onClick={() => editarTarget(idx)}
+                                    disabled={editingIndex !== null}
+                                  >
+                                    <Edit className="w-4 h-4 text-blue-600" />
+                                  </button>
+                                  <button 
+                                    title="Remover" 
+                                    className="p-1 rounded hover:bg-gray-100"
+                                    onClick={() => {
+                                      const novosTargets = [...targets];
+                                      novosTargets.splice(idx, 1);
+                                      setTargets(novosTargets);
+                                    }}
+                                    disabled={editingIndex !== null}
+                                  >
+                                    <Trash className="w-4 h-4 text-red-600" />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="text-center py-6 bg-gray-50 rounded-lg text-gray-500">
+                        Nenhum target ou stop loss adicionado ainda.
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             )}

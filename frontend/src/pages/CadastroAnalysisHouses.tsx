@@ -248,6 +248,7 @@ export function CadastroAnalysisHouses() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState<string | undefined>(undefined);
   const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   // Add these two states:
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
@@ -256,6 +257,7 @@ export function CadastroAnalysisHouses() {
   // Função para buscar casas de análise
   const fetchAnalysisHouses = async (currentPage: number = page) => {
     console.log("Buscando casas de análise da página:", currentPage);
+    setLoading(true);
     try {
       const data: AnalysisHousePaginated =
         await AnalysisHouseService.getAnalysisHouses(currentPage, 10);
@@ -269,6 +271,8 @@ export function CadastroAnalysisHouses() {
       setAnalysisHouses([]);
       // Manter totalPages como 1 mesmo em caso de erro
       setTotalPages(1);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -335,11 +339,18 @@ export function CadastroAnalysisHouses() {
       <CadastroAnalysisHouseModal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        onSuccess={() => fetchAnalysisHouses(page)} // Recarregar página atual ao ter sucesso
+        onSuccess={() => fetchAnalysisHouses(page)}
         analysisHouseId={editId}
       />
 
-      {analysisHouses.length === 0 ? (
+      {loading ? (
+        <div className="bg-white rounded-xl shadow-sm p-10 text-center border border-gray-100">
+          <div className="flex flex-col items-center justify-center">
+            <Loader2 className="w-10 h-10 text-purple-600 animate-spin mb-4" />
+            <p className="text-gray-500">Carregando casas de análise...</p>
+          </div>
+        </div>
+      ) : analysisHouses.length === 0 ? (
         <div className="bg-white rounded-xl shadow-sm p-10 text-center border border-gray-100">
           <p className="text-gray-500">
             Nenhuma casa de análise cadastrada ainda.
