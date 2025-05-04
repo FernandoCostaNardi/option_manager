@@ -1,4 +1,4 @@
-package com.olisystem.optionsmanager.dto;
+package com.olisystem.optionsmanager.dto.analysis_house;
 
 import com.olisystem.optionsmanager.model.StatusType;
 import lombok.Data;
