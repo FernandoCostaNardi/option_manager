@@ -1,12 +1,11 @@
 package com.olisystem.optionsmanager.repository;
 
+import com.olisystem.optionsmanager.model.analysis_house.AnalysisHouse;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.stereotype.Repository;
-
-import com.olisystem.optionsmanager.model.analysis_house.AnalysisHouse;
 
 @Repository
 public interface AnalysisHouseRepository

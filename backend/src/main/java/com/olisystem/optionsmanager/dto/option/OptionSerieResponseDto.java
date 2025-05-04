@@ -1,11 +1,9 @@
 package com.olisystem.optionsmanager.dto.option;
 
+import com.olisystem.optionsmanager.model.option_serie.OptionType;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.UUID;
-
-import com.olisystem.optionsmanager.model.option_serie.OptionType;
-
 import lombok.Builder;
 import lombok.Data;
 

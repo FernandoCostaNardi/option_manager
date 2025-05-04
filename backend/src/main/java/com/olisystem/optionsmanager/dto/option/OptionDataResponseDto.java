@@ -2,7 +2,6 @@ package com.olisystem.optionsmanager.dto.option;
 
 import com.olisystem.optionsmanager.model.Asset.AssetType;
 import com.olisystem.optionsmanager.model.option_serie.OptionType;
-
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import lombok.Data;

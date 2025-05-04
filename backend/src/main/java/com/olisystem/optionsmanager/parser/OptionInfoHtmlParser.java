@@ -1,14 +1,12 @@
 package com.olisystem.optionsmanager.parser;
 
+import com.olisystem.optionsmanager.model.option_serie.OptionType;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
-import com.olisystem.optionsmanager.model.option_serie.OptionType;
-
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j

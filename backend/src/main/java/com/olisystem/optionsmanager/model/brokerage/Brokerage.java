@@ -1,10 +1,8 @@
 package com.olisystem.optionsmanager.model.brokerage;
 
+import com.olisystem.optionsmanager.model.auth.User;
 import jakarta.persistence.*;
 import java.util.UUID;
-
-import com.olisystem.optionsmanager.model.auth.User;
-
 import lombok.*;
 
 @Entity

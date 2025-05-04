@@ -5,7 +5,6 @@ import com.olisystem.optionsmanager.dto.operation.OperationSummaryResponseDto;
 import com.olisystem.optionsmanager.model.operation.OperationStatus;
 import com.olisystem.optionsmanager.model.operation.TradeType;
 import com.olisystem.optionsmanager.model.option_serie.OptionType;
-
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;

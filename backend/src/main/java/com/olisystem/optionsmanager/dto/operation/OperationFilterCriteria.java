@@ -4,7 +4,6 @@ import com.olisystem.optionsmanager.model.operation.OperationStatus;
 import com.olisystem.optionsmanager.model.operation.TradeType;
 import com.olisystem.optionsmanager.model.option_serie.OptionType;
 import com.olisystem.optionsmanager.model.transaction.TransactionType;
-
 import java.time.LocalDate;
 import java.util.List;
 import lombok.Builder;

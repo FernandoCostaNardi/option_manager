@@ -3,7 +3,6 @@ package com.olisystem.optionsmanager.model.operation;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.util.UUID;
-
 import lombok.*;
 
 @Entity

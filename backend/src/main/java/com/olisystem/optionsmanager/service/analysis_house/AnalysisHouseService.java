@@ -72,27 +72,33 @@ public class AnalysisHouseService {
     AnalysisHouse analysisHouse = AnalysisHouseMapper.toEntity(dto, user);
 
     return findByCnpj(analysisHouse.getCnpj())
-        .map(existing -> {
-          log.warn("Tentativa de criar casa de análise com CNPJ duplicado: {}", analysisHouse.getCnpj());
-          return AnalysisHouseMapper.toDto(existing);
-        })
-        .orElseGet(() -> {
-          AnalysisHouse savedAnalysisHouse = save(analysisHouse);
-          return AnalysisHouseMapper.toDto(savedAnalysisHouse);
-        });
+        .map(
+            existing -> {
+              log.warn(
+                  "Tentativa de criar casa de análise com CNPJ duplicado: {}",
+                  analysisHouse.getCnpj());
+              return AnalysisHouseMapper.toDto(existing);
+            })
+        .orElseGet(
+            () -> {
+              AnalysisHouse savedAnalysisHouse = save(analysisHouse);
+              return AnalysisHouseMapper.toDto(savedAnalysisHouse);
+            });
   }
 
-  public AnalysisHouseResponseDto updateAnalysisHouse(String id, AnalysisHouseCreateRequestDto dto) {
+  public AnalysisHouseResponseDto updateAnalysisHouse(
+      String id, AnalysisHouseCreateRequestDto dto) {
     UUID analysisHouseId = UuidUtil.parseUuid(id);
     User user = SecurityUtil.getLoggedUser();
 
     return findById(analysisHouseId)
-        .map(existing -> {
-          AnalysisHouse analysisHouseToUpdate = AnalysisHouseMapper.toEntity(dto, user);
-          analysisHouseToUpdate.setId(analysisHouseId);
-          AnalysisHouse updated = save(analysisHouseToUpdate);
-          return AnalysisHouseMapper.toDto(updated);
-        })
+        .map(
+            existing -> {
+              AnalysisHouse analysisHouseToUpdate = AnalysisHouseMapper.toEntity(dto, user);
+              analysisHouseToUpdate.setId(analysisHouseId);
+              AnalysisHouse updated = save(analysisHouseToUpdate);
+              return AnalysisHouseMapper.toDto(updated);
+            })
         .orElseThrow(() -> new ResourceNotFoundException("Casa de análise não encontrada"));
   }
 

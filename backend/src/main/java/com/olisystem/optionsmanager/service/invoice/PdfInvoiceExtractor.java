@@ -3,7 +3,6 @@ package com.olisystem.optionsmanager.service.invoice;
 import com.olisystem.optionsmanager.model.brokerage.Brokerage;
 import com.olisystem.optionsmanager.model.invoice.Invoice;
 import com.olisystem.optionsmanager.model.invoice.InvoiceItem;
-
 import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.*;

@@ -1,6 +1,5 @@
 package com.olisystem.optionsmanager.controller.analysis_house;
 
-
 import com.olisystem.optionsmanager.dto.analysis_house.AnalysisHouseCreateRequestDto;
 import com.olisystem.optionsmanager.dto.analysis_house.AnalysisHouseResponseDto;
 import com.olisystem.optionsmanager.mapper.analysis_house.AnalysisHouseMapper;

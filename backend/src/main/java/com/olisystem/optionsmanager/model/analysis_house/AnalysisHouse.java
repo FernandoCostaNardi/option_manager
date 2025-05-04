@@ -1,11 +1,9 @@
 package com.olisystem.optionsmanager.model.analysis_house;
 
-import jakarta.persistence.*;
-import java.util.UUID;
-
 import com.olisystem.optionsmanager.model.auth.User;
 import com.olisystem.optionsmanager.model.operation.StatusType;
-
+import jakarta.persistence.*;
+import java.util.UUID;
 import lombok.*;
 
 @Entity

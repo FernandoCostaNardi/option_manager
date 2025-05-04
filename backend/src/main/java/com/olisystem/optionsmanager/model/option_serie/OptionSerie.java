@@ -1,12 +1,10 @@
 package com.olisystem.optionsmanager.model.option_serie;
 
+import com.olisystem.optionsmanager.model.Asset.Asset;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.UUID;
-
-import com.olisystem.optionsmanager.model.Asset.Asset;
-
 import lombok.*;
 
 @Entity

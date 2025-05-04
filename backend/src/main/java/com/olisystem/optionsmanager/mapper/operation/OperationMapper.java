@@ -2,7 +2,6 @@ package com.olisystem.optionsmanager.mapper.operation;
 
 import com.olisystem.optionsmanager.dto.operation.OperationItemDto;
 import com.olisystem.optionsmanager.model.operation.Operation;
-
 import org.springframework.stereotype.Component;
 
 @Component
@@ -14,7 +13,8 @@ public class OperationMapper {
         .optionSeriesCode(operation.getOptionSeries().getCode())
         .baseAssetName(operation.getOptionSeries().getAsset().getName())
         .baseAssetLogoUrl(operation.getOptionSeries().getAsset().getUrlLogo())
-        .analysisHouseName(operation.getAnalysisHouse() != null ? operation.getAnalysisHouse().getName() : null)
+        .analysisHouseName(
+            operation.getAnalysisHouse() != null ? operation.getAnalysisHouse().getName() : null)
         .brokerageName(operation.getBrokerage().getName())
         .transactionType(operation.getTransactionType())
         .tradeType(operation.getTradeType())
@@ -29,4 +29,4 @@ public class OperationMapper {
         .status(operation.getStatus())
         .build();
   }
-} 
+}

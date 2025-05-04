@@ -71,14 +71,16 @@ public class BrokerageService {
     Brokerage brokerage = BrokerageMapper.toEntity(dto, user);
 
     return findByCnpj(brokerage.getCnpj())
-        .map(existing -> {
-          log.warn("Tentativa de criar corretora com CNPJ duplicado: {}", brokerage.getCnpj());
-          return BrokerageMapper.toDto(existing);
-        })
-        .orElseGet(() -> {
-          Brokerage savedBrokerage = save(brokerage);
-          return BrokerageMapper.toDto(savedBrokerage);
-        });
+        .map(
+            existing -> {
+              log.warn("Tentativa de criar corretora com CNPJ duplicado: {}", brokerage.getCnpj());
+              return BrokerageMapper.toDto(existing);
+            })
+        .orElseGet(
+            () -> {
+              Brokerage savedBrokerage = save(brokerage);
+              return BrokerageMapper.toDto(savedBrokerage);
+            });
   }
 
   public BrokerageResponseDto updateBrokerage(String id, BrokerageCreateRequestDto dto) {
@@ -86,12 +88,13 @@ public class BrokerageService {
     User user = SecurityUtil.getLoggedUser();
 
     return findById(brokerageId)
-        .map(existing -> {
-          Brokerage brokerageToUpdate = BrokerageMapper.toEntity(dto, user);
-          brokerageToUpdate.setId(brokerageId);
-          Brokerage updated = save(brokerageToUpdate);
-          return BrokerageMapper.toDto(updated);
-        })
+        .map(
+            existing -> {
+              Brokerage brokerageToUpdate = BrokerageMapper.toEntity(dto, user);
+              brokerageToUpdate.setId(brokerageId);
+              Brokerage updated = save(brokerageToUpdate);
+              return BrokerageMapper.toDto(updated);
+            })
         .orElseThrow(() -> new ResourceNotFoundException("Corretora não encontrada"));
   }
 

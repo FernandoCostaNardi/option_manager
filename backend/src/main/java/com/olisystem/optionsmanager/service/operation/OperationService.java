@@ -15,7 +15,7 @@ import com.olisystem.optionsmanager.model.operation.OperationStatus;
 import com.olisystem.optionsmanager.model.operation.OperationTarget;
 import com.olisystem.optionsmanager.model.operation.TradeType;
 import com.olisystem.optionsmanager.model.option_serie.OptionSerie;
-import com.olisystem.optionsmanager.report.OperationReportService;
+import com.olisystem.optionsmanager.report.OperationReportData;
 import com.olisystem.optionsmanager.repository.OperationRepository;
 import com.olisystem.optionsmanager.repository.OperationTargetRepository;
 import com.olisystem.optionsmanager.repository.OptionSerieRepository;
@@ -26,20 +26,16 @@ import com.olisystem.optionsmanager.service.option_series.OptionSerieService;
 import com.olisystem.optionsmanager.util.OperationSummaryCalculator;
 import com.olisystem.optionsmanager.util.SecurityUtil;
 import com.olisystem.optionsmanager.validation.OperationValidator;
-
+import jakarta.persistence.criteria.Predicate;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
-import jakarta.persistence.criteria.Predicate;
 import lombok.extern.log4j.Log4j2;
-import org.apache.poi.ss.usermodel.*;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -51,7 +47,7 @@ import org.springframework.stereotype.Service;
 
 @Log4j2
 @Service
-public class OperationService {
+public class OperationService implements OperationReportData {
 
   @Autowired private OperationRepository operationRepository;
   @Autowired private AssetService assetService;
@@ -62,7 +58,6 @@ public class OperationService {
   @Autowired private OperationTargetRepository operationTargetRepository;
   @Autowired private OperationValidator operationValidator;
   @Autowired private OperationMapper operationMapper;
-  @Autowired private OperationReportService operationReportService;
 
   public void createOperation(OperationDataRequest request) {
     operationValidator.validateCreate(request);
@@ -267,34 +262,33 @@ public class OperationService {
     return isAscending ? comparator : comparator.reversed();
   }
 
-  public Page<OperationSummaryResponseDto> findByFilters(
+  @Override
+  public OperationSummaryResponseDto findByFilters(
       OperationFilterCriteria criteria, Pageable pageable) {
-    Specification<Operation> spec = createSpecification(criteria);
-    Page<Operation> page = operationRepository.findAll(spec, pageable);
-    
-    List<OperationItemDto> dtos = page.getContent().stream()
-        .map(operationMapper::toDto)
-        .collect(Collectors.toList());
-    
+    Page<Operation> page = operationRepository.findAll(createSpecification(criteria), pageable);
+    List<OperationItemDto> dtos =
+        page.getContent().stream().map(this::mapToDto).collect(Collectors.toList());
+
     OperationSummaryResponseDto summary = OperationSummaryCalculator.calculateSummary(dtos);
-    return new PageImpl<>(Collections.singletonList(summary), pageable, page.getTotalElements());
+    return summary;
   }
 
   private Specification<Operation> createSpecification(OperationFilterCriteria criteria) {
     return (root, query, cb) -> {
       List<Predicate> predicates = new ArrayList<>();
-      
+
       // Filtro por usuário
       predicates.add(cb.equal(root.get("user"), SecurityUtil.getLoggedUser()));
-      
+
       // Filtro por status
       if (criteria.getStatus() != null && !criteria.getStatus().isEmpty()) {
         predicates.add(root.get("status").in(criteria.getStatus()));
       }
-      
+
       // Filtro por datas
       if (criteria.getEntryDateStart() != null) {
-        predicates.add(cb.greaterThanOrEqualTo(root.get("entryDate"), criteria.getEntryDateStart()));
+        predicates.add(
+            cb.greaterThanOrEqualTo(root.get("entryDate"), criteria.getEntryDateStart()));
       }
       if (criteria.getEntryDateEnd() != null) {
         predicates.add(cb.lessThanOrEqualTo(root.get("entryDate"), criteria.getEntryDateEnd()));
@@ -305,40 +299,46 @@ public class OperationService {
       if (criteria.getExitDateEnd() != null) {
         predicates.add(cb.lessThanOrEqualTo(root.get("exitDate"), criteria.getExitDateEnd()));
       }
-      
+
       // Filtro por casa de análise
       if (criteria.getAnalysisHouseName() != null && !criteria.getAnalysisHouseName().isEmpty()) {
-        predicates.add(cb.like(cb.lower(root.get("analysisHouse").get("name")), 
-            "%" + criteria.getAnalysisHouseName().toLowerCase() + "%"));
+        predicates.add(
+            cb.like(
+                cb.lower(root.get("analysisHouse").get("name")),
+                "%" + criteria.getAnalysisHouseName().toLowerCase() + "%"));
       }
-      
+
       // Filtro por corretora
       if (criteria.getBrokerageName() != null && !criteria.getBrokerageName().isEmpty()) {
-        predicates.add(cb.like(cb.lower(root.get("brokerage").get("name")), 
-            "%" + criteria.getBrokerageName().toLowerCase() + "%"));
+        predicates.add(
+            cb.like(
+                cb.lower(root.get("brokerage").get("name")),
+                "%" + criteria.getBrokerageName().toLowerCase() + "%"));
       }
-      
+
       // Filtro por tipo de transação
       if (criteria.getTransactionType() != null) {
         predicates.add(cb.equal(root.get("transactionType"), criteria.getTransactionType()));
       }
-      
+
       // Filtro por tipo de trade
       if (criteria.getTradeType() != null) {
         predicates.add(cb.equal(root.get("tradeType"), criteria.getTradeType()));
       }
-      
+
       // Filtro por tipo de opção
       if (criteria.getOptionType() != null) {
         predicates.add(cb.equal(root.get("optionSeries").get("type"), criteria.getOptionType()));
       }
-      
+
       // Filtro por código da série
       if (criteria.getOptionSeriesCode() != null && !criteria.getOptionSeriesCode().isEmpty()) {
-        predicates.add(cb.like(cb.lower(root.get("optionSeries").get("code")), 
-            "%" + criteria.getOptionSeriesCode().toLowerCase() + "%"));
+        predicates.add(
+            cb.like(
+                cb.lower(root.get("optionSeries").get("code")),
+                "%" + criteria.getOptionSeriesCode().toLowerCase() + "%"));
       }
-      
+
       return cb.and(predicates.toArray(new Predicate[0]));
     };
   }
@@ -371,48 +371,44 @@ public class OperationService {
         .build();
   }
 
-  public byte[] generateExcelReport(OperationFilterCriteria filterCriteria) {
-    return operationReportService.generateExcelReport(filterCriteria);
-  }
-
-  public byte[] generatePdfReport(OperationFilterCriteria filterCriteria) {
-    return operationReportService.generatePdfReport(filterCriteria);
-  }
-
   public void updateOperation(UUID id, OperationDataRequest request) {
     operationValidator.validateUpdate(request);
-    
-    Operation operation = operationRepository.findById(id)
-        .orElseThrow(() -> new ResourceNotFoundException("Operação não encontrada"));
-    
+
+    Operation operation =
+        operationRepository
+            .findById(id)
+            .orElseThrow(() -> new ResourceNotFoundException("Operação não encontrada"));
+
     // Atualiza os campos básicos
     operation.setTransactionType(request.getTransactionType());
     operation.setEntryDate(request.getEntryDate());
     operation.setExitDate(request.getExitDate());
     operation.setQuantity(request.getQuantity());
     operation.setEntryUnitPrice(request.getEntryUnitPrice());
-    operation.setEntryTotalValue(request.getEntryUnitPrice().multiply(BigDecimal.valueOf(request.getQuantity())));
-    
+    operation.setEntryTotalValue(
+        request.getEntryUnitPrice().multiply(BigDecimal.valueOf(request.getQuantity())));
+
     // Atualiza o tipo de trade se necessário
     if (request.getExitDate() != null) {
       operation.setTradeType(calculateTradeType(request.getEntryDate(), request.getExitDate()));
     }
-    
+
     // Atualiza a corretora
     if (request.getBrokerageId() != null) {
       Brokerage brokerage = brokerageService.getBrokerageById(request.getBrokerageId());
       operation.setBrokerage(brokerage);
     }
-    
+
     // Atualiza a casa de análise
     if (request.getAnalysisHouseId() != null) {
-      Optional<AnalysisHouse> analysisHouseOpt = analysisHouseService.findById(request.getAnalysisHouseId());
+      Optional<AnalysisHouse> analysisHouseOpt =
+          analysisHouseService.findById(request.getAnalysisHouseId());
       analysisHouseOpt.ifPresent(operation::setAnalysisHouse);
     }
-    
+
     // Salva a operação atualizada
     operationRepository.save(operation);
-    
+
     // Atualiza os targets
     if (request.getTargets() != null) {
       updateOperationTargets(operation, request.getTargets());
@@ -422,20 +418,22 @@ public class OperationService {
   private void updateOperationTargets(Operation operation, List<OperationTarget> newTargets) {
     // Remove os targets existentes
     operationTargetRepository.deleteByOperation(operation);
-    
+
     // Salva os novos targets
     if (!newTargets.isEmpty()) {
-      List<OperationTarget> targets = newTargets.stream()
-          .map(targetDto -> {
-            OperationTarget target = new OperationTarget();
-            target.setSequence(targetDto.getSequence());
-            target.setType(targetDto.getType());
-            target.setValue(targetDto.getValue());
-            target.setOperation(operation);
-            return target;
-          })
-          .collect(Collectors.toList());
-      
+      List<OperationTarget> targets =
+          newTargets.stream()
+              .map(
+                  targetDto -> {
+                    OperationTarget target = new OperationTarget();
+                    target.setSequence(targetDto.getSequence());
+                    target.setType(targetDto.getType());
+                    target.setValue(targetDto.getValue());
+                    target.setOperation(operation);
+                    return target;
+                  })
+              .collect(Collectors.toList());
+
       operationTargetRepository.saveAll(targets);
     }
   }

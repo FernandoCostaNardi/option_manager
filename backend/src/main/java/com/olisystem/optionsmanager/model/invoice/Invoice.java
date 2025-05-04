@@ -1,11 +1,9 @@
 package com.olisystem.optionsmanager.model.invoice;
 
+import com.olisystem.optionsmanager.model.brokerage.Brokerage;
 import jakarta.persistence.*;
 import java.util.Date;
 import java.util.List;
-
-import com.olisystem.optionsmanager.model.brokerage.Brokerage;
-
 import lombok.*;
 
 @Entity

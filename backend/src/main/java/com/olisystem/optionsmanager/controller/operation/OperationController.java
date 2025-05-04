@@ -7,8 +7,8 @@ import com.olisystem.optionsmanager.model.operation.OperationStatus;
 import com.olisystem.optionsmanager.model.operation.TradeType;
 import com.olisystem.optionsmanager.model.option_serie.OptionType;
 import com.olisystem.optionsmanager.model.transaction.TransactionType;
+import com.olisystem.optionsmanager.report.OperationReportService;
 import com.olisystem.optionsmanager.service.operation.OperationService;
-
 import java.time.LocalDate;
 import java.util.Collections;
 import java.util.List;
@@ -40,6 +40,7 @@ public class OperationController {
   private static final Logger log = LoggerFactory.getLogger(OperationController.class);
 
   @Autowired private OperationService operationService;
+  @Autowired private OperationReportService operationReportService;
 
   @PostMapping("/operations")
   public ResponseEntity<?> createOperation(@RequestBody OperationDataRequest request) {
@@ -64,7 +65,7 @@ public class OperationController {
   }
 
   @GetMapping("/operations")
-  public ResponseEntity<Page<OperationSummaryResponseDto>> getOperationsByStatus(
+  public ResponseEntity<OperationSummaryResponseDto> getOperationsByStatus(
       @RequestParam(required = false) List<OperationStatus> status,
       @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
           LocalDate entryDateStart,
@@ -116,8 +117,7 @@ public class OperationController {
             .optionSeriesCode(optionSeriesCode)
             .build();
 
-    Page<OperationSummaryResponseDto> result =
-        operationService.findByFilters(filterCriteria, pageable);
+    OperationSummaryResponseDto result = operationService.findByFilters(filterCriteria, pageable);
     return ResponseEntity.ok(result);
   }
 
@@ -167,7 +167,7 @@ public class OperationController {
 
     log.info("Critérios de filtro: {}", filterCriteria);
 
-    byte[] excelBytes = operationService.generateExcelReport(filterCriteria);
+    byte[] excelBytes = operationReportService.generateExcelReport(filterCriteria);
 
     HttpHeaders headers = new HttpHeaders();
     headers.setContentType(
@@ -225,7 +225,7 @@ public class OperationController {
 
     log.info("Critérios de filtro para PDF: {}", filterCriteria);
 
-    byte[] pdfBytes = operationService.generatePdfReport(filterCriteria);
+    byte[] pdfBytes = operationReportService.generatePdfReport(filterCriteria);
 
     HttpHeaders headers = new HttpHeaders();
     headers.setContentType(MediaType.APPLICATION_PDF);

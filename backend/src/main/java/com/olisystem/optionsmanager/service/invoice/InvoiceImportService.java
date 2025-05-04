@@ -2,7 +2,6 @@ package com.olisystem.optionsmanager.service.invoice;
 
 import com.olisystem.optionsmanager.model.invoice.Invoice;
 import com.olisystem.optionsmanager.repository.InvoiceRepository;
-
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;

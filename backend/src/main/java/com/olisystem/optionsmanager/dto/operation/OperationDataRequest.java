@@ -4,7 +4,6 @@ import com.olisystem.optionsmanager.model.Asset.AssetType;
 import com.olisystem.optionsmanager.model.operation.OperationTarget;
 import com.olisystem.optionsmanager.model.option_serie.OptionType;
 import com.olisystem.optionsmanager.model.transaction.TransactionType;
-
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;

@@ -1,16 +1,14 @@
 package com.olisystem.optionsmanager.model.operation;
 
-import jakarta.persistence.*;
-import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.util.UUID;
-
 import com.olisystem.optionsmanager.model.analysis_house.AnalysisHouse;
 import com.olisystem.optionsmanager.model.auth.User;
 import com.olisystem.optionsmanager.model.brokerage.Brokerage;
 import com.olisystem.optionsmanager.model.option_serie.OptionSerie;
 import com.olisystem.optionsmanager.model.transaction.TransactionType;
-
+import jakarta.persistence.*;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.UUID;
 import lombok.*;
 
 @Entity

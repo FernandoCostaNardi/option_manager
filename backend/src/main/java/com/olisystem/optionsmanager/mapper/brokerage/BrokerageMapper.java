@@ -1,8 +1,8 @@
 package com.olisystem.optionsmanager.mapper.brokerage;
 
+import com.olisystem.optionsmanager.dto.auth.UserSummaryDto;
 import com.olisystem.optionsmanager.dto.brokerage.BrokerageCreateRequestDto;
 import com.olisystem.optionsmanager.dto.brokerage.BrokerageResponseDto;
-import com.olisystem.optionsmanager.dto.auth.UserSummaryDto;
 import com.olisystem.optionsmanager.model.auth.User;
 import com.olisystem.optionsmanager.model.brokerage.Brokerage;
 

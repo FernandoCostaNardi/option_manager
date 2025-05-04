@@ -3,7 +3,6 @@ package com.olisystem.optionsmanager.repository;
 import com.olisystem.optionsmanager.model.auth.User;
 import com.olisystem.optionsmanager.model.operation.Operation;
 import com.olisystem.optionsmanager.model.operation.OperationStatus;
-
 import java.util.List;
 import java.util.UUID;
 import org.springframework.data.domain.Page;

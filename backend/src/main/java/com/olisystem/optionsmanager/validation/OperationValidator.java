@@ -33,7 +33,8 @@ public class OperationValidator {
     if (request.getQuantity() <= 0) {
       throw new InvalidOperationException("Quantidade deve ser maior que zero");
     }
-    if (request.getEntryUnitPrice() == null || request.getEntryUnitPrice().compareTo(BigDecimal.ZERO) <= 0) {
+    if (request.getEntryUnitPrice() == null
+        || request.getEntryUnitPrice().compareTo(BigDecimal.ZERO) <= 0) {
       throw new InvalidOperationException("Preço unitário de entrada deve ser maior que zero");
     }
   }
@@ -48,8 +49,9 @@ public class OperationValidator {
     if (request.getQuantity() <= 0) {
       throw new InvalidOperationException("Quantidade deve ser maior que zero");
     }
-    if (request.getEntryUnitPrice() == null || request.getEntryUnitPrice().compareTo(BigDecimal.ZERO) <= 0) {
+    if (request.getEntryUnitPrice() == null
+        || request.getEntryUnitPrice().compareTo(BigDecimal.ZERO) <= 0) {
       throw new InvalidOperationException("Preço unitário de entrada deve ser maior que zero");
     }
   }
-} 
+}
