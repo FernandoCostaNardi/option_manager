@@ -102,23 +102,32 @@ public class OperationController {
       }
     }
 
-    OperationFilterCriteria filterCriteria =
-        OperationFilterCriteria.builder()
-            .status(status)
-            .entryDateStart(entryDateStart)
-            .entryDateEnd(entryDateEnd)
-            .exitDateStart(exitDateStart)
-            .exitDateEnd(exitDateEnd)
-            .analysisHouseName(analysisHouseName)
-            .brokerageName(brokerageName)
-            .transactionType(transactionType)
-            .tradeType(tradeType)
-            .optionType(optionType)
-            .optionSeriesCode(optionSeriesCode)
-            .build();
+    // Se houver outros critérios de filtro além do status, use findByFilters
+    if (entryDateStart != null || entryDateEnd != null || exitDateStart != null || exitDateEnd != null
+        || analysisHouseName != null || brokerageName != null || transactionType != null
+        || tradeType != null || optionType != null || optionSeriesCode != null) {
+      OperationFilterCriteria filterCriteria =
+          OperationFilterCriteria.builder()
+              .status(status)
+              .entryDateStart(entryDateStart)
+              .entryDateEnd(entryDateEnd)
+              .exitDateStart(exitDateStart)
+              .exitDateEnd(exitDateEnd)
+              .analysisHouseName(analysisHouseName)
+              .brokerageName(brokerageName)
+              .transactionType(transactionType)
+              .tradeType(tradeType)
+              .optionType(optionType)
+              .optionSeriesCode(optionSeriesCode)
+              .build();
 
-    OperationSummaryResponseDto result = operationService.findByFilters(filterCriteria, pageable);
-    return ResponseEntity.ok(result);
+      OperationSummaryResponseDto result = operationService.findByFilters(filterCriteria, pageable);
+      return ResponseEntity.ok(result);
+    } else {
+      // Se apenas o status for fornecido, use findByStatuses
+      OperationSummaryResponseDto result = operationService.findByStatuses(status, pageable);
+      return ResponseEntity.ok(result);
+    }
   }
 
   @GetMapping("/operations/export/excel")
