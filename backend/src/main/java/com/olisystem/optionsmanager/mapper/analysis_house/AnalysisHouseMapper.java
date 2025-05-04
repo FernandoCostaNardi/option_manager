@@ -2,9 +2,9 @@ package com.olisystem.optionsmanager.mapper.analysis_house;
 
 import com.olisystem.optionsmanager.dto.analysis_house.AnalysisHouseCreateRequestDto;
 import com.olisystem.optionsmanager.dto.analysis_house.AnalysisHouseResponseDto;
-import com.olisystem.optionsmanager.model.AnalysisHouse;
-import com.olisystem.optionsmanager.model.StatusType;
-import com.olisystem.optionsmanager.model.User;
+import com.olisystem.optionsmanager.model.analysis_house.AnalysisHouse;
+import com.olisystem.optionsmanager.model.auth.User;
+import com.olisystem.optionsmanager.model.operation.StatusType;
 
 public class AnalysisHouseMapper {
 

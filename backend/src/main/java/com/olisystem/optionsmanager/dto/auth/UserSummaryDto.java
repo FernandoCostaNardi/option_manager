@@ -1,4 +1,4 @@
-package com.olisystem.optionsmanager.dto;
+package com.olisystem.optionsmanager.dto.auth;
 
 import java.util.UUID;
 import lombok.AllArgsConstructor;

@@ -1,9 +1,10 @@
-package com.olisystem.optionsmanager.dto;
+package com.olisystem.optionsmanager.dto.operation;
 
-import com.olisystem.optionsmanager.model.AssetType;
-import com.olisystem.optionsmanager.model.OperationTarget;
-import com.olisystem.optionsmanager.model.OptionType;
-import com.olisystem.optionsmanager.model.TransactionType;
+import com.olisystem.optionsmanager.model.Asset.AssetType;
+import com.olisystem.optionsmanager.model.operation.OperationTarget;
+import com.olisystem.optionsmanager.model.option_serie.OptionType;
+import com.olisystem.optionsmanager.model.transaction.TransactionType;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;

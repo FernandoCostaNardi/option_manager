@@ -1,13 +1,14 @@
-package com.olisystem.optionsmanager.controller;
+package com.olisystem.optionsmanager.controller.operation;
 
-import com.olisystem.optionsmanager.dto.OperationDataRequest;
-import com.olisystem.optionsmanager.dto.OperationFilterCriteria;
-import com.olisystem.optionsmanager.dto.OperationSummaryResponseDto;
-import com.olisystem.optionsmanager.model.OperationStatus;
-import com.olisystem.optionsmanager.model.OptionType;
-import com.olisystem.optionsmanager.model.TradeType;
-import com.olisystem.optionsmanager.model.TransactionType;
-import com.olisystem.optionsmanager.service.OperationService;
+import com.olisystem.optionsmanager.dto.operation.OperationDataRequest;
+import com.olisystem.optionsmanager.dto.operation.OperationFilterCriteria;
+import com.olisystem.optionsmanager.dto.operation.OperationSummaryResponseDto;
+import com.olisystem.optionsmanager.model.operation.OperationStatus;
+import com.olisystem.optionsmanager.model.operation.TradeType;
+import com.olisystem.optionsmanager.model.option_serie.OptionType;
+import com.olisystem.optionsmanager.model.transaction.TransactionType;
+import com.olisystem.optionsmanager.service.operation.OperationService;
+
 import java.time.LocalDate;
 import java.util.Collections;
 import java.util.List;

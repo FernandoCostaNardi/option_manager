@@ -1,7 +1,8 @@
 package com.olisystem.optionsmanager.parser;
 
-import com.olisystem.optionsmanager.model.Asset;
-import com.olisystem.optionsmanager.model.AssetType;
+import com.olisystem.optionsmanager.model.Asset.Asset;
+import com.olisystem.optionsmanager.model.Asset.AssetType;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 

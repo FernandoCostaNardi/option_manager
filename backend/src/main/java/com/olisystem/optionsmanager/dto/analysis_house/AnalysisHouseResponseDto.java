@@ -1,7 +1,9 @@
 package com.olisystem.optionsmanager.dto.analysis_house;
 
-import com.olisystem.optionsmanager.model.StatusType;
 import java.util.UUID;
+
+import com.olisystem.optionsmanager.model.operation.StatusType;
+
 import lombok.Builder;
 import lombok.Data;
 

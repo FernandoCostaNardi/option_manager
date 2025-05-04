@@ -1,6 +1,9 @@
-package com.olisystem.optionsmanager.dto;
+package com.olisystem.optionsmanager.dto.brokerage;
 
 import java.util.UUID;
+
+import com.olisystem.optionsmanager.dto.auth.UserSummaryDto;
+
 import lombok.AllArgsConstructor;
 import lombok.Data;
 

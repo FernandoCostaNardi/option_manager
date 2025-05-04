@@ -1,4 +1,4 @@
-package com.olisystem.optionsmanager.dto;
+package com.olisystem.optionsmanager.dto.error;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;

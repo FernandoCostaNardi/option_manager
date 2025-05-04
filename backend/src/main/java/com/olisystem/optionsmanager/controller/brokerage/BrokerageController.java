@@ -1,11 +1,11 @@
-package com.olisystem.optionsmanager.controller;
+package com.olisystem.optionsmanager.controller.brokerage;
 
-import com.olisystem.optionsmanager.dto.BrokerageCreateRequestDto;
-import com.olisystem.optionsmanager.dto.BrokerageResponseDto;
-import com.olisystem.optionsmanager.mapper.BrokerageMapper;
-import com.olisystem.optionsmanager.model.Brokerage;
-import com.olisystem.optionsmanager.model.User;
-import com.olisystem.optionsmanager.service.BrokerageService;
+import com.olisystem.optionsmanager.dto.brokerage.BrokerageCreateRequestDto;
+import com.olisystem.optionsmanager.dto.brokerage.BrokerageResponseDto;
+import com.olisystem.optionsmanager.mapper.brokerage.BrokerageMapper;
+import com.olisystem.optionsmanager.model.auth.User;
+import com.olisystem.optionsmanager.model.brokerage.Brokerage;
+import com.olisystem.optionsmanager.service.brokerage.BrokerageService;
 import com.olisystem.optionsmanager.util.SecurityUtil;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;

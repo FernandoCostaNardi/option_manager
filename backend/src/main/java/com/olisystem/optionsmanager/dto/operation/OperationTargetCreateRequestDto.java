@@ -1,8 +1,10 @@
-package com.olisystem.optionsmanager.dto;
+package com.olisystem.optionsmanager.dto.operation;
 
-import com.olisystem.optionsmanager.model.TargetType;
 import java.math.BigDecimal;
 import java.util.UUID;
+
+import com.olisystem.optionsmanager.model.operation.TargetType;
+
 import lombok.Data;
 
 @Data

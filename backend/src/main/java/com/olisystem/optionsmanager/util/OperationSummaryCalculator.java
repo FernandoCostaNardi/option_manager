@@ -1,10 +1,11 @@
 package com.olisystem.optionsmanager.util;
 
-import com.olisystem.optionsmanager.dto.OperationItemDto;
-import com.olisystem.optionsmanager.dto.OperationSummaryResponseDto;
-import com.olisystem.optionsmanager.model.OperationStatus;
-import com.olisystem.optionsmanager.model.OptionType;
-import com.olisystem.optionsmanager.model.TradeType;
+import com.olisystem.optionsmanager.dto.operation.OperationItemDto;
+import com.olisystem.optionsmanager.dto.operation.OperationSummaryResponseDto;
+import com.olisystem.optionsmanager.model.operation.OperationStatus;
+import com.olisystem.optionsmanager.model.operation.TradeType;
+import com.olisystem.optionsmanager.model.option_serie.OptionType;
+
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;

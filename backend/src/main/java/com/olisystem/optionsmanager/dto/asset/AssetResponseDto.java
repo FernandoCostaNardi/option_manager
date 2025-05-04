@@ -1,7 +1,9 @@
-package com.olisystem.optionsmanager.dto;
+package com.olisystem.optionsmanager.dto.asset;
 
-import com.olisystem.optionsmanager.model.AssetType;
 import java.util.UUID;
+
+import com.olisystem.optionsmanager.model.Asset.AssetType;
+
 import lombok.Builder;
 import lombok.Data;
 

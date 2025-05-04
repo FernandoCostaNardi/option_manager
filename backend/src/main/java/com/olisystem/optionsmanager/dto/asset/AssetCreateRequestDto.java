@@ -1,6 +1,7 @@
-package com.olisystem.optionsmanager.dto;
+package com.olisystem.optionsmanager.dto.asset;
 
-import com.olisystem.optionsmanager.model.AssetType;
+import com.olisystem.optionsmanager.model.Asset.AssetType;
+
 import lombok.Data;
 
 @Data

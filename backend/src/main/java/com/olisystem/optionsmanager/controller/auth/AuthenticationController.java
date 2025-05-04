@@ -1,9 +1,10 @@
-package com.olisystem.optionsmanager.controller;
+package com.olisystem.optionsmanager.controller.auth;
 
-import com.olisystem.optionsmanager.dto.AuthenticationRequest;
-import com.olisystem.optionsmanager.dto.AuthenticationResponse;
-import com.olisystem.optionsmanager.dto.RegisterRequest;
-import com.olisystem.optionsmanager.service.AuthenticationService;
+import com.olisystem.optionsmanager.dto.auth.AuthenticationRequest;
+import com.olisystem.optionsmanager.dto.auth.AuthenticationResponse;
+import com.olisystem.optionsmanager.dto.auth.RegisterRequest;
+import com.olisystem.optionsmanager.service.auth.AuthenticationService;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;

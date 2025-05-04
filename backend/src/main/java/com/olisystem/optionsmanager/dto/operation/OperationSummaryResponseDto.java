@@ -1,4 +1,4 @@
-package com.olisystem.optionsmanager.dto;
+package com.olisystem.optionsmanager.dto.operation;
 
 import java.math.BigDecimal;
 import java.util.List;

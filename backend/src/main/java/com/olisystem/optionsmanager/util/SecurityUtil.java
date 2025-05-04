@@ -1,6 +1,6 @@
 package com.olisystem.optionsmanager.util;
 
-import com.olisystem.optionsmanager.model.User;
+import com.olisystem.optionsmanager.model.auth.User;
 import com.olisystem.optionsmanager.repository.UserRepository;
 import java.util.Optional;
 import org.springframework.beans.factory.annotation.Autowired;

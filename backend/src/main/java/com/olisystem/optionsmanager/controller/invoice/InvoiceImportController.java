@@ -1,7 +1,8 @@
-package com.olisystem.optionsmanager.controller;
+package com.olisystem.optionsmanager.controller.invoice;
 
-import com.olisystem.optionsmanager.model.Invoice;
-import com.olisystem.optionsmanager.service.InvoiceImportService;
+import com.olisystem.optionsmanager.model.invoice.Invoice;
+import com.olisystem.optionsmanager.service.invoice.InvoiceImportService;
+
 import java.io.IOException;
 import java.util.List;
 import lombok.RequiredArgsConstructor;

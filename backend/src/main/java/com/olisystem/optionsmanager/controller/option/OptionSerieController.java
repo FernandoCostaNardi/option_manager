@@ -1,7 +1,8 @@
-package com.olisystem.optionsmanager.controller;
+package com.olisystem.optionsmanager.controller.option;
 
-import com.olisystem.optionsmanager.dto.OptionDataResponseDto;
-import com.olisystem.optionsmanager.service.OptionSerieService;
+import com.olisystem.optionsmanager.dto.option.OptionDataResponseDto;
+import com.olisystem.optionsmanager.service.option_series.OptionSerieService;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;

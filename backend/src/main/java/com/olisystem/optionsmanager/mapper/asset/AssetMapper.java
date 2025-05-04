@@ -1,8 +1,8 @@
-package com.olisystem.optionsmanager.mapper;
+package com.olisystem.optionsmanager.mapper.asset;
 
-import com.olisystem.optionsmanager.dto.AssetCreateRequestDto;
-import com.olisystem.optionsmanager.dto.AssetResponseDto;
-import com.olisystem.optionsmanager.model.Asset;
+import com.olisystem.optionsmanager.dto.asset.AssetCreateRequestDto;
+import com.olisystem.optionsmanager.dto.asset.AssetResponseDto;
+import com.olisystem.optionsmanager.model.Asset.Asset;
 
 public class AssetMapper {
 

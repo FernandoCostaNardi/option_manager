@@ -1,9 +1,10 @@
-package com.olisystem.optionsmanager.controller;
+package com.olisystem.optionsmanager.controller.operation;
 
-import com.olisystem.optionsmanager.dto.OperationTargetResponseDto;
-import com.olisystem.optionsmanager.mapper.OperationTargetMapper;
-import com.olisystem.optionsmanager.model.OperationTarget;
-import com.olisystem.optionsmanager.service.OperationTargetService;
+import com.olisystem.optionsmanager.dto.operation.OperationTargetResponseDto;
+import com.olisystem.optionsmanager.mapper.operation.OperationTargetMapper;
+import com.olisystem.optionsmanager.model.operation.OperationTarget;
+import com.olisystem.optionsmanager.service.operation.OperationTargetService;
+
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
