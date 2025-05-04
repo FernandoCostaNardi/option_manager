@@ -149,7 +149,7 @@ public class OperationService implements OperationReportData {
     }
   }
 
-  public Page<OperationSummaryResponseDto> findByStatuses(
+  public OperationSummaryResponseDto findByStatuses(
       List<OperationStatus> statuses, Pageable pageable) {
     // Verificar se há ordenação por campos que não existem na entidade
     if (pageable.getSort().isSorted()) {
@@ -173,10 +173,7 @@ public class OperationService implements OperationReportData {
       List<OperationItemDto> sortedDtos = sortDtoList(dtos, sort);
 
       // Calcular totalizadores usando a classe utilitária
-      OperationSummaryResponseDto summary = OperationSummaryCalculator.calculateSummary(sortedDtos);
-
-      // Criar uma nova página com os DTOs ordenados
-      return new PageImpl<>(List.of(summary), pageable, page.getTotalElements());
+      return OperationSummaryCalculator.calculateSummary(sortedDtos);
     } else {
       // Se não houver ordenação, usar o fluxo normal
       User user = SecurityUtil.getLoggedUser();
@@ -187,10 +184,7 @@ public class OperationService implements OperationReportData {
           page.getContent().stream().map(this::mapToDto).collect(Collectors.toList());
 
       // Calcular totalizadores usando a classe utilitária
-      OperationSummaryResponseDto summary = OperationSummaryCalculator.calculateSummary(dtos);
-
-      // Criar uma nova página
-      return new PageImpl<>(List.of(summary), pageable, page.getTotalElements());
+      return OperationSummaryCalculator.calculateSummary(dtos);
     }
   }
 
