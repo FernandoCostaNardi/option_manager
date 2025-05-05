@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, Loader2, CheckCircle, XCircle } from 'lucide-react';
-import axios from 'axios';
+import { X, Loader2 } from 'lucide-react';
+import { Label } from '../../../components/ui/label';
+import { Switch } from '../../../components/ui/switch';
 
 interface FinalizarOperacaoModalProps {
   isOpen: boolean;
@@ -26,25 +27,38 @@ export function FinalizarOperacaoModal({ isOpen, operacao, onClose, onSuccess }:
   const [operacaoAtiva, setOperacaoAtiva] = useState<OperacaoAtiva | null>(null);
   
   // Estados para os campos do formulário
-  const [status, setStatus] = useState<'Vencedor' | 'Perdedor'>('Vencedor');
   const [valorUnitarioSaida, setValorUnitarioSaida] = useState('');
   const [dataSaida, setDataSaida] = useState('');
+  const [saidaTotal, setSaidaTotal] = useState(true);
+  const [quantidadeParcial, setQuantidadeParcial] = useState('');
   
   // Estados para controle de carregamento e erros
-  const [carregando, setCarregando] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Preencher campos ao abrir o modal
   useEffect(() => {
     if (isOpen && operacao) {
-      setStatus('Vencedor');
       setValorUnitarioSaida('');
+      setSaidaTotal(true);
+      setQuantidadeParcial('');
       // Data de saída padrão: hoje
       const hoje = new Date();
       setDataSaida(hoje.toISOString().split('T')[0]);
     }
   }, [isOpen, operacao]);
+
+  // Validar quantidade parcial
+  const validarQuantidadeParcial = (quantidade: string) => {
+    const qtd = parseInt(quantidade);
+    if (isNaN(qtd) || qtd <= 0) {
+      return 'A quantidade deve ser um número positivo';
+    }
+    if (qtd >= operacao.quantity) {
+      return 'A quantidade parcial deve ser menor que a quantidade total da operação';
+    }
+    return null;
+  };
 
   // Função para salvar a finalização da operação
   const salvarFinalizacao = async () => {
@@ -53,6 +67,15 @@ export function FinalizarOperacaoModal({ isOpen, operacao, onClose, onSuccess }:
       setError('Por favor, preencha todos os campos.');
       return;
     }
+
+    if (!saidaTotal) {
+      const validacaoQtd = validarQuantidadeParcial(quantidadeParcial);
+      if (validacaoQtd) {
+        setError(validacaoQtd);
+        return;
+      }
+    }
+
     setSalvando(true);
     setError(null);
     try {
@@ -70,9 +93,10 @@ export function FinalizarOperacaoModal({ isOpen, operacao, onClose, onSuccess }:
   const calcularValores = () => {
     if (!operacao || !valorUnitarioSaida) return null;
     const valorUnitarioSaidaNum = parseFloat(valorUnitarioSaida);
-    const valorTotalSaida = operacao.quantity * valorUnitarioSaidaNum;
-    const valorLucroPrejuizo = valorTotalSaida - operacao.entryTotalValue;
-    const percentualLucroPrejuizo = (valorLucroPrejuizo / operacao.entryTotalValue) * 100;
+    const quantidadeFinal = !saidaTotal && quantidadeParcial ? parseInt(quantidadeParcial) : operacao.quantity;
+    const valorTotalSaida = quantidadeFinal * valorUnitarioSaidaNum;
+    const valorLucroPrejuizo = valorTotalSaida - (quantidadeFinal * operacao.entryUnitPrice);
+    const percentualLucroPrejuizo = (valorLucroPrejuizo / (quantidadeFinal * operacao.entryUnitPrice)) * 100;
     return {
       valorTotalSaida,
       valorLucroPrejuizo,
@@ -101,7 +125,7 @@ export function FinalizarOperacaoModal({ isOpen, operacao, onClose, onSuccess }:
       <div className="fixed inset-0 bg-gray-900 bg-opacity-75" onClick={onClose} />
       
       {/* Conteúdo do modal */}
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden relative z-10">
+      <div className="relative bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         {/* Cabeçalho do modal */}
         <div className="flex justify-between items-center p-4 border-b border-gray-200">
           <h2 id="finalizar-modal-title" className="text-xl font-semibold text-gray-800">Finalizar Operação</h2>
@@ -125,114 +149,142 @@ export function FinalizarOperacaoModal({ isOpen, operacao, onClose, onSuccess }:
             </div>
           )}
           
-          {carregando ? (
-            <div className="flex justify-center items-center py-10">
-              <Loader2 className="animate-spin w-8 h-8 text-purple-600" />
-              <span className="ml-3 text-gray-600">Carregando detalhes da operação...</span>
-            </div>
-          ) : operacao ? (
-            <div className="space-y-6">
-              {/* Detalhes da operação */}
-              <div className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <img src={operacao.baseAssetLogoUrl} alt={operacao.optionSeriesCode} className="h-10 w-10 rounded-full object-contain" />
-                  <div>
-                    <h3 className="font-bold text-lg">{operacao.optionSeriesCode}</h3>
-                    <p className="text-sm text-gray-500">{operacao.brokerageName}</p>
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <p className="text-gray-500">Quantidade</p>
-                    <p className="font-medium">{operacao.quantity}</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-500">Valor de Entrada</p>
-                    <p className="font-medium">{formatarMoeda(operacao.entryTotalValue)}</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-500">Preço Unitário de Entrada</p>
-                    <p className="font-medium">{formatarMoeda(operacao.entryUnitPrice)}</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-500">Tipo de Opção</p>
-                    <p className="font-medium">{operacao.optionType}</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-500">Data de Entrada</p>
-                    <p className="font-medium">{new Date(operacao.entryDate).toLocaleDateString('pt-BR')}</p>
-                  </div>
+          <div className="space-y-6">
+            {/* Detalhes da operação */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <img src={operacao.baseAssetLogoUrl} alt={operacao.optionSeriesCode} className="h-10 w-10 rounded-full object-contain" />
+                <div>
+                  <h3 className="font-bold text-lg">{operacao.optionSeriesCode}</h3>
+                  <p className="text-sm text-gray-500">{operacao.brokerageName}</p>
                 </div>
               </div>
               
-              <hr className="border-gray-200" />
-              
-              {/* Formulário de finalização */}
-              <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label htmlFor="dataSaida" className="block text-sm font-medium text-gray-700 mb-1">
-                    Data de Saída
-                  </label>
-                  <input
-                    type="date"
-                    id="dataSaida"
-                    value={dataSaida}
-                    onChange={(e) => setDataSaida(e.target.value)}
-                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  <p className="text-gray-500">Quantidade</p>
+                  <p className="font-medium">{operacao.quantity}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Valor de Entrada</p>
+                  <p className="font-medium">{formatarMoeda(operacao.entryTotalValue)}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Preço Unitário de Entrada</p>
+                  <p className="font-medium">{formatarMoeda(operacao.entryUnitPrice)}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Tipo de Opção</p>
+                  <p className="font-medium">{operacao.optionType}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Data de Entrada</p>
+                  <p className="font-medium">{new Date(operacao.entryDate).toLocaleDateString('pt-BR')}</p>
+                </div>
+              </div>
+            </div>
+            
+            <hr className="border-gray-200" />
+            
+            {/* Formulário de finalização */}
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="dataSaida" className="text-sm font-medium text-gray-700">
+                  Data de Saída
+                </Label>
+                <input
+                  type="date"
+                  id="dataSaida"
+                  value={dataSaida}
+                  onChange={(e) => setDataSaida(e.target.value)}
+                  className="mt-1 w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  disabled={salvando}
+                />
+              </div>
+
+              <div className="flex items-center justify-between space-x-4 mb-4">
+                <Label htmlFor="saidaParcial" className="text-sm font-medium text-gray-700">
+                  Deseja fazer uma saída parcial?
+                </Label>
+                <div className="switch-container" style={{ minWidth: '44px', height: '24px' }}>
+                  <Switch
+                    id="saidaParcial"
+                    checked={!saidaTotal}
+                    onCheckedChange={(checked: boolean) => {
+                      setSaidaTotal(!checked);
+                      if (!checked) {
+                        setQuantidadeParcial('');
+                      }
+                    }}
                     disabled={salvando}
+                    className="finalizar-switch"
                   />
                 </div>
-                
+              </div>
+
+              {!saidaTotal && (
                 <div>
-                  <label htmlFor="valorUnitarioSaida" className="block text-sm font-medium text-gray-700 mb-1">
-                    Valor Unitário de Saída (R$)
-                  </label>
+                  <Label htmlFor="quantidadeParcial" className="text-sm font-medium text-gray-700">
+                    Quantidade Parcial
+                  </Label>
                   <input
                     type="number"
-                    id="valorUnitarioSaida"
-                    value={valorUnitarioSaida}
-                    onChange={(e) => setValorUnitarioSaida(e.target.value)}
-                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    placeholder="0.00"
-                    step="0.01"
-                    min="0.01"
+                    id="quantidadeParcial"
+                    value={quantidadeParcial}
+                    onChange={(e) => setQuantidadeParcial(e.target.value)}
+                    className="mt-1 w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    placeholder="0"
+                    min="1"
+                    max={operacao.quantity - 1}
                     disabled={salvando}
                   />
                 </div>
+              )}
                 
-                {/* Seção de resultado da operação - só aparece se valorUnitarioSaida estiver preenchido */}
-                {valorUnitarioSaida && valores && (
-                  <div className="p-4 bg-purple-50 rounded-lg space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Valor Total de Saída:</span>
-                      <span className="font-medium">{formatarMoeda(valores.valorTotalSaida)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Lucro / Prejuízo:</span>
-                      <span className={valores.valorLucroPrejuizo >= 0 ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>
-                        {formatarMoeda(valores.valorLucroPrejuizo)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Percentual:</span>
-                      <span className={valores.percentualLucroPrejuizo >= 0 ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>
-                        {valores.percentualLucroPrejuizo.toFixed(2)}%
-                      </span>
-                    </div>
-                  </div>
-                )}
+              <div>
+                <Label htmlFor="valorUnitarioSaida" className="text-sm font-medium text-gray-700">
+                  Valor Unitário de Saída (R$)
+                </Label>
+                <input
+                  type="number"
+                  id="valorUnitarioSaida"
+                  value={valorUnitarioSaida}
+                  onChange={(e) => setValorUnitarioSaida(e.target.value)}
+                  className="mt-1 w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  placeholder="0.00"
+                  step="0.01"
+                  min="0.01"
+                  disabled={salvando}
+                />
               </div>
+              
+              {/* Seção de resultado da operação - só aparece se valorUnitarioSaida estiver preenchido */}
+              {valores && (
+                <div className="p-4 bg-purple-50 rounded-lg space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Valor Total de Saída:</span>
+                    <span className="font-medium">{formatarMoeda(valores.valorTotalSaida)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Lucro / Prejuízo:</span>
+                    <span className={valores.valorLucroPrejuizo >= 0 ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>
+                      {formatarMoeda(valores.valorLucroPrejuizo)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Percentual:</span>
+                    <span className={valores.percentualLucroPrejuizo >= 0 ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>
+                      {valores.percentualLucroPrejuizo.toFixed(2)}%
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
-          ) : (
-            <div className="text-center py-8 text-gray-500">
-              Não foi possível carregar os detalhes da operação.
-            </div>
-          )}
+          </div>
         </div>
         
         {/* Rodapé com botões */}
-        <div className="p-4 border-t border-gray-200 flex justify-end">
+        <div className="flex justify-end gap-3 p-4 border-t border-gray-200">
           <button
             type="button"
             onClick={onClose}
