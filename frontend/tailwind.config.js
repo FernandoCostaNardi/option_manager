@@ -7,6 +7,12 @@ module.exports = {
     './app/**/*.{ts,tsx}',
     './src/**/*.{ts,tsx}',
   ],
+  safelist: [
+    'data-[state=checked]:bg-purple-600',
+    'data-[state=unchecked]:bg-gray-200',
+    'data-[state=checked]:translate-x-5',
+    'data-[state=unchecked]:translate-x-0',
+  ],
   theme: {
     container: {
       center: true,

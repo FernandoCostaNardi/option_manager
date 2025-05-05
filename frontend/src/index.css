@@ -1,3 +1,71 @@
 @tailwind base;
 @tailwind components;
-@tailwind utilities; 
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --primary: 271 91% 65%;
+    --primary-foreground: 0 0% 98%;
+  }
+
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Estilos para Radix UI e componentes personalizados */
+@layer components {
+  /* Estilos específicos para o Switch */
+  .switch-container {
+    display: inline-block;
+    position: relative;
+  }
+  
+  /* Estilos para o SwitchRoot */
+  [role="switch"] {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    width: 44px;
+    height: 24px;
+    border-radius: 12px;
+    background-color: #E2E2E2;
+    transition: background-color 150ms;
+    cursor: pointer;
+    -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+  }
+  
+  [role="switch"][data-state="checked"] {
+    background-color: #6E56CF;
+  }
+  
+  /* Estilos para o SwitchThumb */
+  [role="switch"]::after {
+    content: "";
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 18px;
+    height: 18px;
+    border-radius: 9px;
+    background-color: white;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    transition: transform 150ms;
+  }
+  
+  [role="switch"][data-state="checked"]::after {
+    transform: translateX(20px);
+  }
+  
+  /* Estados desativados */
+  [role="switch"][disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+} 
