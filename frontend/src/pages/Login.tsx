@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { Switch } from '../components/ui/switch';
+import { Label } from '../components/ui/label';
 
 export function Login() {
   const [formData, setFormData] = useState({
     email: '',
-    password: ''
+    password: '',
+    rememberMe: false
   });
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -41,6 +44,21 @@ export function Login() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const handleSwitchChange = (checked: boolean) => {
+    setFormData(prev => ({
+      ...prev,
+      rememberMe: checked
+    }));
   };
 
   // CSS estilizado com a paleta de cores enviada
@@ -215,14 +233,19 @@ export function Login() {
       border: 1px solid #e5e7eb;
       border-radius: 0.375rem;
       font-size: 0.875rem;
+      color: #1f2937;
+      background-color: #ffffff;
       transition: all 0.2s ease;
-      background-color: white;
     }
     
     .login-input:focus {
       outline: none;
-      border-color: #8A7CF3;
-      box-shadow: 0 0 0 3px rgba(138, 124, 243, 0.25);
+      border-color: #514EE7;
+      box-shadow: 0 0 0 3px rgba(81, 78, 231, 0.1);
+    }
+
+    .login-input::placeholder {
+      color: #9ca3af;
     }
     
     .login-password-container {
@@ -236,9 +259,13 @@ export function Login() {
       transform: translateY(-50%);
       background: none;
       border: none;
+      padding: 0.25rem;
       cursor: pointer;
       color: #9ca3af;
       font-size: 0.875rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
     
     .login-password-toggle:hover {
@@ -471,10 +498,11 @@ export function Login() {
                   <input
                     type="email"
                     id="email"
+                    name="email"
                     placeholder="Digite seu email"
                     className="login-input"
                     value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    onChange={handleChange}
                     required
                   />
                 </div>
@@ -485,10 +513,11 @@ export function Login() {
                     <input
                       type={showPassword ? "text" : "password"}
                       id="password"
+                      name="password"
                       placeholder="Digite sua senha"
                       className="login-input"
                       value={formData.password}
-                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                      onChange={handleChange}
                       required
                     />
                     <button
@@ -502,15 +531,18 @@ export function Login() {
                 </div>
                 
                 <div className="login-checkbox-row">
-                  <div className="login-remember-me">
-                    <input
-                      type="checkbox"
-                      id="remember-me"
-                      className="login-checkbox"
-                    />
-                    <label htmlFor="remember-me" className="login-checkbox-label">
+                  <div className="flex items-center space-x-4">
+                    <div className="switch-container">
+                      <Switch
+                        id="remember-me"
+                        checked={formData.rememberMe}
+                        onCheckedChange={handleSwitchChange}
+                        className="login-switch"
+                      />
+                    </div>
+                    <Label htmlFor="remember-me" className="text-sm font-medium text-gray-700">
                       Remember me
-                    </label>
+                    </Label>
                   </div>
                   <a href="#" className="login-forgot-password">
                     Forgot password?
