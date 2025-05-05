@@ -31,67 +31,69 @@ export const useOperacoes = ({
 
   const carregarOperacoesAtivas = useCallback(async () => {
     if (loadingAtivas) return;
-    
     setLoadingAtivas(true);
     setError(null);
-  
     try {
       const token = localStorage.getItem('token');
-      console.log('Enviando filtros para operações ativas:', filtros); // Log para debug
-      
       const response = await api.get('/operations', {
         params: { 
-          status: 'ACTIVE',  // Apenas o status ACTIVE
+          status: 'ACTIVE',
           page: currentPage,
           size: pageSize,
           sort: sortField ? `${sortField},${sortDirection}` : undefined,
-          // Filtros adicionais que podem ser aplicados
           entryDateStart: filtros.entryDateStart,
           entryDateEnd: filtros.entryDateEnd,
           analysisHouseName: filtros.analysisHouseName,
           brokerageName: filtros.brokerageName,
           transactionType: filtros.transactionType,
-          optionType: filtros.optionType, // Garantir que este campo seja enviado
+          optionType: filtros.optionType,
           tradeType: filtros.tradeType
-          // Removido o optionSeriesCode dos parâmetros
         },
         headers: token ? { Authorization: `Bearer ${token}` } : undefined
       });
-      
-      // Novo formato de resposta
       const data = response.data;
-      
-      if (data && data.content && data.content.length > 0) {
-        // Extrair operações do novo formato
-        const firstContent = data.content[0];
-        
-        // Garantir que todas as propriedades existam antes de usar
-        const operations = firstContent.operations || [];
-        
-        // Processar cada operação para garantir que todos os campos estejam presentes
+      let operations: any[] = [];
+      let dashboard: any = {};
+      if (data) {
+        if (data.content && data.content.length > 0) {
+          // Formato antigo
+          const firstContent = data.content[0];
+          operations = firstContent.operations || [];
+          dashboard = firstContent;
+        } else if (data.operations && Array.isArray(data.operations)) {
+          // Formato novo (direto)
+          operations = data.operations;
+          dashboard = data;
+        }
+      }
+      if (operations.length > 0) {
         const processedOperations = operations.map(op => ({
           ...op,
-          // Garantir que campos de string existam para evitar erros de toUpperCase()
+          entryDate: formatarDataArrayParaString(op.entryDate),
+          exitDate: formatarDataArrayParaString(op.exitDate),
           optionType: op.optionType || '',
           tradeType: op.tradeType || '',
           status: op.status || '',
           transactionType: op.transactionType || '',
           optionSeriesCode: op.optionSeriesCode || '',
           brokerageName: op.brokerageName || '',
-          analysisHouseName: op.analysisHouseName || ''
+          analysisHouseName: op.analysisHouseName || '',
+          baseAssetLogoUrl: op.baseAssetLogoUrl || '',
+          quantity: op.quantity || 0,
+          entryUnitPrice: op.entryUnitPrice || 0,
+          entryTotalValue: op.entryTotalValue || 0,
+          exitUnitPrice: op.exitUnitPrice || 0,
+          exitTotalValue: op.exitTotalValue || 0,
+          profitLoss: op.profitLoss || 0,
+          profitLossPercentage: op.profitLossPercentage || 0,
         }));
-        
         setOperacoesAtivas(processedOperations);
-        
-        // Extrair dados do dashboard
         setDashboardData({
-          totalActiveOperations: firstContent.totalActiveOperations || 0,
-          totalPutOperations: firstContent.totalPutOperations || 0,
-          totalCallOperations: firstContent.totalCallOperations || 0,
-          totalEntryValue: firstContent.totalEntryValue || 0
+          totalActiveOperations: dashboard.totalActiveOperations || 0,
+          totalPutOperations: dashboard.totalPutOperations || 0,
+          totalCallOperations: dashboard.totalCallOperations || 0,
+          totalEntryValue: dashboard.totalEntryValue || 0
         });
-        
-        // Configurar paginação
         setTotalPages(data.totalPages || 1);
         setTotalItems(data.totalElements || 0);
       } else {
@@ -110,15 +112,11 @@ export const useOperacoes = ({
 
   const carregarOperacoesFinalizadas = useCallback(async () => {
     if (loadingFinalizadas) return;
-    
     setLoadingFinalizadas(true);
     setError(null);
-  
     try {
       const token = localStorage.getItem('token');
-      // Determina o status a ser enviado na requisição
       const statusParam = filtros.status || 'WINNER,LOSER';
-      
       const response = await api.get('/operations', {
         params: { 
           status: statusParam,
@@ -137,44 +135,50 @@ export const useOperacoes = ({
         },
         headers: token ? { Authorization: `Bearer ${token}` } : undefined
       });
-      
-      // Novo formato de resposta
       const data = response.data;
-      
-      if (data && data.content && data.content.length > 0) {
-        // Extrair operações do novo formato
-        const firstContent = data.content[0];
-        
-        // Garantir que todas as propriedades existam antes de usar
-        const operations = firstContent.operations || [];
-        
-        // Processar cada operação para garantir que todos os campos estejam presentes
+      let operations: any[] = [];
+      let dashboard: any = {};
+      if (data) {
+        if (data.content && data.content.length > 0) {
+          const firstContent = data.content[0];
+          operations = firstContent.operations || [];
+          dashboard = firstContent;
+        } else if (data.operations && Array.isArray(data.operations)) {
+          operations = data.operations;
+          dashboard = data;
+        }
+      }
+      if (operations.length > 0) {
         const processedOperations = operations.map(op => ({
           ...op,
-          // Garantir que campos de string existam para evitar erros de toUpperCase()
+          entryDate: formatarDataArrayParaString(op.entryDate),
+          exitDate: formatarDataArrayParaString(op.exitDate),
           optionType: op.optionType || '',
           tradeType: op.tradeType || '',
           status: op.status || '',
           transactionType: op.transactionType || '',
           optionSeriesCode: op.optionSeriesCode || '',
           brokerageName: op.brokerageName || '',
-          analysisHouseName: op.analysisHouseName || ''
+          analysisHouseName: op.analysisHouseName || '',
+          baseAssetLogoUrl: op.baseAssetLogoUrl || '',
+          quantity: op.quantity || 0,
+          entryUnitPrice: op.entryUnitPrice || 0,
+          entryTotalValue: op.entryTotalValue || 0,
+          exitUnitPrice: op.exitUnitPrice || 0,
+          exitTotalValue: op.exitTotalValue || 0,
+          profitLoss: op.profitLoss || 0,
+          profitLossPercentage: op.profitLossPercentage || 0,
         }));
-        
         setOperacoesFinalizadas(processedOperations);
-        
-        // Extrair dados do dashboard
         setDashboardData({
-          totalWinningOperations: firstContent.totalWinningOperations || 0,
-          totalLosingOperations: firstContent.totalLosingOperations || 0,
-          totalSwingTradeOperations: firstContent.totalSwingTradeOperations || 0,
-          totalDayTradeOperations: firstContent.totalDayTradeOperations || 0,
-          totalProfitLoss: firstContent.totalProfitLoss || 0,
-          totalProfitLossPercentage: firstContent.totalProfitLossPercentage || 0,
-          totalEntryValue: firstContent.totalEntryValue || 0
+          totalWinningOperations: dashboard.totalWinningOperations || 0,
+          totalLosingOperations: dashboard.totalLosingOperations || 0,
+          totalSwingTradeOperations: dashboard.totalSwingTradeOperations || 0,
+          totalDayTradeOperations: dashboard.totalDayTradeOperations || 0,
+          totalProfitLoss: dashboard.totalProfitLoss || 0,
+          totalProfitLossPercentage: dashboard.totalProfitLossPercentage || 0,
+          totalEntryValue: dashboard.totalEntryValue || 0
         });
-        
-        // Configurar paginação
         setTotalPages(data.totalPages || 1);
         setTotalItems(data.totalElements || 0);
       } else {
@@ -215,3 +219,8 @@ export const useOperacoes = ({
     dashboardData
   };
 };
+
+function formatarDataArrayParaString(data) {
+  if (!data || !Array.isArray(data) || data.length !== 3) return '';
+  return `${data[0]}-${String(data[1]).padStart(2, '0')}-${String(data[2]).padStart(2, '0')}`;
+}
