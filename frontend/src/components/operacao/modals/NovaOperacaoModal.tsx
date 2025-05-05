@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { X, Loader2, Plus, Edit, Trash } from 'lucide-react';
 import api from '../../../services/api';
 import { OperacaoAtiva } from '../../../types/operacao/operacoes.types';
+import { Switch } from '../../../components/ui/switch';
+import { Label } from '../../../components/ui/label';
 
 interface NovaOperacaoModalProps {
   isOpen: boolean;
@@ -130,6 +132,7 @@ export function NovaOperacaoModal({ isOpen, onClose, onSuccess, operacaoExistent
     
     try {
       const response = await api.get(`/option-series/${codigoParaBuscar.trim().toLowerCase()}`);
+      console.log('Dados da opção retornados:', response.data);
       setDadosOpcao(response.data);    
       setPassoAtual(2);
     } catch (error) {
@@ -212,6 +215,7 @@ export function NovaOperacaoModal({ isOpen, onClose, onSuccess, operacaoExistent
 
   // Função para avançar para o próximo passo
   const avancarPasso = () => {
+    console.log('avancarPasso chamado', { passoAtual, tipoOperacao, quantidade, valorUnitario, dadosOpcao });
     if (passoAtual === 1) {
       buscarDadosOpcao();
     } else if (passoAtual === 2) {
@@ -224,12 +228,17 @@ export function NovaOperacaoModal({ isOpen, onClose, onSuccess, operacaoExistent
         setError('Por favor, selecione a data de entrada da operação');
         return;
       }
-      if (!quantidade || !valorUnitario) {
-        setError('Por favor, preencha a quantidade e o valor unitário');
+      if (!quantidade || quantidade === '0') {
+        setError('Por favor, preencha a quantidade');
         return;
       }
+      if (!valorUnitario || valorUnitario === '0') {
+        setError('Por favor, preencha o valor unitário');
+        return;
+      }
+      setError(null);
       setPassoAtual(3);
-      
+      console.log('Mudando para passo 3');
       // Carregar corretoras ao avançar para o passo 3
       if (corretoras.length === 0) {
         carregarCorretoras();
@@ -614,7 +623,7 @@ export function NovaOperacaoModal({ isOpen, onClose, onSuccess, operacaoExistent
                     />
                   </div>
 
-                  {quantidade && valorUnitario && (
+                  {quantidade && valorUnitario && parseFloat(quantidade) > 0 && parseFloat(valorUnitario) > 0 && (
                     <div className="p-3 bg-purple-50 rounded-lg">
                       <p className="text-sm text-purple-800">
                         Valor Total: <strong>{formatarMoeda(parseFloat(quantidade) * parseFloat(valorUnitario))}</strong>
@@ -659,19 +668,19 @@ export function NovaOperacaoModal({ isOpen, onClose, onSuccess, operacaoExistent
                   )}
                 </div>
                 
-                <div className="flex items-center space-x-2">
-                  <div className="relative inline-block align-middle">
-                    <input
-                      type="checkbox"
+                <div className="flex items-center space-x-4">
+                  <div className="switch-container">
+                    <Switch
                       id="temCasaAnalise"
                       checked={temCasaAnalise}
-                      onChange={(e) => setTemCasaAnalise(e.target.checked)}
-                      className="form-checkbox h-5 w-5 text-purple-600 rounded border-gray-300 focus:ring-purple-500"
+                      onCheckedChange={setTemCasaAnalise}
+                      disabled={loading}
+                      className="nova-operacao-switch"
                     />
                   </div>
-                  <label htmlFor="temCasaAnalise" className="cursor-pointer">
+                  <Label htmlFor="temCasaAnalise" className="cursor-pointer text-sm font-medium text-gray-700">
                     Existe casa de análise recomendando a operação?
-                  </label>
+                  </Label>
                 </div>
                 
                 {temCasaAnalise && (
@@ -877,7 +886,16 @@ export function NovaOperacaoModal({ isOpen, onClose, onSuccess, operacaoExistent
                   type="button"
                   onClick={avancarPasso}
                   className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-                  disabled={loading || !tipoOperacao || !quantidade || !valorUnitario}
+                  disabled={
+                    loading ||
+                    !tipoOperacao ||
+                    !quantidade ||
+                    !valorUnitario ||
+                    isNaN(Number(quantidade)) ||
+                    isNaN(Number(valorUnitario)) ||
+                    Number(quantidade) <= 0 ||
+                    Number(valorUnitario) <= 0
+                  }
                 >
                   Próximo
                 </button>
