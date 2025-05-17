@@ -21,4 +21,10 @@ public class OperationSummaryResponseDto {
   private Long totalDayTradeOperations;
   private BigDecimal totalProfitLoss;
   private BigDecimal totalProfitLossPercentage;
+
+  // Paginação
+  private int currentPage;
+  private int totalPages;
+  private long totalElements;
+  private int pageSize;
 }

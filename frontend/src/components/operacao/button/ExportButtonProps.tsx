@@ -1,6 +1,6 @@
 // Primeiro, vamos criar um componente para o botão de exportação
 import React, { useState } from 'react';
-import { Download, FileSpreadsheet, FilePdf, Loader2 } from 'lucide-react';
+import { Download, FileSpreadsheet, FileText, Loader2 } from 'lucide-react';
 import { OperacaoService } from '../../../services/operacaoService';
 
 interface ExportButtonProps {
@@ -14,7 +14,14 @@ const ExportButton: React.FC<ExportButtonProps> = ({ finalizada }) => {
   const handleExport = async (formato: 'excel' | 'pdf') => {
     try {
       setIsLoading(true);
-      const response = await OperacaoService.exportarOperacoes(finalizada, formato);
+      
+      // Verificar se há filtros ativos que precisam ser passados
+      const statusArray = finalizada ? ['WINNER', 'LOSER'] : ['ACTIVE'];
+      
+      // Obtenha os filtros ativos do contexto ou props, se necessário
+      const filtrosAtivos = {}; // Substitua por seus filtros reais
+      
+      const response = await OperacaoService.exportarOperacoes(statusArray, formato, formato);
       
       // Cria um URL para o blob e faz o download
       const url = window.URL.createObjectURL(new Blob([response]));
@@ -58,7 +65,7 @@ const ExportButton: React.FC<ExportButtonProps> = ({ finalizada }) => {
             disabled={isLoading}
             className="flex items-center gap-2 w-full px-4 py-2 text-left hover:bg-gray-100"
           >
-            {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : <FilePdf size={16} />}
+            {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : <FileText size={16} />}
             Exportar para PDF
           </button>
         </div>

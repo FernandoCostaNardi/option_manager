@@ -11,7 +11,6 @@ public class AnalysisHouseMapper {
   public static AnalysisHouse toEntity(AnalysisHouseCreateRequestDto dto, User user) {
     return AnalysisHouse.builder()
         .name(dto.getName())
-        .cnpj(dto.getCnpj())
         .website(dto.getWebsite())
         .contactEmail(dto.getContactEmail())
         .contactPhone(dto.getContactPhone())
@@ -25,7 +24,6 @@ public class AnalysisHouseMapper {
     return AnalysisHouseResponseDto.builder()
         .id(entity.getId())
         .name(entity.getName())
-        .cnpj(entity.getCnpj())
         .website(entity.getWebsite())
         .contactEmail(entity.getContactEmail())
         .contactPhone(entity.getContactPhone())

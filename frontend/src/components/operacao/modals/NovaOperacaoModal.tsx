@@ -119,6 +119,32 @@ export function NovaOperacaoModal({ isOpen, onClose, onSuccess, operacaoExistent
     }
   }, [passoAtual, operacaoExistente]);
 
+  // Efeito para resetar estado quando abrir modal para nova operação (sem operacaoExistente)
+  useEffect(() => {
+    if (isOpen && !operacaoExistente) {
+      setPassoAtual(1);
+      setCodigoOpcao('');
+      setDadosOpcao(null);
+      setTipoOperacao('');
+      setQuantidade('');
+      setValorUnitario('');
+      setDataEntrada(() => {
+        const hoje = new Date();
+        return hoje.toISOString().split('T')[0];
+      });
+      setCorretoraSelecionada('');
+      setCasaAnaliseSelecionada('');
+      setTemCasaAnalise(false);
+      setTargets([]);
+      setTargetType('TARGET');
+      setTargetValue('');
+      setEditingIndex(null);
+      setError(null);
+      setLoading(false);
+      setLoadingTargets(false);
+    }
+  }, [isOpen, operacaoExistente]);
+
   // Função para buscar dados da opção com código pré-definido
   const buscarDadosOpcao = async (codigo?: string) => {
     const codigoParaBuscar = codigo || codigoOpcao;

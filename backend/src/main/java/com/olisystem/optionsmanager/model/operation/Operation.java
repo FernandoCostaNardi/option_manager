@@ -38,7 +38,7 @@ public class Operation {
   private TransactionType transactionType;
 
   @Enumerated(EnumType.STRING)
-  @Column(nullable = false)
+  @Column(nullable = true)
   private TradeType tradeType;
 
   @Column(nullable = false)
@@ -50,7 +50,6 @@ public class Operation {
   @Column(nullable = false)
   private OperationStatus status;
 
-  @Column(nullable = false)
   private Integer quantity;
 
   @Column(nullable = false)

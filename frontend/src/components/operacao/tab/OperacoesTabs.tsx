@@ -157,17 +157,31 @@ export const OperacoesTabs: React.FC<OperacoesTabsProps> = ({
 
   // Handler para abrir modal de finalização com a operação selecionada
   const handleFinalizar = (operacao: OperacaoAtiva) => {
-    console.log('Finalizar operação:', operacao);
+    console.log('[DEBUG] Abrir modal de finalização para operação:', operacao);
     setOperacaoParaFinalizar(operacao);
     setModalFinalizarOperacaoAberto(true);
   };
+  
   const fecharModalFinalizarOperacao = () => {
+    console.log('[DEBUG] Fechando modal de finalização');
     setModalFinalizarOperacaoAberto(false);
     setOperacaoParaFinalizar(null);
   };
+  
   const handleFinalizarOperacaoSucesso = () => {
-    // Aqui você pode recarregar as operações se necessário
+    console.log('Operação finalizada com sucesso, atualizando dados...');
+    
+    // Fechar o modal primeiro
     fecharModalFinalizarOperacao();
+    
+    // Usar setTimeout para garantir que o modal tenha tempo de fechar
+    setTimeout(() => {
+      // Mudar para a aba de operações finalizadas
+      setActiveTab('finalizadas');
+      
+      // Recarregar as operações
+      onPageChange(currentPage);
+    }, 500);
   };
 
   // Log de depuração para renderização do modal

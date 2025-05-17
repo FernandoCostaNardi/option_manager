@@ -22,9 +22,17 @@ public class AuthenticationService {
   private final AuthenticationManager authenticationManager;
 
   public AuthenticationResponse register(RegisterRequest request) {
+    // colocar validacao de email e username
+    if (repository.findByEmail(request.getEmail()).isPresent()) {
+      throw new RuntimeException("Email já cadastrado");
+    }
+    if (repository.findByUsername(request.getUsername()).isPresent()) {
+      throw new RuntimeException("Username já cadastrado");
+    }
     var user =
         User.builder()
             .email(request.getEmail())
+            .username(request.getUsername() != null ? request.getUsername() : request.getEmail())
             .password(passwordEncoder.encode(request.getPassword()))
             .role(Role.USER)
             .build();

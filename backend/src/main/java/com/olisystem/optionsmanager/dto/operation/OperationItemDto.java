@@ -36,4 +36,13 @@ public class OperationItemDto {
   private String baseAssetLogoUrl;
   private String baseAssetName;
   private BigDecimal result;
+
+  // Campos para relacionamento com grupos de operações
+  private String roleType; // Tipo de papel no grupo (Original, Parcial, Resultado, etc.)
+  private Integer sequenceNumber; // Número de sequência no grupo
+  private UUID groupId; // ID do grupo de operações médias
+  private Boolean isPartialExit; // Indica se é uma saída parcial
+  private Boolean hasPartialExits; // Indica se tem saídas parciais
+  private UUID originalOperationId; // ID da operação original (para operações relacionadas)
+  private UUID positionId; // ID da posição associada
 }

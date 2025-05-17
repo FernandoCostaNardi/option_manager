@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { BarChart2, CreditCard, PieChart, Activity, Briefcase } from 'lucide-react';
+import { Pagination } from '../components/ui/Pagination';
 
 export function Home() {
+  const [currentPage, setCurrentPage] = useState(0);
   return (
     <>
       <header className="mb-8 md:flex md:items-center md:justify-between">
@@ -137,17 +139,17 @@ export function Home() {
             </tbody>
           </table>
         </div>
-        <div className="px-6 py-3 flex items-center justify-between border-t border-gray-200">
-          <div className="text-sm text-gray-500">
-            Mostrando 4 de 20 resultados
-          </div>
-          <div className="flex gap-2">
-            <button className="px-3 py-1 border border-gray-300 rounded-md text-sm text-gray-600 hover:bg-gray-50">Anterior</button>
-            <button className="px-3 py-1 border border-gray-300 rounded-md text-sm bg-blue-50 text-blue-600 border-blue-200">1</button>
-            <button className="px-3 py-1 border border-gray-300 rounded-md text-sm text-gray-600 hover:bg-gray-50">2</button>
-            <button className="px-3 py-1 border border-gray-300 rounded-md text-sm text-gray-600 hover:bg-gray-50">3</button>
-            <button className="px-3 py-1 border border-gray-300 rounded-md text-sm text-gray-600 hover:bg-gray-50">Próximo</button>
-          </div>
+        <div className="px-6 py-3 border-t border-gray-200">
+          <Pagination
+            currentPage={currentPage}
+            totalPages={5}
+            totalItems={20}
+            pageSize={4}
+            onPageChange={setCurrentPage}
+            showStats={true}
+            variant="default"
+            className="w-full"
+          />
         </div>
       </div>
     </>

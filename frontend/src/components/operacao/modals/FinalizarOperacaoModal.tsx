@@ -3,6 +3,7 @@ import { X, Loader2 } from 'lucide-react';
 import { Label } from '../../../components/ui/label';
 import { Switch } from '../../../components/ui/switch';
 
+
 interface FinalizarOperacaoModalProps {
   isOpen: boolean;
   operacao: any | null;
@@ -39,9 +40,13 @@ export function FinalizarOperacaoModal({ isOpen, operacao, onClose, onSuccess }:
   // Preencher campos ao abrir o modal
   useEffect(() => {
     if (isOpen && operacao) {
+      console.log('[DEBUG] FinalizarOperacaoModal - Modal aberto com operação:', operacao);
+      console.log('[DEBUG] FinalizarOperacaoModal - ID da operação:', operacao.id);
+      
       setValorUnitarioSaida('');
       setSaidaTotal(true);
       setQuantidadeParcial('');
+      setSalvando(false);
       // Data de saída padrão: hoje
       const hoje = new Date();
       setDataSaida(hoje.toISOString().split('T')[0]);
@@ -58,35 +63,6 @@ export function FinalizarOperacaoModal({ isOpen, operacao, onClose, onSuccess }:
       return 'A quantidade parcial deve ser menor que a quantidade total da operação';
     }
     return null;
-  };
-
-  // Função para salvar a finalização da operação
-  const salvarFinalizacao = async () => {
-    if (!operacao) return;
-    if (!valorUnitarioSaida || !dataSaida) {
-      setError('Por favor, preencha todos os campos.');
-      return;
-    }
-
-    if (!saidaTotal) {
-      const validacaoQtd = validarQuantidadeParcial(quantidadeParcial);
-      if (validacaoQtd) {
-        setError(validacaoQtd);
-        return;
-      }
-    }
-
-    setSalvando(true);
-    setError(null);
-    try {
-      // Simulação de chamada de API para facilitar teste
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      onSuccess();
-    } catch (error) {
-      setError('Não foi possível finalizar a operação. Tente novamente.');
-    } finally {
-      setSalvando(false);
-    }
   };
 
   // Cálculo dos valores de saída
@@ -121,8 +97,11 @@ export function FinalizarOperacaoModal({ isOpen, operacao, onClose, onSuccess }:
       aria-labelledby="finalizar-modal-title"
       className="fixed inset-0 flex items-center justify-center z-50 p-4"
     >
-      {/* Overlay do modal */}
-      <div className="fixed inset-0 bg-gray-900 bg-opacity-75" onClick={onClose} />
+      {/* Overlay do modal - restaurado para comportamento normal */}
+      <div 
+        className="fixed inset-0 bg-gray-900 bg-opacity-75" 
+        onClick={onClose}
+      />
       
       {/* Conteúdo do modal */}
       <div className="relative bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
@@ -285,6 +264,7 @@ export function FinalizarOperacaoModal({ isOpen, operacao, onClose, onSuccess }:
         
         {/* Rodapé com botões */}
         <div className="flex justify-end gap-3 p-4 border-t border-gray-200">
+          {/* Botão cancelar */}
           <button
             type="button"
             onClick={onClose}
@@ -293,11 +273,68 @@ export function FinalizarOperacaoModal({ isOpen, operacao, onClose, onSuccess }:
           >
             Cancelar
           </button>
-          <button
+          
+          {/* Botão finalizar */}
+          <button 
+            id="btnFinalizarOperacao"
             type="button"
-            onClick={salvarFinalizacao}
+            disabled={salvando || !operacao || !valorUnitarioSaida || !dataSaida || (!saidaTotal && !quantidadeParcial)}
             className={`px-4 py-2 bg-purple-600 text-white rounded-lg flex items-center justify-center min-w-[100px] ${salvando || !operacao ? 'opacity-70 cursor-not-allowed' : 'hover:bg-purple-700'}`}
-            disabled={salvando || !operacao || !valorUnitarioSaida || !dataSaida}
+            onClick={async () => {
+              if (!operacao) return;
+              if (!valorUnitarioSaida || !dataSaida) {
+                setError('Por favor, preencha todos os campos.');
+                return;
+              }
+              if (!saidaTotal) {
+                const validacaoQtd = validarQuantidadeParcial(quantidadeParcial);
+                if (validacaoQtd) {
+                  setError(validacaoQtd);
+                  return;
+                }
+              }
+              setSalvando(true);
+              const exitUnitPrice = parseFloat(valorUnitarioSaida);
+              const quantity = !saidaTotal && quantidadeParcial ? parseInt(quantidadeParcial) : undefined;
+              const payload = {
+                operationId: operacao.id,
+                exitDate: dataSaida,
+                exitUnitPrice,
+                ...(quantity ? { quantity } : {})
+              };
+              
+              try {
+                const token = localStorage.getItem("token");
+                // Determinar qual endpoint usar com base no tipo de saída
+                const endpoint = saidaTotal 
+                  ? "http://localhost:8080/api/operations/finalize" 
+                  : "http://localhost:8080/api/operations/finalize-parcial";
+                
+                console.log(`[DEBUG] Finalizando operação usando endpoint: ${endpoint}`);
+                console.log(`[DEBUG] Payload: ${JSON.stringify(payload)}`);
+                
+                const response = await fetch(endpoint, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`
+                  },
+                  body: JSON.stringify(payload)
+                });
+                
+                if (response.ok) {
+                  onSuccess();
+                } else {
+                  const errorText = await response.text();
+                  setError(`Erro ao finalizar operação: ${response.status} - ${errorText || response.statusText}`);
+                  setSalvando(false);
+                }
+              } catch (error) {
+                console.error("Erro ao finalizar operação:", error);
+                setError("Erro ao finalizar operação. Tente novamente mais tarde.");
+                setSalvando(false);
+              }
+            }}
           >
             {salvando ? (
               <>

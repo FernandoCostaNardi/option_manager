@@ -27,11 +27,10 @@ public class AnalysisHouseController {
   public ResponseEntity<Page<AnalysisHouseResponseDto>> getAll(
       @RequestParam(defaultValue = "0") int page,
       @RequestParam(defaultValue = "10") int size,
-      @RequestParam(required = false) String name,
-      @RequestParam(required = false) String cnpj) {
+      @RequestParam(required = false) String name) {
 
     Pageable pageable = PageRequest.of(page, size);
-    Page<AnalysisHouse> analysisHouses = analysisHouseService.findAll(pageable, name, cnpj);
+    Page<AnalysisHouse> analysisHouses = analysisHouseService.findAll(pageable, name);
     Page<AnalysisHouseResponseDto> dtoPage = analysisHouses.map(AnalysisHouseMapper::toDto);
     return ResponseEntity.ok(dtoPage);
   }
@@ -86,7 +85,7 @@ public class AnalysisHouseController {
     AnalysisHouse analysisHouse = AnalysisHouseMapper.toEntity(dto, user);
 
     return analysisHouseService
-        .findByCnpj(analysisHouse.getCnpj())
+        .findByName(analysisHouse.getName())
         .map(
             existing ->
                 ResponseEntity.status(HttpStatus.CONFLICT)

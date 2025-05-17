@@ -1,5 +1,6 @@
 package com.olisystem.optionsmanager.repository;
 
+import com.olisystem.optionsmanager.model.auth.User;
 import com.olisystem.optionsmanager.model.brokerage.Brokerage;
 import java.util.Optional;
 import java.util.UUID;
@@ -16,4 +17,19 @@ public interface BrokerageRepository extends JpaRepository<Brokerage, UUID> {
 
   Page<Brokerage> findByNameContainingIgnoreCaseAndCnpjContainingIgnoreCase(
       String name, String cnpj, Pageable pageable);
+
+  Page<Brokerage> findByUser(User user, Pageable pageable);
+
+  Page<Brokerage> findByNameContainingIgnoreCaseAndUser(String name, User user, Pageable pageable);
+
+  Page<Brokerage> findByCnpjContainingIgnoreCaseAndUser(String cnpj, User user, Pageable pageable);
+
+  Page<Brokerage> findByNameContainingIgnoreCaseAndCnpjContainingIgnoreCaseAndUser(
+      String name, String cnpj, User user, Pageable pageable);
+
+  // Buscar corretora por CNPJ e usuário
+  Optional<Brokerage> findByCnpjAndUser(String cnpj, User user);
+
+  // Buscar corretora por ID e usuário
+  Optional<Brokerage> findByIdAndUser(UUID id, User user);
 }

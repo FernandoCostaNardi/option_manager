@@ -20,7 +20,7 @@ export function Operacoes() {
   const [operacaoParaFinalizar, setOperacaoParaFinalizar] = useState<string | null>(null);
   const [modalVisualizarTargetsAberto, setModalVisualizarTargetsAberto] = useState(false);
   const [operacaoParaVisualizarTargets, setOperacaoParaVisualizarTargets] = useState<string | null>(null);
-  const [operacaoParaEditar, setOperacaoParaEditar] = useState<OperacaoAtiva | null>(null);
+  const [operacaoParaEditar, setOperacaoParaEditar] = useState<OperacaoAtiva | undefined>(undefined);
   
   // Hook de filtros
   const {
@@ -77,7 +77,7 @@ export function Operacoes() {
   // Função para aplicar filtros
   const aplicarFiltros = () => {
     // Resetar para a primeira página
-    setCurrentPage(0);
+    resetPage();
     
     // Usar setTimeout para garantir que a atualização do estado seja concluída
     setTimeout(() => {
@@ -126,11 +126,13 @@ export function Operacoes() {
   
   // Handlers para o modal de nova operação
   const abrirModalNovaOperacao = () => {
+    setOperacaoParaEditar(undefined);
     setModalNovaOperacaoAberto(true);
   };
   
   const fecharModalNovaOperacao = () => {
     setModalNovaOperacaoAberto(false);
+    setOperacaoParaEditar(undefined);
   };
   
   const handleNovaOperacaoSucesso = () => {

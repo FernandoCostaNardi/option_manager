@@ -16,7 +16,6 @@ import lombok.extern.log4j.Log4j2;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 
 @Log4j2
@@ -26,40 +25,56 @@ public class AnalysisHouseService {
   @Autowired private AnalysisHouseRepository analysisHouseRepository;
 
   public List<AnalysisHouse> findAll() {
-    return analysisHouseRepository.findAll();
+    User user = SecurityUtil.getLoggedUser();
+    return analysisHouseRepository.findByUser(user);
   }
 
-  public Page<AnalysisHouse> findAll(Pageable pageable, String name, String cnpj) {
-    Specification<AnalysisHouse> spec = Specification.where(null);
-
+  public Page<AnalysisHouse> findAll(Pageable pageable, String name) {
+    User user = SecurityUtil.getLoggedUser();
+    // Filtra pelo usuário e demais critérios
     if (name != null && !name.isEmpty()) {
-      spec =
-          spec.and(
-              (root, query, cb) ->
-                  cb.like(cb.lower(root.get("name")), "%" + name.toLowerCase() + "%"));
+      return analysisHouseRepository.findByNameContainingIgnoreCaseAndUser(name, user, pageable);
+    } else if (name != null && !name.isEmpty()) {
+      return analysisHouseRepository.findByNameContainingIgnoreCaseAndUser(name, user, pageable);
+    } else {
+      return analysisHouseRepository.findByUser(user, pageable);
     }
-
-    if (cnpj != null && !cnpj.isEmpty()) {
-      spec = spec.and((root, query, cb) -> cb.like(root.get("cnpj"), "%" + cnpj + "%"));
-    }
-
-    return analysisHouseRepository.findAll(spec, pageable);
   }
 
   public Optional<AnalysisHouse> findById(UUID id) {
-    return analysisHouseRepository.findById(id);
+    User user = SecurityUtil.getLoggedUser();
+    return analysisHouseRepository.findByIdAndUser(id, user);
   }
 
-  public Optional<AnalysisHouse> findByCnpj(String cnpj) {
-    return analysisHouseRepository.findByCnpj(cnpj);
+  public Optional<AnalysisHouse> findByName(String name) {
+    User user = SecurityUtil.getLoggedUser();
+    return analysisHouseRepository.findByNameAndUser(name, user);
   }
 
   public AnalysisHouse save(AnalysisHouse analysisHouse) {
+    User user = SecurityUtil.getLoggedUser();
+    analysisHouse.setUser(user);
+    // validar nome
+    if (analysisHouseRepository.findByNameAndUser(analysisHouse.getName(), user).isPresent()) {
+      throw new RuntimeException("Nome já cadastrado");
+    }
+    // validar nome (usando busca paginada sem paginação)
+    Page<AnalysisHouse> nameMatches =
+        analysisHouseRepository.findByNameContainingIgnoreCaseAndUser(
+            analysisHouse.getName(), user, Pageable.unpaged());
+    if (nameMatches.hasContent()) {
+      throw new RuntimeException("Nome já cadastrado");
+    }
     return analysisHouseRepository.save(analysisHouse);
   }
 
   public void deleteById(UUID id) {
-    analysisHouseRepository.deleteById(id);
+    User user = SecurityUtil.getLoggedUser();
+    AnalysisHouse existing =
+        analysisHouseRepository
+            .findByIdAndUser(id, user)
+            .orElseThrow(() -> new ResourceNotFoundException("Casa de análise não encontrada"));
+    analysisHouseRepository.delete(existing);
   }
 
   public void deleteById(String id) {
@@ -71,12 +86,12 @@ public class AnalysisHouseService {
     User user = SecurityUtil.getLoggedUser();
     AnalysisHouse analysisHouse = AnalysisHouseMapper.toEntity(dto, user);
 
-    return findByCnpj(analysisHouse.getCnpj())
+    return findByName(analysisHouse.getName())
         .map(
             existing -> {
               log.warn(
-                  "Tentativa de criar casa de análise com CNPJ duplicado: {}",
-                  analysisHouse.getCnpj());
+                  "Tentativa de criar casa de análise com Nome duplicado: {}",
+                  analysisHouse.getName());
               return AnalysisHouseMapper.toDto(existing);
             })
         .orElseGet(

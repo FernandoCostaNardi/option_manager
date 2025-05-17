@@ -29,28 +29,35 @@ public class BrokerageService {
   }
 
   public Page<Brokerage> findAll(Pageable pageable, String name, String cnpj) {
+    // Buscar usuário logado
+    User user = SecurityUtil.getLoggedUser();
+
+    // Filtrar por nome e cnpj para o usuário
     if (name != null && !name.isEmpty() && cnpj != null && !cnpj.isEmpty()) {
-      return brokerageRepository.findByNameContainingIgnoreCaseAndCnpjContainingIgnoreCase(
-          name, cnpj, pageable);
+      return brokerageRepository.findByNameContainingIgnoreCaseAndCnpjContainingIgnoreCaseAndUser(
+          name, cnpj, user, pageable);
     } else if (name != null && !name.isEmpty()) {
-      return brokerageRepository.findByNameContainingIgnoreCase(name, pageable);
+      return brokerageRepository.findByNameContainingIgnoreCaseAndUser(name, user, pageable);
     } else if (cnpj != null && !cnpj.isEmpty()) {
-      return brokerageRepository.findByCnpjContainingIgnoreCase(cnpj, pageable);
+      return brokerageRepository.findByCnpjContainingIgnoreCaseAndUser(cnpj, user, pageable);
     } else {
-      return brokerageRepository.findAll(pageable);
+      return brokerageRepository.findByUser(user, pageable);
     }
   }
 
   public Optional<Brokerage> findById(UUID id) {
-    return brokerageRepository.findById(id);
+    User user = SecurityUtil.getLoggedUser();
+    return brokerageRepository.findByIdAndUser(id, user);
   }
 
   public Optional<Brokerage> findByCnpj(String cnpj) {
-    return brokerageRepository.findByCnpj(cnpj);
+    User user = SecurityUtil.getLoggedUser();
+    return brokerageRepository.findByCnpjAndUser(cnpj, user);
   }
 
   public Brokerage getBrokerageById(UUID id) {
-    return brokerageRepository.findById(id).orElse(null);
+    User user = SecurityUtil.getLoggedUser();
+    return brokerageRepository.findByIdAndUser(id, user).orElse(null);
   }
 
   public Brokerage save(Brokerage brokerage) {

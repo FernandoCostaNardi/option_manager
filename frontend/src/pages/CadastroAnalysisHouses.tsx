@@ -339,7 +339,11 @@ export function CadastroAnalysisHouses() {
       <CadastroAnalysisHouseModal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        onSuccess={() => fetchAnalysisHouses(page)}
+        onSuccess={() => {
+          setModalOpen(false);
+          setEditId(undefined);
+          fetchAnalysisHouses(page);
+        }}
         analysisHouseId={editId}
       />
 

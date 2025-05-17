@@ -9,12 +9,35 @@ import { NotasCorretagem } from './pages/importacoes/NotasCorretagem';
 import { CadastroCorretoras } from './pages/CadastroCorretoras';
 import { CadastroAnalysisHouses } from './pages/CadastroAnalysisHouses';
 import { Operacoes } from './pages/operacoes/Operacoes';
+import { Toaster } from 'react-hot-toast';
 
 function App() {
   return (
     <Router>
       <AuthProvider>
         <div className="min-h-screen bg-gray-50">
+          {/* Provedor de toast para notificações */}
+          <Toaster 
+            position="top-right"
+            toastOptions={{
+              duration: 4000,
+              style: {
+                background: '#fff',
+                color: '#333',
+              },
+              success: {
+                style: {
+                  border: '1px solid #10b981',
+                },
+              },
+              error: {
+                style: {
+                  border: '1px solid #ef4444',
+                },
+              },
+            }}
+          />
+          
           <Routes>
             {/* Rotas de autenticação */}
             <Route path="/login" element={<Login />} />

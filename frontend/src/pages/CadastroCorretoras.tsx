@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Brokerage, BrokerageService, BrokeragePaginated } from '../services/brokerageService';
 import { Pencil, Trash, Loader2, Plus } from 'lucide-react';
-import { Pagination } from '../components/Pagination'; // Importação do componente
+import { Pagination } from '../components/ui/Pagination'; // Importação do novo componente UI
 import { ConfirmDialog } from '../components/ConfirmDialog';
 
 interface ModalProps {
@@ -262,15 +262,16 @@ export function CadastroCorretoras() {
             </table>
           </div>
 
-          <div className="px-6 py-3 flex items-center justify-between border-t border-gray-200">
-            <div className="text-sm text-gray-500">
-              Mostrando {brokerages.length} de {totalPages * 10} resultados
-            </div>
-
+          <div className="px-6 py-3 border-t border-gray-200">
             <Pagination
               currentPage={page}
               totalPages={totalPages}
-              onPageChange={handlePageChange} />
+              totalItems={totalPages * 10} // Estimativa aproximada
+              pageSize={10}
+              onPageChange={handlePageChange}
+              showStats={true}
+              variant="default"
+              className="w-full" />
           </div>
         </div>
       )}
