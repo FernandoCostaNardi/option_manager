@@ -15,6 +15,8 @@ import com.olisystem.optionsmanager.model.operation.OperationTarget;
 import com.olisystem.optionsmanager.model.operation.TradeType;
 import com.olisystem.optionsmanager.model.option_serie.OptionSerie;
 import com.olisystem.optionsmanager.record.operation.OperationContext;
+import com.olisystem.optionsmanager.record.operation.OperationExitContext;
+import com.olisystem.optionsmanager.record.operation.OperationExitContext;
 import com.olisystem.optionsmanager.repository.OperationRepository;
 import com.olisystem.optionsmanager.repository.OperationTargetRepository;
 import com.olisystem.optionsmanager.service.analysis_house.AnalysisHouseService;
@@ -105,8 +107,28 @@ public class OperationServiceImpl implements OperationService {
     @Override
     @Transactional
     public Operation createExitOperation(OperationFinalizationRequest request) {
+        log.info("Iniciando criação de saida com quantidade {} e preço {}",
+                request.getQuantity(), request.getExitUnitPrice());
 
-        return new OperationFinalizationRequest;
+        // 1. Validar e preparar recursos básicos
+        operationValidator.validateCreateExitOperation(request);
+        final User currentUser = SecurityUtil.getLoggedUser();
+
+        // 2. Buscar a operação ativa com o id fornecido
+        Operation activeOperation = operationRepository.findById(request.getOperationId())
+                .orElseThrow(() -> new ResourceNotFoundException("Operação não encontrada"));
+
+        // 3. Criar contexto básico reutilizável
+        OperationExitContext context = new OperationExitContext(request, activeOperation, currentUser);
+
+        // 4. Descobrir se a quantidade da operação ativa é maior que a quantidade da saida
+        if (activeOperation.getQuantity() > request.getQuantity()) {
+            // 4.0 Será uma saida parcial
+            return strategyService.processPartialExitOperation(context);
+        }else{
+            // 4.1 Será uma saida total
+            return strategyService.processExitOperation(context);
+        }
     }
 
     @Override

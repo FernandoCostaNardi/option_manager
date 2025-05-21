@@ -77,4 +77,8 @@ public class Position {
     operations.add(operation);
     operation.setPosition(this);
   }
+
+  public List<EntryLot> getEntryLot() {
+    return entryLots;
+  }
 }

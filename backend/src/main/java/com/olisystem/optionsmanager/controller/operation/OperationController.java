@@ -2,6 +2,8 @@ package com.olisystem.optionsmanager.controller.operation;
 
 import com.olisystem.optionsmanager.dto.operation.OperationDataRequest;
 import com.olisystem.optionsmanager.dto.operation.OperationFilterCriteria;
+import com.olisystem.optionsmanager.dto.operation.OperationFinalizationRequest;
+import com.olisystem.optionsmanager.dto.operation.OperationFinalizationResponse;
 import com.olisystem.optionsmanager.dto.operation.OperationSummaryResponseDto;
 import com.olisystem.optionsmanager.model.operation.Operation;
 import com.olisystem.optionsmanager.model.operation.OperationStatus;
@@ -84,21 +86,17 @@ public class OperationController {
     }
   }
 
-  //  @PostMapping("/operations/finalize")
-  //  public ResponseEntity<?> finalizeOperation(
-  //      @RequestBody OperationFinalizationRequest request,
-  //      @RequestParam(defaultValue = "0") int page,
-  //      @RequestParam(defaultValue = "10") int size,
-  //      @RequestParam(required = false) List<OperationStatus> status) {
-  //    try {
-  //      OperationFinalizationResponse response =
-  //          operationService.finalizeOperation(request, page, size, status);
-  //      return ResponseEntity.ok(response);
-  //    } catch (Exception e) {
-  //      return ResponseEntity.internalServerError()
-  //          .body("Erro ao finalizar operação: " + e.getMessage());
-  //    }
-  //  }
+    @PostMapping("/operations/finalize")
+    public ResponseEntity<?> finalizeOperation(
+        @RequestBody OperationFinalizationRequest request) {
+      try {
+        Operation response =  operationService.createExitOperation(request);
+        return ResponseEntity.ok(response);
+      } catch (Exception e) {
+        return ResponseEntity.internalServerError()
+            .body("Erro ao finalizar operação: " + e.getMessage());
+      }
+    }
   //
   //  @PostMapping("/operations/finalize-parcial")
   //  public ResponseEntity<?> finalizeParcialOperation(

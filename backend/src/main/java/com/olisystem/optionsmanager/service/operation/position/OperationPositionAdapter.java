@@ -104,7 +104,7 @@ public class OperationPositionAdapter {
                         .positionId(position.getId())
                         .exitDate(request.getExitDate())
                         .quantity(qtyDayTrade)
-                        .exitUnitPrice(BigDecimal.valueOf(request.getExitUnitPrice()))
+                        .exitUnitPrice(request.getExitUnitPrice())
                         .exitStrategy(ExitStrategy.AUTO)
                         .analysisHouseId(
                             operation.getAnalysisHouse() != null
@@ -126,7 +126,7 @@ public class OperationPositionAdapter {
                         .positionId(position.getId())
                         .exitDate(request.getExitDate())
                         .quantity(qtyToExit)
-                        .exitUnitPrice(BigDecimal.valueOf(request.getExitUnitPrice()))
+                        .exitUnitPrice(request.getExitUnitPrice())
                         .exitStrategy(ExitStrategy.AUTO)
                         .analysisHouseId(
                             operation.getAnalysisHouse() != null

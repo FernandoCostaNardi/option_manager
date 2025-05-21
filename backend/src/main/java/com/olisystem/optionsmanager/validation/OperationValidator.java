@@ -1,6 +1,7 @@
 package com.olisystem.optionsmanager.validation;
 
 import com.olisystem.optionsmanager.dto.operation.OperationDataRequest;
+import com.olisystem.optionsmanager.dto.operation.OperationFinalizationRequest;
 import com.olisystem.optionsmanager.exception.InvalidOperationException;
 import java.math.BigDecimal;
 import org.springframework.stereotype.Component;
@@ -54,4 +55,21 @@ public class OperationValidator {
       throw new InvalidOperationException("Preço unitário de entrada deve ser maior que zero");
     }
   }
+
+    public void validateCreateExitOperation(OperationFinalizationRequest request) {
+      if (request.getOperationId() == null ) {
+        throw new InvalidOperationException("ID da operação é obrigatório");
+      }
+      if (request.getExitDate() == null) {
+        throw new InvalidOperationException("Data de saída é obrigatória");
+      }
+      if (request.getExitUnitPrice() == null
+          || request.getExitUnitPrice().compareTo(BigDecimal.ZERO) <= 0) {
+        throw new InvalidOperationException("Preço unitário de saída deve ser maior que zero");
+      }
+      if (request.getQuantity() <= 0) {
+        throw new InvalidOperationException("Quantidade deve ser maior que zero");
+      }
+      
+    }
 }

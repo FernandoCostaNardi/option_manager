@@ -295,7 +295,7 @@ export function FinalizarOperacaoModal({ isOpen, operacao, onClose, onSuccess }:
               }
               setSalvando(true);
               const exitUnitPrice = parseFloat(valorUnitarioSaida);
-              const quantity = !saidaTotal && quantidadeParcial ? parseInt(quantidadeParcial) : undefined;
+              const quantity = !saidaTotal && quantidadeParcial ? parseInt(quantidadeParcial) : operacao.quantity;
               const payload = {
                 operationId: operacao.id,
                 exitDate: dataSaida,

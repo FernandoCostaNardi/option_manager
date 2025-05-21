@@ -1,7 +1,11 @@
 package com.olisystem.optionsmanager.dto.operation;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.UUID;
+
+import com.olisystem.optionsmanager.model.operation.TradeType;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -15,5 +19,5 @@ public class OperationFinalizationRequest {
   private UUID operationId;
   private Integer quantity;
   private LocalDate exitDate;
-  private Double exitUnitPrice;
+  private BigDecimal exitUnitPrice;
 }

@@ -4,9 +4,12 @@ import com.olisystem.optionsmanager.dto.operation.OperationDataRequest;
 import com.olisystem.optionsmanager.model.auth.User;
 import com.olisystem.optionsmanager.model.operation.Operation;
 import com.olisystem.optionsmanager.model.operation.OperationStatus;
+import com.olisystem.optionsmanager.model.operation.TradeType;
 import com.olisystem.optionsmanager.model.option_serie.OptionSerie;
 import com.olisystem.optionsmanager.model.transaction.TransactionType;
 import com.olisystem.optionsmanager.record.operation.OperationBuildData;
+import com.olisystem.optionsmanager.record.operation.OperationBuildExitData;
+import com.olisystem.optionsmanager.record.operation.OperationExitPositionContext;
 import com.olisystem.optionsmanager.repository.OperationRepository;
 import com.olisystem.optionsmanager.service.analysis_house.AnalysisHouseService;
 import com.olisystem.optionsmanager.service.brokerage.BrokerageService;
@@ -88,6 +91,51 @@ public class OperationCreationServiceImpl implements OperationCreationService {
 
         return savedOperation;
     }
+
+    @Override
+    public Operation createExitOperation(OperationExitPositionContext context, TradeType tradeType, BigDecimal profitLoss, TransactionType type) {
+        Operation operation = buildExitOperation(
+                OperationBuildExitData.fromRequest(context, profitLoss, tradeType, type),
+                context.context().activeOperation().getOptionSeries(),
+                profitLoss.compareTo(BigDecimal.ZERO) > 0 ? OperationStatus.WINNER : OperationStatus.LOSER,
+                context.context().currentUser()
+        );
+
+        Operation savedOperation = operationRepository.save(operation);
+        logOperationCreation(savedOperation.getStatus(), savedOperation);
+        return savedOperation;
+    }
+
+    private Operation buildExitOperation(OperationBuildExitData data, OptionSerie optionSeries, OperationStatus status, User currentUser) {
+        var brokerage = brokerageService.getBrokerageById(data.brokerageId());
+        var analysisHouse = data.analysisHouseId() != null ?
+                analysisHouseService.findById(data.analysisHouseId()).orElse(null) :
+                null;
+
+        // 2. Calcular valor total
+        BigDecimal entryTotalValue = data.entryUnitPrice()
+                .multiply(BigDecimal.valueOf(data.quantity()));
+
+        // 3. Criar a entidade usando Builder
+        return Operation.builder()
+                .optionSeries(optionSeries)
+                .brokerage(brokerage)
+                .analysisHouse(analysisHouse)
+                .transactionType(data.transactionType())
+                .tradeType(data.tradeType())
+                .entryDate(data.entryDate())
+                .quantity(data.quantity())
+                .entryUnitPrice(data.entryUnitPrice())
+                .entryTotalValue(entryTotalValue)
+                .exitUnitPrice(data.exitUnitPrice())
+                .exitTotalValue(data.exitTotalValue())
+                .profitLoss(data.profitLoss())
+                .profitLossPercentage(data.profitLossPercentage())
+                .status(status)
+                .user(currentUser)
+                .build();
+    }
+    
 
     /**
      * Método unificado para construir uma operação, independentemente da fonte de dados
