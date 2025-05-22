@@ -11,14 +11,14 @@ import com.olisystem.optionsmanager.model.position.Position;
 import com.olisystem.optionsmanager.repository.OperationRepository;
 import com.olisystem.optionsmanager.repository.position.PositionOperationRepository;
 import com.olisystem.optionsmanager.service.position.PositionService;
-import java.math.BigDecimal;
-import java.util.List;
-import java.util.Optional;
-import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * Classe adaptadora que integra o OperationService existente com o novo PositionService. Serve como

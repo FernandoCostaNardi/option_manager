@@ -1,41 +1,25 @@
 package com.olisystem.optionsmanager.controller.operation;
 
 import com.olisystem.optionsmanager.dto.operation.OperationDataRequest;
-import com.olisystem.optionsmanager.dto.operation.OperationFilterCriteria;
 import com.olisystem.optionsmanager.dto.operation.OperationFinalizationRequest;
-import com.olisystem.optionsmanager.dto.operation.OperationFinalizationResponse;
 import com.olisystem.optionsmanager.dto.operation.OperationSummaryResponseDto;
 import com.olisystem.optionsmanager.model.operation.Operation;
-import com.olisystem.optionsmanager.model.operation.OperationStatus;
-import com.olisystem.optionsmanager.model.operation.TradeType;
-import com.olisystem.optionsmanager.model.option_serie.OptionType;
-import com.olisystem.optionsmanager.model.transaction.TransactionType;
 import com.olisystem.optionsmanager.record.operation.OperationSearchRequest;
-import com.olisystem.optionsmanager.report.OperationReportService;
 import com.olisystem.optionsmanager.service.operation.OperationService;
-
-import java.time.LocalDate;
-import java.util.Collections;
-import java.util.List;
-import java.util.UUID;
-
 import com.olisystem.optionsmanager.service.operation.search.OperationSearchService;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
-import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api")
@@ -44,15 +28,12 @@ public class OperationController {
   private static final Logger log = LoggerFactory.getLogger(OperationController.class);
 
   private final OperationService operationService;
-  private final OperationReportService operationReportService;
   private final OperationSearchService operationSearchService;
 
   public OperationController(OperationService operationService,
-                             OperationReportService operationReportService,
                              OperationSearchService operationSearchService
   ){
     this.operationService = operationService;
-    this.operationReportService = operationReportService;
     this.operationSearchService = operationSearchService;
   }
 

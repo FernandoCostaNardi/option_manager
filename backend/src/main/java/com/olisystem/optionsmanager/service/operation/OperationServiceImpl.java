@@ -16,7 +16,6 @@ import com.olisystem.optionsmanager.model.operation.TradeType;
 import com.olisystem.optionsmanager.model.option_serie.OptionSerie;
 import com.olisystem.optionsmanager.record.operation.OperationContext;
 import com.olisystem.optionsmanager.record.operation.OperationExitContext;
-import com.olisystem.optionsmanager.record.operation.OperationExitContext;
 import com.olisystem.optionsmanager.repository.OperationRepository;
 import com.olisystem.optionsmanager.repository.OperationTargetRepository;
 import com.olisystem.optionsmanager.resolver.operation.ExitOperationStrategyResolver;
@@ -120,7 +119,7 @@ public class OperationServiceImpl implements OperationService {
         // 2. Criar contexto de execução
         OperationExitContext context = createExitContext(request, activeOperation);
 
-        // Resolver estratégia apropriada e processar
+        // 3. Resolver estratégia apropriada e processar
         ExitOperationStrategy strategy = exitOperationStrategyResolver.resolveStrategy(context);
 
         return strategy.process(context);

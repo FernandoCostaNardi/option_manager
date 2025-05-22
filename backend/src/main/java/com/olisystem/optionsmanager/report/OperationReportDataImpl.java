@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.stream.Collectors;
+import java.math.RoundingMode;
 
 @Service
 public class OperationReportDataImpl implements OperationReportData {
@@ -71,7 +72,7 @@ public class OperationReportDataImpl implements OperationReportData {
         .reduce(BigDecimal.ZERO, BigDecimal::add);
 
     BigDecimal totalProfitLossPercentage = totalEntry.compareTo(BigDecimal.ZERO) > 0 
-        ? totalProfitLoss.multiply(new BigDecimal("100")).divide(totalEntry, 2, BigDecimal.ROUND_HALF_UP)
+        ? totalProfitLoss.multiply(new BigDecimal("100")).divide(totalEntry, 2, RoundingMode.HALF_UP)
         : BigDecimal.ZERO;
 
     return OperationSummaryResponseDto.builder()

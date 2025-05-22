@@ -24,6 +24,7 @@ public class AnalysisHouse {
   private String subscriptionType; // e.g., "Free", "Premium", "Enterprise"
 
   @Enumerated(EnumType.STRING)
+  @Builder.Default
   private StatusType status = StatusType.ACTIVE; // Valor padrão: Ativo
 
   @ManyToOne

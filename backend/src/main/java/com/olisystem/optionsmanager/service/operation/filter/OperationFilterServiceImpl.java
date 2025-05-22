@@ -22,14 +22,11 @@ import java.util.stream.Collectors;
 public class OperationFilterServiceImpl implements OperationFilterService {
 
     private final OperationRepository operationRepository;
-    private final OperationItemMapper operationItemMapper;
 
     public OperationFilterServiceImpl(
-            OperationRepository operationRepository,
-            OperationItemMapper operationItemMapper
+            OperationRepository operationRepository
     ) {
         this.operationRepository = operationRepository;
-        this.operationItemMapper = operationItemMapper;
     }
 
     @Override

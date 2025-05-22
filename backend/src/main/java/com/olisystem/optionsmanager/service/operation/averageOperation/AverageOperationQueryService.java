@@ -1,21 +1,20 @@
 package com.olisystem.optionsmanager.service.operation.averageOperation;
 
 import com.olisystem.optionsmanager.dto.operation.OperationItemDto;
-import com.olisystem.optionsmanager.model.operation.*;
-import com.olisystem.optionsmanager.repository.AverageOperationGroupRepository;
+import com.olisystem.optionsmanager.model.operation.AverageOperationGroup;
+import com.olisystem.optionsmanager.model.operation.AverageOperationItem;
+import com.olisystem.optionsmanager.model.operation.OperationRoleType;
 import com.olisystem.optionsmanager.repository.AverageOperationItemRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.stream.Collectors;
-
-import com.olisystem.optionsmanager.service.operation.OperationService;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Serviço para consultas relacionadas a grupos de operações médias. Fornece métodos para recuperar
@@ -27,9 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 public class AverageOperationQueryService {
 
-  private final AverageOperationGroupRepository groupRepository;
   private final AverageOperationItemRepository itemRepository;
-  private final OperationService operationService;
 
   /**
    * Obtém todas as operações parciais associadas a uma operação original.
@@ -51,11 +48,11 @@ public class AverageOperationQueryService {
     }
 
     // Obter grupo
-    AverageOperationGroup group = originalItem.get().getGroup();
+//    AverageOperationGroup group = originalItem.get().getGroup();
 
     // Buscar itens parciais
-    List<AverageOperationItem> partialItems =
-        itemRepository.findByGroupAndRoleType(group, OperationRoleType.CONSOLIDATED_RESULT);
+//    List<AverageOperationItem> partialItems =
+//        itemRepository.findByGroupAndRoleType(group, OperationRoleType.CONSOLIDATED_RESULT);
 
     // Converter para DTOs
     return null; /* partialItems.stream()

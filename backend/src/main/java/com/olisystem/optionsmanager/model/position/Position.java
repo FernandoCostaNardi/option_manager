@@ -60,9 +60,11 @@ public class Position {
   @JoinColumn(name = "user_id", nullable = false)
   private User user;
 
+  @Builder.Default
   @OneToMany(mappedBy = "position", cascade = CascadeType.ALL, orphanRemoval = true)
   private List<EntryLot> entryLots = new ArrayList<>();
 
+  @Builder.Default
   @OneToMany(mappedBy = "position", cascade = CascadeType.ALL, orphanRemoval = true)
   private List<PositionOperation> operations = new ArrayList<>();
 

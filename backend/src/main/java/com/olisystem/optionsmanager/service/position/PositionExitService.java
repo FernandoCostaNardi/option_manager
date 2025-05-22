@@ -1,40 +1,39 @@
 package com.olisystem.optionsmanager.service.position;
 
 import com.olisystem.optionsmanager.dto.position.EntryLotDto;
-import com.olisystem.optionsmanager.dto.position.ExitProcessingResult;
 import com.olisystem.optionsmanager.dto.position.ExitRecordDto;
 import com.olisystem.optionsmanager.dto.position.PositionExitRequest;
 import com.olisystem.optionsmanager.dto.position.PositionExitResult;
 import com.olisystem.optionsmanager.exception.ResourceNotFoundException;
 import com.olisystem.optionsmanager.mapper.PositionMapper;
-import com.olisystem.optionsmanager.model.analysis_house.AnalysisHouse;
 import com.olisystem.optionsmanager.model.operation.Operation;
 import com.olisystem.optionsmanager.model.operation.OperationStatus;
 import com.olisystem.optionsmanager.model.operation.TradeType;
-import com.olisystem.optionsmanager.model.position.*;
+import com.olisystem.optionsmanager.model.position.EntryLot;
+import com.olisystem.optionsmanager.model.position.ExitRecord;
+import com.olisystem.optionsmanager.model.position.Position;
+import com.olisystem.optionsmanager.model.position.PositionOperation;
+import com.olisystem.optionsmanager.model.position.PositionOperationType;
+import com.olisystem.optionsmanager.model.position.PositionStatus;
 import com.olisystem.optionsmanager.model.transaction.TransactionType;
 import com.olisystem.optionsmanager.repository.OperationRepository;
 import com.olisystem.optionsmanager.repository.position.EntryLotRepository;
 import com.olisystem.optionsmanager.repository.position.ExitRecordRepository;
 import com.olisystem.optionsmanager.repository.position.PositionOperationRepository;
 import com.olisystem.optionsmanager.repository.position.PositionRepository;
-import com.olisystem.optionsmanager.service.analysis_house.AnalysisHouseService;
 import com.olisystem.optionsmanager.service.operation.averageOperation.AverageOperationService;
 import com.olisystem.optionsmanager.util.SecurityUtil;
-import java.math.BigDecimal;
-import java.math.RoundingMode;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Optional;
-import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Serviço especializado no processamento de saídas de posições. Implementa a lógica de saídas
@@ -51,7 +50,6 @@ public class PositionExitService {
   private final ExitRecordRepository exitRecordRepository;
   private final PositionOperationRepository positionOperationRepository;
   private final OperationRepository operationRepository;
-  private final AnalysisHouseService analysisHouseService;
   private final PositionCalculator calculator;
   private final PositionMapper mapper;
   private final AverageOperationService averageOperationService;
@@ -323,194 +321,194 @@ public class PositionExitService {
   }
 
   /** Cria uma operação para a saída da posição. */
-  private Operation createExitOperation(
-      Position position, PositionExitRequest request, List<ExitRecordDto> exitRecords) {
-    // Calcular lucro/prejuízo total
-    BigDecimal totalProfitLoss =
-        exitRecords.stream()
-            .map(ExitRecordDto::getProfitLoss)
-            .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-    // Calcular valor total de saída
-    BigDecimal exitTotalValue =
-        request.getExitUnitPrice().multiply(BigDecimal.valueOf(request.getQuantity()));
-
-    // Calcular valor total de entrada e preço médio dos lotes consumidos
-    BigDecimal entryTotalValue =
-        exitRecords.stream()
-            .map(r -> r.getEntryUnitPrice().multiply(BigDecimal.valueOf(r.getQuantity())))
-            .reduce(BigDecimal.ZERO, BigDecimal::add);
-    BigDecimal entryUnitPrice =
-        entryTotalValue.divide(
-            BigDecimal.valueOf(request.getQuantity()), PRECISION, RoundingMode.HALF_UP);
-
-    // Inverter a direção da transação original para a saída
-    TransactionType exitTransactionType =
-        position.getDirection() == TransactionType.BUY ? TransactionType.SELL : TransactionType.BUY;
-
-    // Determinar se é day trade (todos os lotes consumidos têm entryDate igual ao exitDate)
-    boolean isDayTrade =
-        exitRecords.stream().allMatch(r -> r.getEntryDate().equals(request.getExitDate()));
-    TradeType tradeType = isDayTrade ? TradeType.DAY : TradeType.SWING;
-    log.info(
-        "Criando operação de saída: {} | Tipo: {} | DayTrade? {}",
-        exitRecords.size(),
-        tradeType,
-        isDayTrade);
-
-    // Criar operação de saída
-    Operation exitOperation =
-        Operation.builder()
-            .optionSeries(position.getOptionSeries())
-            .brokerage(position.getBrokerage())
-            .transactionType(exitTransactionType)
-            .tradeType(tradeType)
-            .entryDate(position.getOpenDate())
-            .exitDate(request.getExitDate())
-            .quantity(request.getQuantity())
-            .entryUnitPrice(entryUnitPrice)
-            .entryTotalValue(entryTotalValue)
-            .exitUnitPrice(request.getExitUnitPrice())
-            .exitTotalValue(exitTotalValue)
-            .profitLoss(totalProfitLoss)
-            .profitLossPercentage(calculateAverageProfitLossPercentageForDtos(exitRecords))
-            .status(
-                OperationStatus
-                    .HIDDEN) // Esta operação fica HIDDEN, apenas a consolidada fica visível
-            .user(SecurityUtil.getLoggedUser())
-            .build();
-
-    // Adicionar casa de análise se fornecida
-    if (request.getAnalysisHouseId() != null) {
-      Optional<AnalysisHouse> analysisHouse =
-          analysisHouseService.findById(request.getAnalysisHouseId());
-      analysisHouse.ifPresent(exitOperation::setAnalysisHouse);
-    }
-
-    Operation savedOperation = operationRepository.save(exitOperation);
-
-    // Criar link de operação com a posição
-    PositionOperation posOp =
-        PositionOperation.builder()
-            .position(position)
-            .operation(savedOperation)
-            .type(
-                position.getRemainingQuantity() == request.getQuantity()
-                    ? PositionOperationType.FULL_EXIT
-                    : PositionOperationType.PARTIAL_EXIT)
-            .timestamp(LocalDateTime.now())
-            .sequenceNumber(
-                positionOperationRepository.findByPositionOrderByTimestampAsc(position).size() + 1)
-            .build();
-
-    positionOperationRepository.save(posOp);
-    log.info(
-        "Operação de saída criada: {} | Entrada média: {} | Entrada total: {} | Saída: {} | Lucro: {} | Tipo: {}",
-        savedOperation.getId(),
-        entryUnitPrice,
-        entryTotalValue,
-        exitTotalValue,
-        totalProfitLoss,
-        tradeType);
-
-    return savedOperation;
-  }
+//  private Operation createExitOperation(
+//      Position position, PositionExitRequest request, List<ExitRecordDto> exitRecords) {
+//    // Calcular lucro/prejuízo total
+//    BigDecimal totalProfitLoss =
+//        exitRecords.stream()
+//            .map(ExitRecordDto::getProfitLoss)
+//            .reduce(BigDecimal.ZERO, BigDecimal::add);
+//
+//    // Calcular valor total de saída
+//    BigDecimal exitTotalValue =
+//        request.getExitUnitPrice().multiply(BigDecimal.valueOf(request.getQuantity()));
+//
+//    // Calcular valor total de entrada e preço médio dos lotes consumidos
+//    BigDecimal entryTotalValue =
+//        exitRecords.stream()
+//            .map(r -> r.getEntryUnitPrice().multiply(BigDecimal.valueOf(r.getQuantity())))
+//            .reduce(BigDecimal.ZERO, BigDecimal::add);
+//    BigDecimal entryUnitPrice =
+//        entryTotalValue.divide(
+//            BigDecimal.valueOf(request.getQuantity()), PRECISION, RoundingMode.HALF_UP);
+//
+//    // Inverter a direção da transação original para a saída
+//    TransactionType exitTransactionType =
+//        position.getDirection() == TransactionType.BUY ? TransactionType.SELL : TransactionType.BUY;
+//
+//    // Determinar se é day trade (todos os lotes consumidos têm entryDate igual ao exitDate)
+//    boolean isDayTrade =
+//        exitRecords.stream().allMatch(r -> r.getEntryDate().equals(request.getExitDate()));
+//    TradeType tradeType = isDayTrade ? TradeType.DAY : TradeType.SWING;
+//    log.info(
+//        "Criando operação de saída: {} | Tipo: {} | DayTrade? {}",
+//        exitRecords.size(),
+//        tradeType,
+//        isDayTrade);
+//
+//    // Criar operação de saída
+//    Operation exitOperation =
+//        Operation.builder()
+//            .optionSeries(position.getOptionSeries())
+//            .brokerage(position.getBrokerage())
+//            .transactionType(exitTransactionType)
+//            .tradeType(tradeType)
+//            .entryDate(position.getOpenDate())
+//            .exitDate(request.getExitDate())
+//            .quantity(request.getQuantity())
+//            .entryUnitPrice(entryUnitPrice)
+//            .entryTotalValue(entryTotalValue)
+//            .exitUnitPrice(request.getExitUnitPrice())
+//            .exitTotalValue(exitTotalValue)
+//            .profitLoss(totalProfitLoss)
+//            .profitLossPercentage(calculateAverageProfitLossPercentageForDtos(exitRecords))
+//            .status(
+//                OperationStatus
+//                    .HIDDEN) // Esta operação fica HIDDEN, apenas a consolidada fica visível
+//            .user(SecurityUtil.getLoggedUser())
+//            .build();
+//
+//    // Adicionar casa de análise se fornecida
+//    if (request.getAnalysisHouseId() != null) {
+//      Optional<AnalysisHouse> analysisHouse =
+//          analysisHouseService.findById(request.getAnalysisHouseId());
+//      analysisHouse.ifPresent(exitOperation::setAnalysisHouse);
+//    }
+//
+//    Operation savedOperation = operationRepository.save(exitOperation);
+//
+//    // Criar link de operação com a posição
+//    PositionOperation posOp =
+//        PositionOperation.builder()
+//            .position(position)
+//            .operation(savedOperation)
+//            .type(
+//                position.getRemainingQuantity() == request.getQuantity()
+//                    ? PositionOperationType.FULL_EXIT
+//                    : PositionOperationType.PARTIAL_EXIT)
+//            .timestamp(LocalDateTime.now())
+//            .sequenceNumber(
+//                positionOperationRepository.findByPositionOrderByTimestampAsc(position).size() + 1)
+//            .build();
+//
+//    positionOperationRepository.save(posOp);
+//    log.info(
+//        "Operação de saída criada: {} | Entrada média: {} | Entrada total: {} | Saída: {} | Lucro: {} | Tipo: {}",
+//        savedOperation.getId(),
+//        entryUnitPrice,
+//        entryTotalValue,
+//        exitTotalValue,
+//        totalProfitLoss,
+//        tradeType);
+//
+//    return savedOperation;
+//  }
 
   /** Cria uma operação para a quantidade restante após uma saída parcial. */
-  private Operation createRemainderOperation(Position position, Operation originalOperation) {
-    // Criar operação para a quantidade restante
-    Operation remainderOperation =
-        Operation.builder()
-            .optionSeries(position.getOptionSeries())
-            .brokerage(position.getBrokerage())
-            .analysisHouse(originalOperation.getAnalysisHouse())
-            .transactionType(position.getDirection())
-            .entryDate(position.getOpenDate())
-            .quantity(position.getRemainingQuantity())
-            .entryUnitPrice(position.getAveragePrice())
-            .entryTotalValue(
-                position
-                    .getAveragePrice()
-                    .multiply(BigDecimal.valueOf(position.getRemainingQuantity())))
-            .status(OperationStatus.ACTIVE)
-            .user(SecurityUtil.getLoggedUser())
-            .build();
-
-    Operation savedOperation = operationRepository.save(remainderOperation);
-
-    // Criar link de operação com a posição
-    PositionOperation posOp =
-        PositionOperation.builder()
-            .position(position)
-            .operation(savedOperation)
-            .type(PositionOperationType.ENTRY) // É uma entrada pois representa a posição restante
-            .timestamp(LocalDateTime.now())
-            .sequenceNumber(
-                positionOperationRepository.findByPositionOrderByTimestampAsc(position).size() + 1)
-            .build();
-
-    positionOperationRepository.save(posOp);
-
-    return savedOperation;
-  }
+//  private Operation createRemainderOperation(Position position, Operation originalOperation) {
+//    // Criar operação para a quantidade restante
+//    Operation remainderOperation =
+//        Operation.builder()
+//            .optionSeries(position.getOptionSeries())
+//            .brokerage(position.getBrokerage())
+//            .analysisHouse(originalOperation.getAnalysisHouse())
+//            .transactionType(position.getDirection())
+//            .entryDate(position.getOpenDate())
+//            .quantity(position.getRemainingQuantity())
+//            .entryUnitPrice(position.getAveragePrice())
+//            .entryTotalValue(
+//                position
+//                    .getAveragePrice()
+//                    .multiply(BigDecimal.valueOf(position.getRemainingQuantity())))
+//            .status(OperationStatus.ACTIVE)
+//            .user(SecurityUtil.getLoggedUser())
+//            .build();
+//
+//    Operation savedOperation = operationRepository.save(remainderOperation);
+//
+//    // Criar link de operação com a posição
+//    PositionOperation posOp =
+//        PositionOperation.builder()
+//            .position(position)
+//            .operation(savedOperation)
+//            .type(PositionOperationType.ENTRY) // É uma entrada pois representa a posição restante
+//            .timestamp(LocalDateTime.now())
+//            .sequenceNumber(
+//                positionOperationRepository.findByPositionOrderByTimestampAsc(position).size() + 1)
+//            .build();
+//
+//    positionOperationRepository.save(posOp);
+//
+//    return savedOperation;
+//  }
 
   /** Cria ou atualiza a operação consolidada que representa o resultado agregado das saídas. */
-  private Operation createConsolidatedOperation(
-      Position position, Operation exitOperation, int exitQuantity) {
-    // Verificar se já existe uma operação consolidada
-    List<ExitRecord> allExits = exitRecordRepository.findByPositionId(position.getId());
-
-    // Calcular valores consolidados
-    BigDecimal totalProfitLoss =
-        allExits.stream().map(ExitRecord::getProfitLoss).reduce(BigDecimal.ZERO, BigDecimal::add);
-
-    // Calcular quantidade total de saída
-    int totalExitedQuantity = allExits.stream().mapToInt(ExitRecord::getQuantity).sum();
-
-    // Calcular preço médio ponderado de saída
-    BigDecimal totalExitValue =
-        allExits.stream()
-            .map(
-                record ->
-                    record.getExitUnitPrice().multiply(BigDecimal.valueOf(record.getQuantity())))
-            .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-    BigDecimal averageExitPrice =
-        totalExitValue.divide(
-            BigDecimal.valueOf(totalExitedQuantity), PRECISION, RoundingMode.HALF_UP);
-
-    // Calcular percentual médio ponderado de lucro/prejuízo
-    BigDecimal profitLossPercentage = calculateAverageProfitLossPercentage(allExits);
-
-    // Determinar status (WINNER ou LOSER)
-    OperationStatus status =
-        totalProfitLoss.compareTo(BigDecimal.ZERO) > 0
-            ? OperationStatus.WINNER
-            : OperationStatus.LOSER;
-
-    // Criar operação consolidada
-    Operation consolidatedOperation =
-        Operation.builder()
-            .optionSeries(position.getOptionSeries())
-            .brokerage(position.getBrokerage())
-            .analysisHouse(exitOperation.getAnalysisHouse())
-            .transactionType(exitOperation.getTransactionType())
-            .entryDate(position.getOpenDate())
-            .exitDate(exitOperation.getExitDate()) // Usa a data da última saída
-            .quantity(totalExitedQuantity)
-            .entryUnitPrice(position.getAveragePrice())
-            .entryTotalValue(
-                position.getAveragePrice().multiply(BigDecimal.valueOf(totalExitedQuantity)))
-            .exitUnitPrice(averageExitPrice)
-            .exitTotalValue(totalExitValue)
-            .profitLoss(totalProfitLoss)
-            .profitLossPercentage(profitLossPercentage)
-            .status(status)
-            .user(SecurityUtil.getLoggedUser())
-            .build();
-
-    return operationRepository.save(consolidatedOperation);
-  }
+//  private Operation createConsolidatedOperation(
+//      Position position, Operation exitOperation, int exitQuantity) {
+//    // Verificar se já existe uma operação consolidada
+//    List<ExitRecord> allExits = exitRecordRepository.findByPositionId(position.getId());
+//
+//    // Calcular valores consolidados
+//    BigDecimal totalProfitLoss =
+//        allExits.stream().map(ExitRecord::getProfitLoss).reduce(BigDecimal.ZERO, BigDecimal::add);
+//
+//    // Calcular quantidade total de saída
+//    int totalExitedQuantity = allExits.stream().mapToInt(ExitRecord::getQuantity).sum();
+//
+//    // Calcular preço médio ponderado de saída
+//    BigDecimal totalExitValue =
+//        allExits.stream()
+//            .map(
+//                record ->
+//                    record.getExitUnitPrice().multiply(BigDecimal.valueOf(record.getQuantity())))
+//            .reduce(BigDecimal.ZERO, BigDecimal::add);
+//
+//    BigDecimal averageExitPrice =
+//        totalExitValue.divide(
+//            BigDecimal.valueOf(totalExitedQuantity), PRECISION, RoundingMode.HALF_UP);
+//
+//    // Calcular percentual médio ponderado de lucro/prejuízo
+//    BigDecimal profitLossPercentage = calculateAverageProfitLossPercentage(allExits);
+//
+//    // Determinar status (WINNER ou LOSER)
+//    OperationStatus status =
+//        totalProfitLoss.compareTo(BigDecimal.ZERO) > 0
+//            ? OperationStatus.WINNER
+//            : OperationStatus.LOSER;
+//
+//    // Criar operação consolidada
+//    Operation consolidatedOperation =
+//        Operation.builder()
+//            .optionSeries(position.getOptionSeries())
+//            .brokerage(position.getBrokerage())
+//            .analysisHouse(exitOperation.getAnalysisHouse())
+//            .transactionType(exitOperation.getTransactionType())
+//            .entryDate(position.getOpenDate())
+//            .exitDate(exitOperation.getExitDate()) // Usa a data da última saída
+//            .quantity(totalExitedQuantity)
+//            .entryUnitPrice(position.getAveragePrice())
+//            .entryTotalValue(
+//                position.getAveragePrice().multiply(BigDecimal.valueOf(totalExitedQuantity)))
+//            .exitUnitPrice(averageExitPrice)
+//            .exitTotalValue(totalExitValue)
+//            .profitLoss(totalProfitLoss)
+//            .profitLossPercentage(profitLossPercentage)
+//            .status(status)
+//            .user(SecurityUtil.getLoggedUser())
+//            .build();
+//
+//    return operationRepository.save(consolidatedOperation);
+//  }
 
   /** Salva registros de saída para cada lote consumido. */
   private List<ExitRecord> saveExitRecords(
@@ -697,72 +695,72 @@ public class PositionExitService {
    * Aplica regras FIFO/LIFO para processamento de saída. Implementação alternativa para suporte a
    * versões anteriores.
    */
-  private List<ExitProcessingResult> applyFifoLifoRules(
-      Position position, Integer exitQuantity, LocalDate exitDate, BigDecimal exitUnitPrice) {
-    List<ExitProcessingResult> results = new ArrayList<>();
-    Integer remainingExitQuantity = exitQuantity;
-
-    // Passo 1: Obtemos todos os lotes de entrada ainda disponíveis
-    List<EntryLot> availableLots =
-        entryLotRepository.findByPositionAndRemainingQuantityGreaterThan(
-            position, 0); // Ordenados por data (mais antigos primeiro)
-
-    // Passo 2: Calculamos o dia da operação de saída
-    String exitDayKey = exitDate.format(DateTimeFormatter.ISO_DATE);
-
-    // Passo 3: Separamos os lotes do mesmo dia e de dias anteriores
-    List<EntryLot> sameDayLots =
-        availableLots.stream()
-            .filter(lot -> exitDayKey.equals(lot.getEntryDate().format(DateTimeFormatter.ISO_DATE)))
-            .collect(Collectors.toList());
-
-    List<EntryLot> previousDaysLots =
-        availableLots.stream()
-            .filter(
-                lot -> !exitDayKey.equals(lot.getEntryDate().format(DateTimeFormatter.ISO_DATE)))
-            .collect(Collectors.toList());
-
-    // Passo 4: Aplicamos LIFO para lotes do mesmo dia (do mais recente para o mais antigo)
-    sameDayLots.sort(
-        Comparator.comparing(EntryLot::getEntryDate).reversed()); // Mais recentes primeiro (LIFO)
-
-    for (EntryLot lot : sameDayLots) {
-      if (remainingExitQuantity <= 0) break;
-
-      int qtyToExit = Math.min(remainingExitQuantity, lot.getRemainingQuantity());
-      BigDecimal costBasis = lot.getUnitPrice().multiply(new BigDecimal(qtyToExit));
-      BigDecimal exitValue = exitUnitPrice.multiply(new BigDecimal(qtyToExit));
-      BigDecimal profitLoss = exitValue.subtract(costBasis);
-
-      // Registrar resultado desta saída
-      results.add(new ExitProcessingResult(lot, qtyToExit, costBasis, exitValue, profitLoss));
-
-      // Atualizar o lote
-      lot.setRemainingQuantity(lot.getRemainingQuantity() - qtyToExit);
-      remainingExitQuantity -= qtyToExit;
-    }
+//  private List<ExitProcessingResult> applyFifoLifoRules(
+//      Position position, Integer exitQuantity, LocalDate exitDate, BigDecimal exitUnitPrice) {
+//    List<ExitProcessingResult> results = new ArrayList<>();
+//    Integer remainingExitQuantity = exitQuantity;
+//
+//    // Passo 1: Obtemos todos os lotes de entrada ainda disponíveis
+//    List<EntryLot> availableLots =
+//        entryLotRepository.findByPositionAndRemainingQuantityGreaterThan(
+//            position, 0); // Ordenados por data (mais antigos primeiro)
+//
+//    // Passo 2: Calculamos o dia da operação de saída
+//    String exitDayKey = exitDate.format(DateTimeFormatter.ISO_DATE);
+//
+//    // Passo 3: Separamos os lotes do mesmo dia e de dias anteriores
+//    List<EntryLot> sameDayLots =
+//        availableLots.stream()
+//            .filter(lot -> exitDayKey.equals(lot.getEntryDate().format(DateTimeFormatter.ISO_DATE)))
+//            .collect(Collectors.toList());
+//
+//    List<EntryLot> previousDaysLots =
+//        availableLots.stream()
+//            .filter(
+//                lot -> !exitDayKey.equals(lot.getEntryDate().format(DateTimeFormatter.ISO_DATE)))
+//            .collect(Collectors.toList());
+//
+//    // Passo 4: Aplicamos LIFO para lotes do mesmo dia (do mais recente para o mais antigo)
+//    sameDayLots.sort(
+//        Comparator.comparing(EntryLot::getEntryDate).reversed()); // Mais recentes primeiro (LIFO)
+//
+//    for (EntryLot lot : sameDayLots) {
+//      if (remainingExitQuantity <= 0) break;
+//
+//      int qtyToExit = Math.min(remainingExitQuantity, lot.getRemainingQuantity());
+//      BigDecimal costBasis = lot.getUnitPrice().multiply(new BigDecimal(qtyToExit));
+//      BigDecimal exitValue = exitUnitPrice.multiply(new BigDecimal(qtyToExit));
+//      BigDecimal profitLoss = exitValue.subtract(costBasis);
+//
+//      // Registrar resultado desta saída
+//      results.add(new ExitProcessingResult(lot, qtyToExit, costBasis, exitValue, profitLoss));
+//
+//      // Atualizar o lote
+//      lot.setRemainingQuantity(lot.getRemainingQuantity() - qtyToExit);
+//      remainingExitQuantity -= qtyToExit;
+//    }
 
     // Passo 5: Se ainda há quantidade a sair, aplicamos FIFO para dias anteriores
-    if (remainingExitQuantity > 0) {
-      for (EntryLot lot : previousDaysLots) { // Já estão ordenados por data (FIFO)
-        if (remainingExitQuantity <= 0) break;
-
-        int qtyToExit = Math.min(remainingExitQuantity, lot.getRemainingQuantity());
-        BigDecimal costBasis = lot.getUnitPrice().multiply(new BigDecimal(qtyToExit));
-        BigDecimal exitValue = exitUnitPrice.multiply(new BigDecimal(qtyToExit));
-        BigDecimal profitLoss = exitValue.subtract(costBasis);
-
-        // Registrar resultado desta saída
-        results.add(new ExitProcessingResult(lot, qtyToExit, costBasis, exitValue, profitLoss));
-
-        // Atualizar o lote
-        lot.setRemainingQuantity(lot.getRemainingQuantity() - qtyToExit);
-        remainingExitQuantity -= qtyToExit;
-      }
-    }
-
-    return results;
-  }
+//    if (remainingExitQuantity > 0) {
+//      for (EntryLot lot : previousDaysLots) { // Já estão ordenados por data (FIFO)
+//        if (remainingExitQuantity <= 0) break;
+//
+//        int qtyToExit = Math.min(remainingExitQuantity, lot.getRemainingQuantity());
+//        BigDecimal costBasis = lot.getUnitPrice().multiply(new BigDecimal(qtyToExit));
+//        BigDecimal exitValue = exitUnitPrice.multiply(new BigDecimal(qtyToExit));
+//        BigDecimal profitLoss = exitValue.subtract(costBasis);
+//
+//        // Registrar resultado desta saída
+//        results.add(new ExitProcessingResult(lot, qtyToExit, costBasis, exitValue, profitLoss));
+//
+//        // Atualizar o lote
+//        lot.setRemainingQuantity(lot.getRemainingQuantity() - qtyToExit);
+//        remainingExitQuantity -= qtyToExit;
+//      }
+//    }
+//
+//    return results;
+//  }
 
   /** Classe interna para armazenar resultados do processamento de saída. */
 //  private static class ExitProcessingResult {

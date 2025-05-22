@@ -9,17 +9,12 @@ import com.olisystem.optionsmanager.model.operation.OperationStatus;
 import com.olisystem.optionsmanager.model.position.Position;
 import com.olisystem.optionsmanager.record.operation.ExistingOperationContext;
 import com.olisystem.optionsmanager.record.operation.OperationContext;
-import com.olisystem.optionsmanager.repository.AverageOperationGroupRepository;
 import com.olisystem.optionsmanager.repository.AverageOperationItemRepository;
 import com.olisystem.optionsmanager.repository.OperationRepository;
-import com.olisystem.optionsmanager.repository.position.EntryLotRepository;
-import com.olisystem.optionsmanager.repository.position.ExitRecordRepository;
-import com.olisystem.optionsmanager.repository.position.PositionOperationRepository;
 import com.olisystem.optionsmanager.repository.position.PositionRepository;
 import com.olisystem.optionsmanager.service.operation.averageOperation.AverageOperationService;
 import com.olisystem.optionsmanager.service.operation.consolidate.OperationConsolidateService;
 import com.olisystem.optionsmanager.service.operation.creation.OperationCreationService;
-import com.olisystem.optionsmanager.service.position.PositionCalculator;
 import com.olisystem.optionsmanager.service.position.PositionService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -35,11 +30,6 @@ public class OperationStrategyServiceImpl implements OperationStrategyService {
     private final PositionRepository positionRepository;
     private final OperationConsolidateService consolidateService;
     private final OperationRepository operationRepository;
-    private final EntryLotRepository entryLotRepository;
-    private final PositionCalculator positionCalculator;
-    private final PositionOperationRepository positionOperationRepository;
-    private final AverageOperationGroupRepository groupRepository;
-    private final ExitRecordRepository exitRecordRepository;
 
     // Construtor com injeção de dependências
     public OperationStrategyServiceImpl(
@@ -49,12 +39,8 @@ public class OperationStrategyServiceImpl implements OperationStrategyService {
             AverageOperationItemRepository itemRepository,
             PositionRepository positionRepository,
             OperationConsolidateService consolidateService,
-            OperationRepository operationRepository,
-            EntryLotRepository entryLotRepository,
-            PositionCalculator positionCalculator,
-            PositionOperationRepository positionOperationRepository,
-            AverageOperationGroupRepository groupRepository,
-            ExitRecordRepository exitRecordRepository) {
+            OperationRepository operationRepository
+           ) {
         this.creationService = creationService;
         this.positionService = positionService;
         this.averageOperationService = averageOperationService;
@@ -62,11 +48,6 @@ public class OperationStrategyServiceImpl implements OperationStrategyService {
         this.positionRepository = positionRepository;
         this.consolidateService = consolidateService;
         this.operationRepository = operationRepository;
-        this.entryLotRepository = entryLotRepository;
-        this.positionCalculator = positionCalculator;
-        this.positionOperationRepository = positionOperationRepository;
-        this.groupRepository = groupRepository;
-        this.exitRecordRepository = exitRecordRepository;
     }
 
     @Override
