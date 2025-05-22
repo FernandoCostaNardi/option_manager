@@ -124,6 +124,7 @@ public class OperationCreationServiceImpl implements OperationCreationService {
                 .transactionType(data.transactionType())
                 .tradeType(data.tradeType())
                 .entryDate(data.entryDate())
+                .exitDate(data.exitDate())
                 .quantity(data.quantity())
                 .entryUnitPrice(data.entryUnitPrice())
                 .entryTotalValue(entryTotalValue)

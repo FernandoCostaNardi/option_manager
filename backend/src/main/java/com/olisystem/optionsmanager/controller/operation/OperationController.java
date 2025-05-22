@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.UUID;
 
 import com.olisystem.optionsmanager.service.operation.search.OperationSearchService;
+import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -88,15 +89,15 @@ public class OperationController {
 
     @PostMapping("/operations/finalize")
     public ResponseEntity<?> finalizeOperation(
-        @RequestBody OperationFinalizationRequest request) {
-      try {
-        Operation response =  operationService.createExitOperation(request);
-        return ResponseEntity.ok(response);
-      } catch (Exception e) {
-        return ResponseEntity.internalServerError()
-            .body("Erro ao finalizar operação: " + e.getMessage());
+            @Valid @RequestBody OperationFinalizationRequest request) {
+      log.info("Finalizando operação com ID: {}", request.getOperationId());
+      Operation result = operationService.createExitOperation(request);
+      return ResponseEntity.ok(result);
       }
     }
+
+
+
   //
   //  @PostMapping("/operations/finalize-parcial")
   //  public ResponseEntity<?> finalizeParcialOperation(
@@ -226,4 +227,4 @@ public class OperationController {
   //
   //    return new ResponseEntity<>(pdfBytes, headers, HttpStatus.OK);
   //  }
-}
+

@@ -73,6 +73,9 @@ export const OperacaoAtivaItem: React.FC<OperacaoAtivaItemProps> = ({
       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-700 text-center">
         {operacao.quantity}
       </td>
+       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-700 text-right">
+        {formatarMoeda(operacao.entryUnitPrice)}
+       </td>
       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-700 text-right">
         {formatarMoeda(operacao.entryTotalValue)}
       </td>

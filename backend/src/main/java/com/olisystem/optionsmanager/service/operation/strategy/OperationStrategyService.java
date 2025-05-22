@@ -15,13 +15,4 @@ public interface OperationStrategyService {
      */
     Operation processExistingOperation(OperationContext context, Operation activeOperation);
 
-    /**
-     * Processa uma saida parcial de uma operação
-     */
-    Operation processPartialExitOperation(OperationExitContext context);
-
-    /**
-     * Processa uma saida total de uma operação
-     */
-    Operation processExitOperation(OperationExitContext context);
 }

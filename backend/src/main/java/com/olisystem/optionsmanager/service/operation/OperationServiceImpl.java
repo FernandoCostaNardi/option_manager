@@ -19,10 +19,12 @@ import com.olisystem.optionsmanager.record.operation.OperationExitContext;
 import com.olisystem.optionsmanager.record.operation.OperationExitContext;
 import com.olisystem.optionsmanager.repository.OperationRepository;
 import com.olisystem.optionsmanager.repository.OperationTargetRepository;
+import com.olisystem.optionsmanager.resolver.operation.ExitOperationStrategyResolver;
 import com.olisystem.optionsmanager.service.analysis_house.AnalysisHouseService;
 import com.olisystem.optionsmanager.service.asset.AssetService;
 import com.olisystem.optionsmanager.service.brokerage.BrokerageService;
 import com.olisystem.optionsmanager.service.operation.filter.OperationFilterService;
+import com.olisystem.optionsmanager.service.operation.strategy.ExitOperationStrategy;
 import com.olisystem.optionsmanager.service.operation.strategy.OperationStrategyService;
 import com.olisystem.optionsmanager.service.option_series.OptionSerieService;
 import com.olisystem.optionsmanager.util.SecurityUtil;
@@ -51,6 +53,7 @@ public class OperationServiceImpl implements OperationService {
     private final AnalysisHouseService analysisHouseService;
     private final OperationTargetRepository operationTargetRepository;
     private final OperationFilterService operationFilterService;
+    private final ExitOperationStrategyResolver exitOperationStrategyResolver;
 
     // Construtor com injeção de dependências
     public OperationServiceImpl(
@@ -62,7 +65,8 @@ public class OperationServiceImpl implements OperationService {
             BrokerageService brokerageService,
             AnalysisHouseService analysisHouseService,
             OperationTargetRepository operationTargetRepository,
-            OperationFilterService operationFilterService
+            OperationFilterService operationFilterService,
+            ExitOperationStrategyResolver exitOperationStrategyResolver
             ) {
         this.operationValidator = operationValidator;
         this.assetService = assetService;
@@ -73,6 +77,7 @@ public class OperationServiceImpl implements OperationService {
         this.analysisHouseService = analysisHouseService;
         this.operationTargetRepository = operationTargetRepository;
         this.operationFilterService = operationFilterService;
+        this.exitOperationStrategyResolver = exitOperationStrategyResolver;
     }
 
     @Override
@@ -107,28 +112,28 @@ public class OperationServiceImpl implements OperationService {
     @Override
     @Transactional
     public Operation createExitOperation(OperationFinalizationRequest request) {
-        log.info("Iniciando criação de saida com quantidade {} e preço {}",
-                request.getQuantity(), request.getExitUnitPrice());
+        log.info("Processando finalização de operação: {}", request.getOperationId());
 
-        // 1. Validar e preparar recursos básicos
-        operationValidator.validateCreateExitOperation(request);
-        final User currentUser = SecurityUtil.getLoggedUser();
+        // 1. Buscar operação ativa
+        Operation activeOperation = findActiveOperation(request.getOperationId());
 
-        // 2. Buscar a operação ativa com o id fornecido
-        Operation activeOperation = operationRepository.findById(request.getOperationId())
-                .orElseThrow(() -> new ResourceNotFoundException("Operação não encontrada"));
+        // 2. Criar contexto de execução
+        OperationExitContext context = createExitContext(request, activeOperation);
 
-        // 3. Criar contexto básico reutilizável
-        OperationExitContext context = new OperationExitContext(request, activeOperation, currentUser);
+        // Resolver estratégia apropriada e processar
+        ExitOperationStrategy strategy = exitOperationStrategyResolver.resolveStrategy(context);
 
-        // 4. Descobrir se a quantidade da operação ativa é maior que a quantidade da saida
-        if (activeOperation.getQuantity() > request.getQuantity()) {
-            // 4.0 Será uma saida parcial
-            return strategyService.processPartialExitOperation(context);
-        }else{
-            // 4.1 Será uma saida total
-            return strategyService.processExitOperation(context);
-        }
+        return strategy.process(context);
+    }
+
+    private Operation findActiveOperation(UUID operationId) {
+        return operationRepository.findById(operationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Operação não encontrada com ID: " + operationId));
+    }
+
+    private OperationExitContext createExitContext(OperationFinalizationRequest request, Operation activeOperation) {
+        User currentUser = SecurityUtil.getLoggedUser();
+        return new OperationExitContext(request, activeOperation, currentUser);
     }
 
     @Override
