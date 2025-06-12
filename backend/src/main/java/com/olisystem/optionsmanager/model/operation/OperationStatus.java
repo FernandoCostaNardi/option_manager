@@ -4,7 +4,8 @@ public enum OperationStatus {
   ACTIVE("Ativa"),
   WINNER("Vencedora"),
   LOSER("Perdedora"),
-  HIDDEN("Oculta");
+  HIDDEN("Oculta"),
+  NEUTRAl("Neutra");
 
   private final String description;
 

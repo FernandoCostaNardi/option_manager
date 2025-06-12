@@ -9,6 +9,7 @@ import com.olisystem.optionsmanager.model.transaction.TransactionType;
 import com.olisystem.optionsmanager.record.operation.OperationExitPositionContext;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 public interface OperationCreationService {
     /**
@@ -29,5 +30,22 @@ public interface OperationCreationService {
     /**
      * Cria uma nova operação de saída
      */
-    Operation createExitOperation(OperationExitPositionContext exitPositionContext, TradeType tradeType, BigDecimal profitLoss, TransactionType type);
+    Operation createExitOperation(OperationExitPositionContext exitPositionContext, TradeType tradeType, BigDecimal profitLoss, TransactionType type, Integer totalQuantity);
+
+    /**
+     * Cria uma operação de saída com dados específicos calculados
+     * Usado para cenários complexos onde os dados já foram calculados previamente
+     */
+    Operation createExitOperationWithSpecificData(
+        Operation originalOperation,
+        OptionSerie optionSerie,
+        User currentUser,
+        int quantity,
+        BigDecimal entryUnitPrice,
+        BigDecimal exitUnitPrice,
+        BigDecimal profitLoss,
+        BigDecimal profitLossPercentage,
+        TradeType tradeType,
+        LocalDate exitDate
+    );
 }

@@ -306,9 +306,9 @@ export function FinalizarOperacaoModal({ isOpen, operacao, onClose, onSuccess }:
               try {
                 const token = localStorage.getItem("token");
                 // Determinar qual endpoint usar com base no tipo de saída
-                const endpoint = saidaTotal 
+                const endpoint = saidaTotal
                   ? "http://localhost:8080/api/operations/finalize" 
-                  : "http://localhost:8080/api/operations/finalize-parcial";
+                  : "http://localhost:8080/api/operations/finalize";
                 
                 console.log(`[DEBUG] Finalizando operação usando endpoint: ${endpoint}`);
                 console.log(`[DEBUG] Payload: ${JSON.stringify(payload)}`);

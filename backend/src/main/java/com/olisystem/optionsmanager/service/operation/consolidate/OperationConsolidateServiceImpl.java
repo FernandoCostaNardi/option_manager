@@ -28,7 +28,6 @@ public class OperationConsolidateServiceImpl implements OperationConsolidateServ
    
     @Override
     public Operation consolidateOperationEntryValues(Operation consolidatedEntry, Position position) {
-        
         consolidatedEntry.setQuantity(position.getRemainingQuantity());
         consolidatedEntry.setEntryUnitPrice(position.getAveragePrice());
         consolidatedEntry.setEntryTotalValue(position.getAveragePrice().multiply(new BigDecimal(position.getRemainingQuantity())));

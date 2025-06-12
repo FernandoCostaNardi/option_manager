@@ -36,6 +36,14 @@ public class GlobalExceptionHandler {
         .body(new ErrorResponseDto("Recurso não encontrado", ex.getMessage()));
   }
 
+  @ExceptionHandler(BusinessException.class)
+  public ResponseEntity<ErrorResponseDto> handleBusinessException(
+      BusinessException ex, WebRequest request) {
+    log.error("Erro de negócio: {}", ex.getMessage(), ex);
+    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+        .body(new ErrorResponseDto("Erro de negócio", ex.getMessage()));
+  }
+
   @ExceptionHandler(InvalidIdFormatException.class)
   public ResponseEntity<ErrorResponseDto> handleInvalidIdFormatException(
       InvalidIdFormatException ex, WebRequest request) {

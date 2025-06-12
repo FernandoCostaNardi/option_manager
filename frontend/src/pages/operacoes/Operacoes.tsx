@@ -174,19 +174,21 @@ export function Operacoes() {
   const DashboardCardWithSecondary = ({ 
     icon, 
     title, 
-    primaryValue, 
-    secondaryValue, 
+    primaryValue,
+    secondaryValue,
     isPrimaryPositive,
     isSecondaryPositive,
-    color 
+    color,
+    extraInfo
   }: { 
     icon: React.ReactNode, 
     title: string, 
-    primaryValue: string | number, 
+    primaryValue: string | number,
     secondaryValue: string | number,
     isPrimaryPositive: boolean,
     isSecondaryPositive: boolean,
-    color: string 
+    color: string,
+    extraInfo?: React.ReactNode
   }) => (
     <div className="bg-white rounded-lg shadow-sm overflow-hidden">
       <div className="p-4 sm:p-6">
@@ -196,9 +198,9 @@ export function Operacoes() {
           </div>
           <div>
             <h3 className="text-sm font-medium text-gray-500">{title}</h3>
-            <p className={`text-2xl font-bold mt-1 ${isPrimaryPositive ? 'text-green-600' : 'text-red-600'}`}>
-              {primaryValue}
-            </p>
+            <p className={`text-2xl font-bold mt-1 ${isPrimaryPositive ? 'text-green-600' : 'text-red-600'}`}>{primaryValue}</p>
+            <p className={`text-sm mt-1 ${isSecondaryPositive ? 'text-green-600' : 'text-red-600'}`}>{secondaryValue}</p>
+            {extraInfo && <div className="text-xs text-gray-500 mt-1">{extraInfo}</div>}
           </div>
         </div>
       </div>
@@ -248,11 +250,6 @@ export function Operacoes() {
         icon={<DollarSign className="h-6 w-6 text-green-500" />}
         title="Resultado Total"
         primaryValue={isLoading ? "..." : formatarMoeda(dashboardData.totalProfitLoss || 0)}
-        secondaryValue={isLoading ? "..." : (
-          (dashboardData.totalProfitLoss || 0) >= 0 
-            ? `Ganhos: ${formatarMoeda(dashboardData.totalProfitLoss || 0)}`
-            : `Perdas: ${formatarMoeda(Math.abs(dashboardData.totalProfitLoss || 0))}`
-        )}
         isPrimaryPositive={!isLoading && (dashboardData.totalProfitLoss || 0) >= 0}
         isSecondaryPositive={!isLoading && (dashboardData.totalProfitLoss || 0) >= 0}
         color="bg-green-100"
@@ -261,14 +258,10 @@ export function Operacoes() {
         icon={<Percent className="h-6 w-6 text-blue-500" />}
         title="% Total"
         primaryValue={isLoading ? "..." : `${(dashboardData.totalProfitLossPercentage || 0).toFixed(2)}%`}
-        secondaryValue={isLoading ? "..." : (
-          (dashboardData.totalProfitLossPercentage || 0) >= 0 
-            ? "Rentabilidade positiva" 
-            : "Rentabilidade negativa"
-        )}
         isPrimaryPositive={!isLoading && (dashboardData.totalProfitLossPercentage || 0) >= 0}
         isSecondaryPositive={!isLoading && (dashboardData.totalProfitLossPercentage || 0) >= 0}
         color="bg-blue-100"
+        extraInfo={isLoading ? "..." : `Total investido: ${formatarMoeda(dashboardData.totalEntryValue || 0)}`}
       />
     </div>
   );

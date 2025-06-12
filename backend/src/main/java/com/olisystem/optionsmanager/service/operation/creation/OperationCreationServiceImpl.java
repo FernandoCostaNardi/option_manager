@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 @Slf4j
 @Service
@@ -93,16 +94,27 @@ public class OperationCreationServiceImpl implements OperationCreationService {
     }
 
     @Override
-    public Operation createExitOperation(OperationExitPositionContext context, TradeType tradeType, BigDecimal profitLoss, TransactionType type) {
+    public Operation createExitOperation(OperationExitPositionContext context, TradeType tradeType, BigDecimal profitLoss, TransactionType type, Integer totalQuantity) {
+        
+        // ✅ CORREÇÃO: Validar dados antes de criar operação
+        validateExitOperationData(context, tradeType, profitLoss, type, totalQuantity);
+        
         Operation operation = buildExitOperation(
-                OperationBuildExitData.fromRequest(context, profitLoss, tradeType, type),
+                OperationBuildExitData.fromRequest(context, profitLoss, tradeType, type, totalQuantity),
                 context.context().activeOperation().getOptionSeries(),
-                profitLoss.compareTo(BigDecimal.ZERO) > 0 ? OperationStatus.WINNER : OperationStatus.LOSER,
+                profitLoss.compareTo(BigDecimal.ZERO) >= 0 ? OperationStatus.WINNER : OperationStatus.LOSER,
                 context.context().currentUser()
         );
 
+        // ✅ CORREÇÃO: Validar operação construída antes de salvar
+        validateBuiltExitOperation(operation);
+
         Operation savedOperation = operationRepository.save(operation);
         logOperationCreation(savedOperation.getStatus(), savedOperation);
+        
+        log.debug("Operação de saída criada com sucesso: ID={}, quantidade={}, profitLoss={}, status={}",
+                savedOperation.getId(), savedOperation.getQuantity(), savedOperation.getProfitLoss(), savedOperation.getStatus());
+        
         return savedOperation;
     }
 
@@ -168,9 +180,135 @@ public class OperationCreationServiceImpl implements OperationCreationService {
                 .build();
     }
 
+    @Override
+    @Transactional
+    public Operation createExitOperationWithSpecificData(
+            Operation originalOperation,
+            OptionSerie optionSerie,
+            User currentUser,
+            int quantity,
+            BigDecimal entryUnitPrice,
+            BigDecimal exitUnitPrice,
+            BigDecimal profitLoss,
+            BigDecimal profitLossPercentage,
+            TradeType tradeType,
+            LocalDate exitDate) {
+        
+        log.debug("Criando operação de saída com dados específicos: quantidade={}, P&L={}, tipo={}", 
+                quantity, profitLoss, tradeType);
+
+        // Calcular valores totais
+        BigDecimal entryTotalValue = entryUnitPrice.multiply(BigDecimal.valueOf(quantity));
+        BigDecimal exitTotalValue = exitUnitPrice.multiply(BigDecimal.valueOf(quantity));
+
+        // Determinar status baseado no P&L
+        OperationStatus status = profitLoss.compareTo(BigDecimal.ZERO) >= 0 ? 
+            OperationStatus.WINNER : OperationStatus.LOSER;
+
+        // Criar a operação de saída
+        Operation exitOperation = Operation.builder()
+                .optionSeries(optionSerie)
+                .brokerage(originalOperation.getBrokerage())
+                .analysisHouse(originalOperation.getAnalysisHouse())
+                .transactionType(TransactionType.SELL)
+                .tradeType(tradeType)
+                .entryDate(originalOperation.getEntryDate())
+                .exitDate(exitDate)
+                .quantity(quantity)
+                .entryUnitPrice(entryUnitPrice)
+                .entryTotalValue(entryTotalValue)
+                .exitUnitPrice(exitUnitPrice)
+                .exitTotalValue(exitTotalValue)
+                .profitLoss(profitLoss)
+                .profitLossPercentage(profitLossPercentage)
+                .status(status)
+                .user(currentUser)
+                .build();
+
+        Operation savedOperation = operationRepository.save(exitOperation);
+        
+        log.info("Operação de saída específica criada: id={}, P&L={}, tipo={}", 
+                savedOperation.getId(), profitLoss, tradeType);
+        
+        return savedOperation;
+    }
+
+    /**
+     * ✅ NOVO MÉTODO: Validar dados antes de criar operação de saída
+     */
+    private void validateExitOperationData(OperationExitPositionContext context, TradeType tradeType, 
+                                          BigDecimal profitLoss, TransactionType type, Integer totalQuantity) {
+        
+        if (context == null) {
+            throw new IllegalArgumentException("Contexto de saída não pode ser nulo");
+        }
+        
+        if (tradeType == null) {
+            throw new IllegalArgumentException("Tipo de trade não pode ser nulo");
+        }
+        
+        if (profitLoss == null) {
+            throw new IllegalArgumentException("Valor de lucro/prejuízo não pode ser nulo");
+        }
+        
+        if (type == null) {
+            throw new IllegalArgumentException("Tipo de transação não pode ser nulo");
+        }
+        
+        if (totalQuantity == null || totalQuantity <= 0) {
+            throw new IllegalArgumentException("Quantidade deve ser maior que zero. Valor recebido: " + totalQuantity);
+        }
+        
+        if (context.context() == null || context.context().request() == null) {
+            throw new IllegalArgumentException("Request de finalização não pode ser nulo");
+        }
+        
+        log.debug("Validação de dados aprovada para criação de operação de saída");
+    }
+
+    /**
+     * ✅ NOVO MÉTODO: Validar operação construída antes de salvar
+     */
+    private void validateBuiltExitOperation(Operation operation) {
+        
+        if (operation == null) {
+            throw new IllegalArgumentException("Operação construída não pode ser nula");
+        }
+        
+        // ✅ CORREÇÃO: Rejeitar operações com quantidade zero
+        if (operation.getQuantity() == null || operation.getQuantity() <= 0) {
+            throw new IllegalArgumentException("Operação com quantidade inválida será rejeitada. Quantidade: " + operation.getQuantity());
+        }
+        
+        // ✅ CORREÇÃO: Rejeitar operações com valores de entrada zerados indevidamente
+        if (operation.getEntryTotalValue() == null || operation.getEntryTotalValue().compareTo(BigDecimal.ZERO) <= 0) {
+            log.warn("ATENÇÃO: Operação com valor de entrada zerado ou negativo será rejeitada. Valor: {}", operation.getEntryTotalValue());
+            throw new IllegalArgumentException("Operação com valor de entrada inválido será rejeitada");
+        }
+        
+        // ✅ CORREÇÃO: Rejeitar operações com valores de saída zerados indevidamente
+        if (operation.getExitTotalValue() == null || operation.getExitTotalValue().compareTo(BigDecimal.ZERO) <= 0) {
+            log.warn("ATENÇÃO: Operação com valor de saída zerado ou negativo será rejeitada. Valor: {}", operation.getExitTotalValue());
+            throw new IllegalArgumentException("Operação com valor de saída inválido será rejeitada");
+        }
+        
+        // Validar consistência de datas
+        if (operation.getEntryDate() == null || operation.getExitDate() == null) {
+            throw new IllegalArgumentException("Datas de entrada e saída são obrigatórias");
+        }
+        
+        if (operation.getExitDate().isBefore(operation.getEntryDate())) {
+            throw new IllegalArgumentException("Data de saída não pode ser anterior à data de entrada");
+        }
+        
+        log.debug("Validação da operação construída aprovada: quantidade={}, valor_entrada={}, valor_saida={}",
+                operation.getQuantity(), operation.getEntryTotalValue(), operation.getExitTotalValue());
+    }
+
     private void logOperationCreation(OperationStatus status, Operation operation) {
         log.info("Nova operação {} criada: id={}, quantidade={}, preço={}",
                 status, operation.getId(), operation.getQuantity(), operation.getEntryUnitPrice());
     }
+
 }
 

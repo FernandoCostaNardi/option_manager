@@ -32,6 +32,9 @@ public interface PositionRepository
       @Param("optionSeries") OptionSerie optionSeries,
       @Param("direction") TransactionType direction);
 
-  @Query("SELECT p FROM Position p JOIN p.operations o WHERE o.id = :operationId")
-  Optional<Position> findByOperationId(@Param("operationId") Long operationId);
+  @Query("SELECT p FROM Position p JOIN p.operations po WHERE po.operation.id = :operationId")
+  Optional<Position> findByOperationId(@Param("operationId") UUID operationId);
+
+  @Query("SELECT DISTINCT p FROM Position p JOIN p.operations po WHERE po.operation.id IN :operationIds")
+  List<Position> findByOperationIds(@Param("operationIds") List<UUID> operationIds);
 }

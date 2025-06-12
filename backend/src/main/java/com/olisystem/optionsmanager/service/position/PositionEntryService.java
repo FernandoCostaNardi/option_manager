@@ -3,6 +3,7 @@ package com.olisystem.optionsmanager.service.position;
 import com.olisystem.optionsmanager.model.operation.Operation;
 import com.olisystem.optionsmanager.model.position.*;
 import com.olisystem.optionsmanager.repository.position.EntryLotRepository;
+import com.olisystem.optionsmanager.repository.position.ExitRecordRepository;
 import com.olisystem.optionsmanager.repository.position.PositionOperationRepository;
 import com.olisystem.optionsmanager.repository.position.PositionRepository;
 import com.olisystem.optionsmanager.util.SecurityUtil;
@@ -28,6 +29,7 @@ public class PositionEntryService {
   private final EntryLotRepository entryLotRepository;
   private final PositionOperationRepository positionOperationRepository;
   private final PositionCalculator calculator;
+  private final ExitRecordRepository exitRecordRepository;
 
   /** Cria uma nova posição a partir de uma operação existente. */
   public Position createPositionFromOperation(Operation operation) {
@@ -89,10 +91,47 @@ public class PositionEntryService {
     // Determinar o próximo número de sequência para o lote
     int nextSequence = position.getEntryLots().size() + 1;
 
+    // CAPTURAR quantidade restante ANTES de atualizar a Position
+    int originalRemainingQuantity = position.getRemainingQuantity();
+    
     // Atualizar quantidades e preço médio
     int newTotalQuantity = position.getTotalQuantity() + operation.getQuantity();
     position.setTotalQuantity(newTotalQuantity);
     position.setRemainingQuantity(position.getRemainingQuantity() + operation.getQuantity());
+
+    // CALCULAR PREÇO MÉDIO baseado no valor efetivo dos lotes existentes
+    List<EntryLot> existingLots = entryLotRepository.findByPositionOrderByEntryDateAsc(position);
+    
+    // Calcular valor efetivo dos lotes EXISTENTES apenas
+    BigDecimal currentEffectiveValue = BigDecimal.ZERO;
+    
+    for (EntryLot lot : existingLots) {
+        if (lot.getRemainingQuantity() > 0) {
+            // Valor original do lote total
+            BigDecimal originalLotValue = lot.getUnitPrice().multiply(BigDecimal.valueOf(lot.getQuantity()));
+            
+            // Buscar ExitRecords para este lote para saber o valor das saídas
+            BigDecimal totalExitValue = exitRecordRepository.findByEntryLot(lot)
+                .stream()
+                .map(exitRecord -> exitRecord.getExitUnitPrice().multiply(BigDecimal.valueOf(exitRecord.getQuantity())))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+            
+            // Valor efetivo = valor original - valor das saídas
+            BigDecimal effectiveLotValue = originalLotValue.subtract(totalExitValue);
+            currentEffectiveValue = currentEffectiveValue.add(effectiveLotValue);
+        }
+    }
+    
+    BigDecimal newEntryValue = operation.getEntryTotalValue();
+    BigDecimal totalValue = currentEffectiveValue.add(newEntryValue);
+    
+    // Dividir pela quantidade RESTANTE, não pela quantidade TOTAL
+    int remainingQuantityAfterEntry = originalRemainingQuantity + operation.getQuantity();
+    
+    BigDecimal newAveragePrice = totalValue.divide(
+        BigDecimal.valueOf(remainingQuantityAfterEntry), 6, java.math.RoundingMode.HALF_UP);
+    
+    position.setAveragePrice(newAveragePrice);
 
     // Criar o novo lote
     EntryLot entryLot =
@@ -108,11 +147,6 @@ public class PositionEntryService {
             .build();
 
     entryLotRepository.save(entryLot);
-
-    // Recalcular preço médio
-    List<EntryLot> allLots = entryLotRepository.findByPositionOrderByEntryDateAsc(position);
-    BigDecimal newAveragePrice = calculator.calculateWeightedAveragePrice(allLots);
-    position.setAveragePrice(newAveragePrice);
 
     // Criar o link de operação
     PositionOperation posOp =

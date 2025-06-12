@@ -91,6 +91,10 @@ public class OperationStrategyServiceImpl implements OperationStrategyService {
 
     @Transactional
     public Operation processConsolidationStrategy(ExistingOperationContext context) {
+        log.info("=== DEBUG CONSOLIDATION STRATEGY ===");
+        log.info("Posição ANTES: Quantidade total={}, Quantidade restante={}, Preço médio={}", 
+                 context.position().getTotalQuantity(), context.position().getRemainingQuantity(), context.position().getAveragePrice());
+        
         // 1. Esconder a operação ativa existente
         context.activeOperation().setStatus(OperationStatus.HIDDEN);
         operationRepository.save(context.activeOperation());
@@ -101,7 +105,11 @@ public class OperationStrategyServiceImpl implements OperationStrategyService {
         averageOperationService.addNewItemGroup(context.group(), hiddenOperation, OperationRoleType.NEW_ENTRY);
 
         // 3. Atualizar a posição
+        log.info("Chamando addEntryToPosition com operação: quantidade={}, preço={}", 
+                 hiddenOperation.getQuantity(), hiddenOperation.getEntryUnitPrice());
         positionService.addEntryToPosition(context.position(), hiddenOperation);
+        log.info("Posição APÓS addEntryToPosition: Quantidade total={}, Quantidade restante={}, Preço médio={}", 
+                 context.position().getTotalQuantity(), context.position().getRemainingQuantity(), context.position().getAveragePrice());
 
         // 4. Criar operação consolidada
         Operation consolidatedEntry = creationService.createConsolidatedOperation(
@@ -110,23 +118,48 @@ public class OperationStrategyServiceImpl implements OperationStrategyService {
                 context.itemGroup().getGroup(), consolidatedEntry, OperationRoleType.CONSOLIDATED_ENTRY);
 
         // 5. Atualizar valores e estruturas relacionadas
+        log.info("Chamando consolidateOperationEntryValues...");
         consolidateService.consolidateOperationEntryValues(consolidatedEntry, context.position());
+        log.info("Posição APÓS consolidate: Quantidade total={}, Quantidade restante={}, Preço médio={}", 
+                 context.position().getTotalQuantity(), context.position().getRemainingQuantity(), context.position().getAveragePrice());
+        
         averageOperationService.updateAverageOperationGroup(context.group(), context.position());
+        
+        log.info("Operação consolidada final: quantidade={}, preço={}, valor total={}", 
+                 consolidatedEntry.getQuantity(), consolidatedEntry.getEntryUnitPrice(), consolidatedEntry.getEntryTotalValue());
+        log.info("=== FIM CONSOLIDATION STRATEGY ===");
 
         return consolidatedEntry;
     }
 
     @Transactional
     public Operation processSimpleAdditionStrategy(ExistingOperationContext context) {
+        log.info("=== DEBUG SIMPLE ADDITION STRATEGY ===");
+        log.info("Posição ANTES: Quantidade total={}, Quantidade restante={}, Preço médio={}", 
+                 context.position().getTotalQuantity(), context.position().getRemainingQuantity(), context.position().getAveragePrice());
+        
         // 1. Criar operação oculta para a entrada adicional
         Operation hiddenOperation = creationService.createHiddenOperation(
                 context.request(), context.optionSerie(), context.currentUser());
         averageOperationService.addNewItemGroup(context.group(), hiddenOperation, OperationRoleType.NEW_ENTRY);
 
         // 2. Atualizar posição e estruturas relacionadas
+        log.info("Chamando addEntryToPosition com operação: quantidade={}, preço={}", 
+                 hiddenOperation.getQuantity(), hiddenOperation.getEntryUnitPrice());
         positionService.addEntryToPosition(context.position(), hiddenOperation);
+        log.info("Posição APÓS addEntryToPosition: Quantidade total={}, Quantidade restante={}, Preço médio={}", 
+                 context.position().getTotalQuantity(), context.position().getRemainingQuantity(), context.position().getAveragePrice());
+        
+        log.info("Chamando consolidateOperationEntryValues...");
         consolidateService.consolidateOperationEntryValues(context.activeOperation(), context.position());
+        log.info("Posição APÓS consolidate: Quantidade total={}, Quantidade restante={}, Preço médio={}", 
+                 context.position().getTotalQuantity(), context.position().getRemainingQuantity(), context.position().getAveragePrice());
+        
         averageOperationService.updateAverageOperationGroup(context.group(), context.position());
+        
+        log.info("Operação ativa final: quantidade={}, preço={}, valor total={}", 
+                 context.activeOperation().getQuantity(), context.activeOperation().getEntryUnitPrice(), context.activeOperation().getEntryTotalValue());
+        log.info("=== FIM SIMPLE ADDITION STRATEGY ===");
 
         return context.activeOperation();
     }

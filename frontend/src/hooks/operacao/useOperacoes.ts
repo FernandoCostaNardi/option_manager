@@ -220,7 +220,7 @@ export const useOperacoes = ({
   };
 };
 
-function formatarDataArrayParaString(data) {
+function formatarDataArrayParaString(data: any) {
   if (!data || !Array.isArray(data) || data.length !== 3) return '';
   return `${data[0]}-${String(data[1]).padStart(2, '0')}-${String(data[2]).padStart(2, '0')}`;
 }

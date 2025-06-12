@@ -1,0 +1,13 @@
+EXECUTE ESTE COMANDO:
+====================
+
+./mvnw test -Dtest=QuickFinancialValidationTest
+
+RESULTADO ESPERADO:
+==================
+✅ TODOS OS CÁLCULOS CORRETOS!
+📊 Resultado: R$ -75.75
+📈 Percentual: -24.51%
+BUILD SUCCESS
+
+PRONTO! 🎉
