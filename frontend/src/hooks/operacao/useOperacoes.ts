@@ -170,8 +170,33 @@ export const useOperacoes = ({
           profitLoss: op.profitLoss || 0,
           profitLossPercentage: op.profitLossPercentage || 0,
           groupId: op.groupId || null,
+          roleType: op.roleType || null,
         }));
-        setOperacoesFinalizadas(processedOperations);
+
+        // Filtrar operações duplicadas: manter apenas uma operação TOTAL_EXIT por grupo
+        const operacoesFiltradas = [];
+        const gruposProcessados = new Set();
+
+        for (const op of processedOperations) {
+          // Se for TOTAL_EXIT e já processamos este grupo, pular
+          if (op.roleType === 'TOTAL_EXIT' && op.groupId && gruposProcessados.has(op.groupId)) {
+            console.log('[DEBUG] Pulando TOTAL_EXIT duplicado para grupo:', op.groupId, 'ID:', op.id);
+            continue;
+          }
+          
+          // Se for TOTAL_EXIT, marcar grupo como processado
+          if (op.roleType === 'TOTAL_EXIT' && op.groupId) {
+            gruposProcessados.add(op.groupId);
+            console.log('[DEBUG] Adicionando TOTAL_EXIT principal para grupo:', op.groupId, 'ID:', op.id);
+          }
+
+          operacoesFiltradas.push(op);
+        }
+
+        console.log('[DEBUG] Operações antes da filtragem:', processedOperations.length);
+        console.log('[DEBUG] Operações após filtragem:', operacoesFiltradas.length);
+
+        setOperacoesFinalizadas(operacoesFiltradas);
         setDashboardData({
           totalWinningOperations: dashboard.totalWinningOperations || 0,
           totalLosingOperations: dashboard.totalLosingOperations || 0,

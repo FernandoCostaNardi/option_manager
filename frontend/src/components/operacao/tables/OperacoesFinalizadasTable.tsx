@@ -73,7 +73,7 @@ export function OperacoesFinalizadasTable({
           
           // Filtrar apenas as operações que devem aparecer nos detalhes
           const operacoesFiltradas = todasOperacoes.filter((op: any) => {
-            console.log('[DEBUG] Analisando operação - ID:', op.id, 'quantity:', op.quantity, 'status:', op.status, 'profitLoss:', op.profitLoss);
+            console.log('[DEBUG] Analisando operação - ID:', op.id, 'roleType:', op.roleType, 'quantity:', op.quantity, 'status:', op.status, 'profitLoss:', op.profitLoss);
             
             // Deve ter profitLoss (resultado financeiro)
             const temProfitLoss = op.profitLoss !== null && op.profitLoss !== undefined;
@@ -81,10 +81,23 @@ export function OperacoesFinalizadasTable({
             // Não deve ser a mesma operação consolidada (principal critério)
             const naoEhOperacaoMae = op.id !== operacao.id;
             
-            // Se tem profitLoss e não é a operação mãe, deve aparecer nos detalhes
-            // (independente do status - pode ser HIDDEN, LOSER, WINNER, etc.)
-            const passa = temProfitLoss && naoEhOperacaoMae;
-            console.log('[DEBUG] Operação passa no filtro:', passa, { temProfitLoss, naoEhOperacaoMae, id: op.id, quantity: op.quantity });
+            // Excluir outros TOTAL_EXIT que não sejam a operação principal (evitar duplicação)
+            const naoEhTotalExitDuplicado = !(op.roleType === 'TOTAL_EXIT' && naoEhOperacaoMae);
+            
+            // Mostrar apenas PARTIAL_EXIT, ORIGINAL, CONSOLIDATED_ENTRY (operações relevantes para detalhes)
+            const ehOperacaoDetalhe = op.roleType && ['PARTIAL_EXIT', 'ORIGINAL', 'CONSOLIDATED_ENTRY'].includes(op.roleType);
+            
+            // Se tem profitLoss, não é a operação mãe, não é TOTAL_EXIT duplicado e é operação de detalhe
+            const passa = temProfitLoss && naoEhOperacaoMae && naoEhTotalExitDuplicado && ehOperacaoDetalhe;
+            console.log('[DEBUG] Operação passa no filtro:', passa, { 
+              temProfitLoss, 
+              naoEhOperacaoMae, 
+              naoEhTotalExitDuplicado, 
+              ehOperacaoDetalhe,
+              roleType: op.roleType,
+              id: op.id, 
+              quantity: op.quantity 
+            });
             
             return passa;
           }).map(op => ({
