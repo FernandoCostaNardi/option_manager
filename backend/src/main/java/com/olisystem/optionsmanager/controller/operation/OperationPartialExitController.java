@@ -1,6 +1,7 @@
 package com.olisystem.optionsmanager.controller.operation;
 
 import com.olisystem.optionsmanager.dto.operation.OperationItemDto;
+import com.olisystem.optionsmanager.dto.operation.OperationSummaryResponseDto;
 import com.olisystem.optionsmanager.service.operation.averageOperation.AverageOperationQueryService;
 import java.util.List;
 import java.util.Optional;
@@ -20,6 +21,33 @@ import org.springframework.web.bind.annotation.*;
 public class OperationPartialExitController {
 
   private final AverageOperationQueryService averageOperationQueryService;
+
+  /** 
+   * Retorna todas as operações de um grupo que tenham data de saída e não sejam consolidadas.
+   */
+  @GetMapping("/group/{groupId}/exited-operations")
+  public ResponseEntity<List<OperationSummaryResponseDto>> getExitedNonConsolidatedOperations(
+      @PathVariable String groupId) {
+    log.debug("Requisição para obter operações com saída não consolidadas do grupo: {}", groupId);
+
+    try {
+      List<OperationSummaryResponseDto> operations = 
+          averageOperationQueryService.getExitedNonConsolidatedOperations(groupId);
+      
+      if (operations.isEmpty()) {
+        log.info("Nenhuma operação com saída não consolidada encontrada para grupo: {}", groupId);
+        return ResponseEntity.ok(operations);
+      }
+      
+      log.info("Retornando {} operações com saída não consolidadas para grupo: {}", 
+               operations.size(), groupId);
+      return ResponseEntity.ok(operations);
+      
+    } catch (Exception e) {
+      log.error("Erro ao buscar operações com saída do grupo {}: {}", groupId, e.getMessage(), e);
+      return ResponseEntity.internalServerError().build();
+    }
+  }
 
   /** Retorna todas as saídas parciais para uma operação original. */
   @GetMapping("/{operationId}/partial-exits")

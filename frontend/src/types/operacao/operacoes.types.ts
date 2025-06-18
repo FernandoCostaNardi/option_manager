@@ -37,6 +37,7 @@ export interface OperacaoFinalizada {
   optionSeriesCode: string;
   entryDate: string;
   exitDate: string;
+  quantity: number;
   entryUnitPrice: number;
   entryTotalValue: number;
   exitUnitPrice: number;

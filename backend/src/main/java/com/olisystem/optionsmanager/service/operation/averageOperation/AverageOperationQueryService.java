@@ -1,20 +1,26 @@
 package com.olisystem.optionsmanager.service.operation.averageOperation;
 
 import com.olisystem.optionsmanager.dto.operation.OperationItemDto;
+import com.olisystem.optionsmanager.dto.operation.OperationSummaryResponseDto;
+import com.olisystem.optionsmanager.mapper.operation.OperationItemMapper;
 import com.olisystem.optionsmanager.model.operation.AverageOperationGroup;
 import com.olisystem.optionsmanager.model.operation.AverageOperationItem;
+import com.olisystem.optionsmanager.model.operation.Operation;
 import com.olisystem.optionsmanager.model.operation.OperationRoleType;
 import com.olisystem.optionsmanager.repository.AverageOperationItemRepository;
+import com.olisystem.optionsmanager.util.OperationSummaryCalculator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Serviço para consultas relacionadas a grupos de operações médias. Fornece métodos para recuperar
@@ -27,6 +33,65 @@ import java.util.UUID;
 public class AverageOperationQueryService {
 
   private final AverageOperationItemRepository itemRepository;
+  private final OperationItemMapper operationItemMapper;
+
+  /**
+   * Obtém todas as operações de um grupo que tenham data de saída e não sejam consolidadas.
+   *
+   * @param groupId ID do grupo de operações
+   * @return Lista de OperationSummaryResponseDto das operações que atendem aos critérios
+   */
+  public List<OperationSummaryResponseDto> getExitedNonConsolidatedOperations(String groupId) {
+    log.debug("Buscando operações com saída não consolidadas para grupo: {}", groupId);
+
+    try {
+      UUID groupUuid = UUID.fromString(groupId);
+      
+      // Definir tipos consolidados a serem excluídos
+      List<OperationRoleType> consolidatedTypes = Arrays.asList(
+          OperationRoleType.CONSOLIDATED_ENTRY,
+          OperationRoleType.CONSOLIDATED_RESULT
+      );
+
+      // Buscar operações que atendem aos critérios
+      List<AverageOperationItem> items = itemRepository
+          .findExitedNonConsolidatedOperationsByGroupId(groupUuid, consolidatedTypes);
+
+      log.info("Encontradas {} operações com saída não consolidadas para grupo {}", items.size(), groupId);
+
+      // Converter para DTOs e criar summaries individuais
+      List<OperationSummaryResponseDto> summaries = items.stream()
+          .map(item -> {
+            Operation operation = item.getOperation();
+            OperationItemDto dto = operationItemMapper.mapToDto(operation);
+            
+            // Adicionar informações específicas do grupo
+            dto.setRoleType(item.getRoleType().getDescription());
+            dto.setSequenceNumber(item.getSequenceNumber());
+            
+            // Criar um summary individual para cada operação
+            List<OperationItemDto> singleOperationList = List.of(dto);
+            
+            return OperationSummaryCalculator.calculateSummary(
+                singleOperationList, 
+                0, // currentPage
+                1, // totalPages 
+                1L, // totalElements
+                1  // pageSize
+            );
+          })
+          .collect(Collectors.toList());
+
+      return summaries;
+      
+    } catch (IllegalArgumentException e) {
+      log.error("ID de grupo inválido: {}", groupId, e);
+      return new ArrayList<>();
+    } catch (Exception e) {
+      log.error("Erro ao buscar operações do grupo {}: {}", groupId, e.getMessage(), e);
+      return new ArrayList<>();
+    }
+  }
 
   /**
    * Obtém todas as operações parciais associadas a uma operação original.
@@ -153,18 +218,12 @@ public class AverageOperationQueryService {
 //              .thenComparing(AverageOperationItem::getSequenceNumber));
 //
 //      // Converter para DTOs
-//      List<OperationItemDto> dtos =
-//          items.stream()
-//              .map(
-//                  item -> {
-//                    OperationItemDto dto = operationService.mapToDto(item.getOperation());
-//                    dto.setRoleType(item.getRoleType().getDescription());
-//                    dto.setSequenceNumber(item.getSequenceNumber());
-//                    return dto;
-//                  })
-//              .collect(Collectors.toList());
-//
-//      result.addAll(dtos);
+//      for (AverageOperationItem item : items) {
+//        OperationItemDto dto = operationService.mapToDto(item.getOperation());
+//        dto.setRoleType(item.getRoleType().getDescription());
+//        dto.setSequenceNumber(item.getSequenceNumber());
+//        result.add(dto);
+//      }
 //    }
 //
 //    return result;

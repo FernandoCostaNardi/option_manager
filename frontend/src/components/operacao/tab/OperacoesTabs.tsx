@@ -190,7 +190,7 @@ export const OperacoesTabs: React.FC<OperacoesTabsProps> = ({
   return (
     <>
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className="mb-4">
+        <TabsList className="mb-2">
           <TabsTrigger 
             value="ativas" 
             className={`px-4 py-2 ${activeTab === 'ativas' ? 'bg-purple-100' : ''}`}

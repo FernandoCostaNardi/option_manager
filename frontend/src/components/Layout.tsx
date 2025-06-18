@@ -21,8 +21,8 @@ export function Layout() {
       <div className="flex flex-1 pt-16"> {/* pt-16 para compensar a altura do header fixo */}
         <Sidebar />
         
-        <main className="flex-1 p-4 md:p-8">
-          <div className="max-w-7xl mx-auto">
+        <main className="flex-1 p-2 md:p-4">
+          <div className="w-full">
             <Outlet />
           </div>
         </main>

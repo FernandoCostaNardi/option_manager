@@ -1,8 +1,10 @@
 package com.olisystem.optionsmanager.config.security;
 
-import com.olisystem.optionsmanager.config.jwt.JwtAuthenticationFilter; // ajuste o import conforme
+
 import java.util.Arrays;
 import java.util.List;
+
+import com.olisystem.optionsmanager.config.jwt.JwtAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;

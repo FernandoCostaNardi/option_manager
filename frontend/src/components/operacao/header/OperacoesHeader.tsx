@@ -7,7 +7,7 @@ interface OperacoesHeaderProps {
 
 export const OperacoesHeader: React.FC<OperacoesHeaderProps> = ({ onNovaOperacao }) => {
   return (
-    <div className="flex items-center justify-between mb-6">
+    <div className="flex items-center justify-between mb-3">
       <h1 className="text-2xl font-bold flex items-center gap-2">
         <BarChart2 className="w-7 h-7 text-purple-600" /> Operações
       </h1>

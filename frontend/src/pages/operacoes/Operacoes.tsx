@@ -156,14 +156,14 @@ export function Operacoes() {
   // Componente de Dashboard Card
   const DashboardCard = ({ icon, title, value, color }: { icon: React.ReactNode, title: string, value: string | number, color: string }) => (
     <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-      <div className="p-4 sm:p-6">
+      <div className="p-3 sm:p-4">
         <div className="flex items-center">
-          <div className={`p-3 rounded-full ${color} mr-4`}>
+          <div className={`p-2 rounded-full ${color} mr-3`}>
             {icon}
           </div>
           <div>
             <h3 className="text-sm font-medium text-gray-500">{title}</h3>
-            <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
+            <p className="text-xl font-bold text-gray-900 mt-1">{value}</p>
           </div>
         </div>
       </div>
@@ -191,14 +191,14 @@ export function Operacoes() {
     extraInfo?: React.ReactNode
   }) => (
     <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-      <div className="p-4 sm:p-6">
+      <div className="p-3 sm:p-4">
         <div className="flex items-center">
-          <div className={`p-3 rounded-full ${color} mr-4`}>
+          <div className={`p-2 rounded-full ${color} mr-3`}>
             {icon}
           </div>
           <div>
             <h3 className="text-sm font-medium text-gray-500">{title}</h3>
-            <p className={`text-2xl font-bold mt-1 ${isPrimaryPositive ? 'text-green-600' : 'text-red-600'}`}>{primaryValue}</p>
+            <p className={`text-xl font-bold mt-1 ${isPrimaryPositive ? 'text-green-600' : 'text-red-600'}`}>{primaryValue}</p>
             <p className={`text-sm mt-1 ${isSecondaryPositive ? 'text-green-600' : 'text-red-600'}`}>{secondaryValue}</p>
             {extraInfo && <div className="text-xs text-gray-500 mt-1">{extraInfo}</div>}
           </div>
@@ -209,7 +209,7 @@ export function Operacoes() {
   
   // Renderização dos cards para operações ativas
   const renderAtivasCards = (isLoading: boolean) => (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
       <DashboardCard 
         icon={<ListChecks className="h-6 w-6 text-blue-500" />}
         title="Operações Ativas"
@@ -233,7 +233,7 @@ export function Operacoes() {
   
   // Renderização dos cards para operações finalizadas
   const renderFinalizadasCards = (isLoading: boolean) => (
-    <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+    <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
       <DashboardCard 
         icon={<ListChecks className="h-6 w-6 text-blue-500" />}
         title="Ganhadoras / Perdedoras"
@@ -250,6 +250,7 @@ export function Operacoes() {
         icon={<DollarSign className="h-6 w-6 text-green-500" />}
         title="Resultado Total"
         primaryValue={isLoading ? "..." : formatarMoeda(dashboardData.totalProfitLoss || 0)}
+        secondaryValue=""
         isPrimaryPositive={!isLoading && (dashboardData.totalProfitLoss || 0) >= 0}
         isSecondaryPositive={!isLoading && (dashboardData.totalProfitLoss || 0) >= 0}
         color="bg-green-100"
@@ -258,6 +259,7 @@ export function Operacoes() {
         icon={<Percent className="h-6 w-6 text-blue-500" />}
         title="% Total"
         primaryValue={isLoading ? "..." : `${(dashboardData.totalProfitLossPercentage || 0).toFixed(2)}%`}
+        secondaryValue=""
         isPrimaryPositive={!isLoading && (dashboardData.totalProfitLossPercentage || 0) >= 0}
         isSecondaryPositive={!isLoading && (dashboardData.totalProfitLossPercentage || 0) >= 0}
         color="bg-blue-100"
@@ -267,7 +269,7 @@ export function Operacoes() {
   );
   
   return (
-    <div className="container mx-auto py-6">
+    <div className="w-full py-3">
       <OperacoesHeader onNovaOperacao={abrirModalNovaOperacao} />
       
       <FiltrosAccordion

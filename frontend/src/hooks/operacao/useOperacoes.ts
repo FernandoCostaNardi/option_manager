@@ -69,8 +69,8 @@ export const useOperacoes = ({
       if (operations.length > 0) {
         const processedOperations = operations.map(op => ({
           ...op,
-          entryDate: formatarDataArrayParaString(op.entryDate),
-          exitDate: formatarDataArrayParaString(op.exitDate),
+          entryDate: op.entryDate,
+          exitDate: op.exitDate,
           optionType: op.optionType || '',
           tradeType: op.tradeType || '',
           status: op.status || '',
@@ -86,6 +86,7 @@ export const useOperacoes = ({
           exitTotalValue: op.exitTotalValue || 0,
           profitLoss: op.profitLoss || 0,
           profitLossPercentage: op.profitLossPercentage || 0,
+          groupId: op.groupId || null,
         }));
         setOperacoesAtivas(processedOperations);
         setDashboardData({
@@ -151,8 +152,8 @@ export const useOperacoes = ({
       if (operations.length > 0) {
         const processedOperations = operations.map(op => ({
           ...op,
-          entryDate: formatarDataArrayParaString(op.entryDate),
-          exitDate: formatarDataArrayParaString(op.exitDate),
+          entryDate: op.entryDate,
+          exitDate: op.exitDate,
           optionType: op.optionType || '',
           tradeType: op.tradeType || '',
           status: op.status || '',
@@ -168,6 +169,7 @@ export const useOperacoes = ({
           exitTotalValue: op.exitTotalValue || 0,
           profitLoss: op.profitLoss || 0,
           profitLossPercentage: op.profitLossPercentage || 0,
+          groupId: op.groupId || null,
         }));
         setOperacoesFinalizadas(processedOperations);
         setDashboardData({
@@ -202,10 +204,7 @@ export const useOperacoes = ({
       carregarOperacoesFinalizadas();
     }
   }, [activeTab, currentPage, pageSize, sortField, sortDirection, carregarOperacoesAtivas, carregarOperacoesFinalizadas]);
-// Removido 'filtros' da lista de dependências
 
-  // quando os filtros são alterados, pois já estamos chamando aplicarFiltros()
-  // explicitamente quando os filtros são aplicados
   return {
     operacoesAtivas,
     operacoesFinalizadas,
@@ -219,8 +218,3 @@ export const useOperacoes = ({
     dashboardData
   };
 };
-
-function formatarDataArrayParaString(data: any) {
-  if (!data || !Array.isArray(data) || data.length !== 3) return '';
-  return `${data[0]}-${String(data[1]).padStart(2, '0')}-${String(data[2]).padStart(2, '0')}`;
-}
