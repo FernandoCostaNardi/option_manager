@@ -6,7 +6,7 @@ import com.olisystem.optionsmanager.dto.operation.OperationSummaryResponseDto;
 import com.olisystem.optionsmanager.mapper.operation.OperationItemMapper;
 import com.olisystem.optionsmanager.model.operation.Operation;
 import com.olisystem.optionsmanager.repository.OperationRepository;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -17,10 +17,11 @@ import java.util.stream.Collectors;
 import java.math.RoundingMode;
 
 @Service
+@RequiredArgsConstructor
 public class OperationReportDataImpl implements OperationReportData {
 
-  @Autowired
-  private OperationRepository operationRepository;
+  private final OperationRepository operationRepository;
+  private final OperationItemMapper operationItemMapper;
 
   @Override
   public OperationSummaryResponseDto findByFilters(OperationFilterCriteria criteria, Pageable pageable) {
@@ -30,7 +31,7 @@ public class OperationReportDataImpl implements OperationReportData {
 
     // Converter para DTOs
     List<OperationItemDto> operationDtos = operations.stream()
-        .map(OperationItemMapper::mapToDto)
+        .map(operationItemMapper::mapToDto)
         .collect(Collectors.toList());
 
     // Calcular totalizadores

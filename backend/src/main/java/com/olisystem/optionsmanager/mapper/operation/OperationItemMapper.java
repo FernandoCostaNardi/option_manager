@@ -1,13 +1,22 @@
 package com.olisystem.optionsmanager.mapper.operation;
 
 import com.olisystem.optionsmanager.dto.operation.OperationItemDto;
+import com.olisystem.optionsmanager.model.operation.AverageOperationGroup;
 import com.olisystem.optionsmanager.model.operation.Operation;
+import com.olisystem.optionsmanager.service.operation.averageOperation.AverageOperationService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 @Component
+@RequiredArgsConstructor
 public class OperationItemMapper {
 
-    public static OperationItemDto mapToDto(Operation op) {
+    private final AverageOperationService averageOperationService;
+
+    public OperationItemDto mapToDto(Operation op) {
+        // Buscar o grupo da operação
+        AverageOperationGroup group = averageOperationService.getGroupByOperation(op);
+        
         return OperationItemDto.builder()
                 .id(op.getId())
                 .optionSeriesCode(
@@ -32,6 +41,7 @@ public class OperationItemMapper {
                 .profitLoss(op.getProfitLoss())
                 .profitLossPercentage(op.getProfitLossPercentage())
                 .baseAssetLogoUrl(op.getOptionSeries().getAsset().getUrlLogo())
+                .groupId(group != null ? group.getId() : null)
                 .build();
     }
 }
