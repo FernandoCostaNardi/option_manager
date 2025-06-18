@@ -10,8 +10,10 @@ import com.olisystem.optionsmanager.model.operation.OperationRoleType;
 import com.olisystem.optionsmanager.model.operation.TradeType;
 import com.olisystem.optionsmanager.model.position.EntryLot;
 import com.olisystem.optionsmanager.model.position.PositionOperationType;
+import com.olisystem.optionsmanager.model.position.Position;
 import com.olisystem.optionsmanager.record.operation.OperationExitPositionContext;
 import com.olisystem.optionsmanager.repository.AverageOperationGroupRepository;
+import com.olisystem.optionsmanager.repository.position.PositionRepository;
 import com.olisystem.optionsmanager.resolver.tradeType.TradeTypeResolver;
 import com.olisystem.optionsmanager.service.operation.average.AveragePriceCalculator;
 import com.olisystem.optionsmanager.service.operation.consolidate.ConsolidatedOperationService;
@@ -48,6 +50,7 @@ public class PartialExitProcessor {
     private final PositionUpdateService positionUpdateService;
     private final AverageOperationGroupRepository groupRepository;
     private final AverageOperationService averageOperationService;
+    private final PositionRepository positionRepository;
 
     /**
      * Processa saída parcial com lote único - Implementa os 20 passos do Cenário 3.1
@@ -198,6 +201,11 @@ public class PartialExitProcessor {
         if (consolidatedEntry == null || consolidatedExit == null) {
             throw new BusinessException("Operações consolidadoras não encontradas para saída subsequente");
         }
+
+        // ✅ CORREÇÃO CRÍTICA: Adicionar operação de saída como PARTIAL_EXIT no grupo
+        averageOperationService.addNewItemGroup(context.group(), exitResult.exitOperation, 
+                com.olisystem.optionsmanager.model.operation.OperationRoleType.PARTIAL_EXIT);
+        log.info("✅ Operação de saída SUBSEQUENTE adicionada ao grupo como PARTIAL_EXIT: {}", exitResult.exitOperation.getId());
 
         // PASSO 11: Atualizar operação consolidadora de saída
         consolidatedOperationService.updateConsolidatedExit(
@@ -402,12 +410,12 @@ public class PartialExitProcessor {
     }
 
     /**
-     * Atualiza entidades após primeira saída
+     * Atualiza entidades relacionadas após primeira saída parcial
      */
     private void updateEntitiesAfterFirstExit(OperationExitPositionContext context,
                                               ExitOperationResult exitResult) {
 
-        // Atualizar Position usando o serviço apropriado
+        // Atualizar Position com validações rigorosas
         positionUpdateService.updatePositionPartial(
                 context.position(),
                 context.context().request(),
@@ -416,28 +424,42 @@ public class PartialExitProcessor {
                 exitResult.quantity
         );
 
+        // ✅ CORREÇÃO CRÍTICA: Forçar reload da posição para garantir estado atualizado
+        Position updatedPosition = positionRepository.findById(context.position().getId())
+                .orElseThrow(() -> new BusinessException("Posição não encontrada após atualização"));
+
+        // ✅ VALIDAÇÃO CRÍTICA: Verificar se posição foi corretamente atualizada
+        validatePositionStateAfterPartialExit(updatedPosition, exitResult.quantity, context.context().request().getQuantity());
+
         // Atualizar AverageOperationGroup
         AverageOperationGroup group = context.group();
+        group.setRemainingQuantity(updatedPosition.getRemainingQuantity()); // ✅ Usar quantidade da posição atualizada
+        group.setClosedQuantity(group.getTotalQuantity() - updatedPosition.getRemainingQuantity());
         group.setStatus(AverageOperationGroupStatus.PARTIALLY_CLOSED);
-        group.setClosedQuantity(exitResult.quantity);
-        group.setRemainingQuantity(context.position().getRemainingQuantity() - exitResult.quantity);
 
-        // CORREÇÃO: Atualizar o lucro total do grupo
+        // CORREÇÃO: Acumular lucro
         BigDecimal currentProfit = group.getTotalProfit() != null ? group.getTotalProfit() : BigDecimal.ZERO;
         group.setTotalProfit(currentProfit.add(exitResult.profitLoss));
 
         groupRepository.save(group);
 
-        log.info("Grupo atualizado: Lucro acumulado = {}", group.getTotalProfit());
+        log.info("=== ESTADO APÓS PRIMEIRA SAÍDA PARCIAL ===");
+        log.info("Position {}: status={}, remaining={}, total={}", 
+                updatedPosition.getId(), updatedPosition.getStatus(), 
+                updatedPosition.getRemainingQuantity(), updatedPosition.getTotalQuantity());
+        log.info("Group {}: status={}, remaining={}, closed={}", 
+                group.getId(), group.getStatus(), 
+                group.getRemainingQuantity(), group.getClosedQuantity());
+        log.info("=== VALIDAÇÃO: SEGUNDA SAÍDA DEVE SER POSSÍVEL ===");
     }
 
     /**
-     * Atualizar entidades após saída subsequente
+     * Atualiza entidades relacionadas após saída parcial subsequente
      */
     private void updateEntitiesAfterSubsequentExit(OperationExitPositionContext context,
                                                    ExitOperationResult exitResult) {
 
-        // Atualizar Position usando o serviço apropriado
+        // Atualizar Position
         positionUpdateService.updatePositionPartial(
                 context.position(),
                 context.context().request(),
@@ -446,22 +468,42 @@ public class PartialExitProcessor {
                 exitResult.quantity
         );
 
+        // ✅ CORREÇÃO CRÍTICA: Forçar reload da posição
+        Position updatedPosition = positionRepository.findById(context.position().getId())
+                .orElseThrow(() -> new BusinessException("Posição não encontrada após atualização"));
+
+        // ✅ VALIDAÇÃO CRÍTICA: Verificar se posição foi corretamente atualizada
+        validatePositionStateAfterPartialExit(updatedPosition, exitResult.quantity, context.context().request().getQuantity());
+
         // Atualizar AverageOperationGroup
         AverageOperationGroup group = context.group();
-        group.setClosedQuantity(group.getClosedQuantity() + exitResult.quantity);
-        group.setRemainingQuantity(context.position().getRemainingQuantity() - exitResult.quantity);
+        group.setRemainingQuantity(updatedPosition.getRemainingQuantity()); // ✅ Usar quantidade da posição atualizada
+        group.setClosedQuantity(group.getTotalQuantity() - updatedPosition.getRemainingQuantity());
 
-        // CORREÇÃO: Acumular o lucro total do grupo
+        // Determinar status do grupo baseado na posição atualizada
+        if (updatedPosition.getStatus() == com.olisystem.optionsmanager.model.position.PositionStatus.CLOSED) {
+            group.setStatus(AverageOperationGroupStatus.CLOSED);
+        } else {
+            group.setStatus(AverageOperationGroupStatus.PARTIALLY_CLOSED);
+        }
+
+        // CORREÇÃO: Acumular lucro
         BigDecimal currentProfit = group.getTotalProfit() != null ? group.getTotalProfit() : BigDecimal.ZERO;
         group.setTotalProfit(currentProfit.add(exitResult.profitLoss));
 
         groupRepository.save(group);
 
-        log.info("Grupo atualizado: Lucro acumulado = {}", group.getTotalProfit());
+        log.info("=== ESTADO APÓS SAÍDA SUBSEQUENTE ===");
+        log.info("Position {}: status={}, remaining={}, total={}", 
+                updatedPosition.getId(), updatedPosition.getStatus(), 
+                updatedPosition.getRemainingQuantity(), updatedPosition.getTotalQuantity());
+        log.info("Group {}: status={}, remaining={}, closed={}", 
+                group.getId(), group.getStatus(), 
+                group.getRemainingQuantity(), group.getClosedQuantity());
     }
 
     /**
-     * Atualizar entidades após saída final
+     * Atualiza entidades após saída final
      */
     private void updateEntitiesAfterFinalExit(OperationExitPositionContext context,
                                               ExitOperationResult exitResult) {
@@ -503,6 +545,57 @@ public class PartialExitProcessor {
         if (!partialExitDetector.validateExitQuantity(context.position(), context.context().request().getQuantity())) {
             throw new BusinessException("Quantidade de saída inválida");
         }
+    }
+
+    /**
+     * ✅ NOVA VALIDAÇÃO: Verifica se o estado da posição está correto após saída parcial
+     */
+    private void validatePositionStateAfterPartialExit(Position position, int quantityExited, int requestedQuantity) {
+        log.info("=== VALIDANDO ESTADO DA POSIÇÃO APÓS SAÍDA PARCIAL ===");
+        
+        // Validação 1: Quantidade saída deve corresponder à solicitada
+        if (quantityExited != requestedQuantity) {
+            throw new BusinessException(String.format(
+                "Inconsistência: Quantidade saída (%d) diferente da solicitada (%d)", 
+                quantityExited, requestedQuantity));
+        }
+
+        // Validação 2: Posição deve ter status correto
+        boolean shouldBeClosed = position.getRemainingQuantity() == 0;
+        boolean shouldBePartial = position.getRemainingQuantity() > 0 && position.getRemainingQuantity() < position.getTotalQuantity();
+        
+        if (shouldBeClosed && position.getStatus() != com.olisystem.optionsmanager.model.position.PositionStatus.CLOSED) {
+            throw new BusinessException(String.format(
+                "ERRO CRÍTICO: Posição deveria estar CLOSED mas está %s (remaining=%d)", 
+                position.getStatus(), position.getRemainingQuantity()));
+        }
+        
+        if (shouldBePartial && position.getStatus() != com.olisystem.optionsmanager.model.position.PositionStatus.PARTIAL) {
+            log.warn("AVISO: Posição deveria estar PARTIAL mas está {} (remaining={})", 
+                    position.getStatus(), position.getRemainingQuantity());
+            // ✅ AUTO-CORREÇÃO: Forçar status correto
+            position.setStatus(com.olisystem.optionsmanager.model.position.PositionStatus.PARTIAL);
+            positionRepository.save(position);
+            log.info("Status da posição corrigido para PARTIAL");
+        }
+
+        // Validação 3: Quantidade restante deve ser lógica
+        if (position.getRemainingQuantity() < 0) {
+            throw new BusinessException(String.format(
+                "ERRO CRÍTICO: Quantidade restante não pode ser negativa: %d", 
+                position.getRemainingQuantity()));
+        }
+
+        if (position.getRemainingQuantity() > position.getTotalQuantity()) {
+            throw new BusinessException(String.format(
+                "ERRO CRÍTICO: Quantidade restante (%d) maior que total (%d)", 
+                position.getRemainingQuantity(), position.getTotalQuantity()));
+        }
+
+        log.info("✅ VALIDAÇÃO PASSOU: Position está em estado consistente");
+        log.info("Position ID: {}, Status: {}, Remaining: {}/{}", 
+                position.getId(), position.getStatus(), 
+                position.getRemainingQuantity(), position.getTotalQuantity());
     }
 
     /**

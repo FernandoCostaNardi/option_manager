@@ -140,19 +140,54 @@ public class PartialExitDetector {
      */
     public ExitType determineExitType(Position position, Integer requestedQuantity) {
 
-        if (isFinalExit(position, requestedQuantity)) {
-            if (isFirstPartialExit(position)) {
-                return ExitType.SINGLE_TOTAL_EXIT; // Saída única que fecha tudo
-            } else {
-                return ExitType.FINAL_PARTIAL_EXIT; // Última de uma série de saídas parciais
-            }
-        } else if (isFirstPartialExit(position)) {
-            return ExitType.FIRST_PARTIAL_EXIT;
-        } else if (isSubsequentPartialExit(position)) {
-            return ExitType.SUBSEQUENT_PARTIAL_EXIT;
+        log.info("=== DETERMINANDO TIPO DE SAÍDA ===");
+        log.info("Position ID: {}", position.getId());
+        log.info("Status atual: {}", position.getStatus());
+        log.info("Quantidade restante: {}", position.getRemainingQuantity());
+        log.info("Quantidade total: {}", position.getTotalQuantity());
+        log.info("Quantidade solicitada: {}", requestedQuantity);
+
+        // ✅ VALIDAÇÃO ADICIONAL: Verificar consistência básica
+        if (requestedQuantity > position.getRemainingQuantity()) {
+            log.error("❌ ERRO: Quantidade solicitada ({}) maior que disponível ({})", 
+                    requestedQuantity, position.getRemainingQuantity());
+            return ExitType.UNKNOWN;
         }
 
-        return ExitType.UNKNOWN;
+        boolean isFinal = isFinalExit(position, requestedQuantity);
+        boolean isFirst = isFirstPartialExit(position);
+        boolean isSubsequent = isSubsequentPartialExit(position);
+
+        log.info("Análise de tipos:");
+        log.info("  - É saída final? {}", isFinal);
+        log.info("  - É primeira parcial? {}", isFirst);
+        log.info("  - É saída subsequente? {}", isSubsequent);
+
+        ExitType result;
+        if (isFinal) {
+            if (isFirst) {
+                result = ExitType.SINGLE_TOTAL_EXIT; // Saída única que fecha tudo
+                log.info("🎯 TIPO DETECTADO: SINGLE_TOTAL_EXIT (primeira e única saída)");
+            } else {
+                result = ExitType.FINAL_PARTIAL_EXIT; // Última de uma série de saídas parciais
+                log.info("🎯 TIPO DETECTADO: FINAL_PARTIAL_EXIT (última de várias saídas)");
+            }
+        } else if (isFirst) {
+            result = ExitType.FIRST_PARTIAL_EXIT;
+            log.info("🎯 TIPO DETECTADO: FIRST_PARTIAL_EXIT (primeira de várias saídas)");
+        } else if (isSubsequent) {
+            result = ExitType.SUBSEQUENT_PARTIAL_EXIT;
+            log.info("🎯 TIPO DETECTADO: SUBSEQUENT_PARTIAL_EXIT (segunda, terceira, etc.)");
+        } else {
+            result = ExitType.UNKNOWN;
+            log.error("❌ TIPO DESCONHECIDO - Combinação de condições inválida!");
+            log.error("Position: status={}, remaining={}, total={}, requested={}", 
+                    position.getStatus(), position.getRemainingQuantity(), 
+                    position.getTotalQuantity(), requestedQuantity);
+        }
+
+        log.info("=== RESULTADO: {} ===", result);
+        return result;
     }
 
     /**
