@@ -42,6 +42,7 @@ export function OperacoesFinalizadasTable({
         const token = localStorage.getItem('token');
         const url = `http://localhost:8080/api/operations/group/${operacao.groupId}/exited-operations`;
         console.log('[DEBUG] Buscando detalhes da operação:', url);
+        console.log('[DEBUG] Operação mãe - ID:', operacao.id, 'groupId:', operacao.groupId);
         console.log('[DEBUG] Token presente:', !!token);
         
         const resp = await fetch(url, {
@@ -73,30 +74,27 @@ export function OperacoesFinalizadasTable({
           
           // Filtrar apenas as operações que devem aparecer nos detalhes
           const operacoesFiltradas = todasOperacoes.filter((op: any) => {
-            console.log('[DEBUG] Analisando operação - ID:', op.id, 'roleType:', op.roleType, 'quantity:', op.quantity, 'status:', op.status, 'profitLoss:', op.profitLoss);
-            
-            // Deve ter profitLoss (resultado financeiro)
-            const temProfitLoss = op.profitLoss !== null && op.profitLoss !== undefined;
+            console.log('[DEBUG] Analisando operação - ID:', op.id, 'vs operacao.id:', operacao.id);
+            console.log('[DEBUG] Dados da operação:', { 
+              id: op.id, 
+              roleType: op.roleType, 
+              quantity: op.quantity, 
+              status: op.status, 
+              profitLoss: op.profitLoss,
+              exitDate: op.exitDate,
+              sequenceNumber: op.sequenceNumber
+            });
             
             // Não deve ser a mesma operação consolidada (principal critério)
             const naoEhOperacaoMae = op.id !== operacao.id;
             
-            // Excluir outros TOTAL_EXIT que não sejam a operação principal (evitar duplicação)
-            const naoEhTotalExitDuplicado = !(op.roleType === 'TOTAL_EXIT' && naoEhOperacaoMae);
-            
-            // Mostrar apenas PARTIAL_EXIT, ORIGINAL, CONSOLIDATED_ENTRY (operações relevantes para detalhes)
-            const ehOperacaoDetalhe = op.roleType && ['PARTIAL_EXIT', 'ORIGINAL', 'CONSOLIDATED_ENTRY'].includes(op.roleType);
-            
-            // Se tem profitLoss, não é a operação mãe, não é TOTAL_EXIT duplicado e é operação de detalhe
-            const passa = temProfitLoss && naoEhOperacaoMae && naoEhTotalExitDuplicado && ehOperacaoDetalhe;
+            // Mostrar todas as operações exceto a operação mãe
+            const passa = naoEhOperacaoMae;
             console.log('[DEBUG] Operação passa no filtro:', passa, { 
-              temProfitLoss, 
-              naoEhOperacaoMae, 
-              naoEhTotalExitDuplicado, 
-              ehOperacaoDetalhe,
-              roleType: op.roleType,
-              id: op.id, 
-              quantity: op.quantity 
+              naoEhOperacaoMae,
+              operacaoMaeId: operacao.id,
+              operacaoFilhaId: op.id,
+              saoIguais: op.id === operacao.id
             });
             
             return passa;
