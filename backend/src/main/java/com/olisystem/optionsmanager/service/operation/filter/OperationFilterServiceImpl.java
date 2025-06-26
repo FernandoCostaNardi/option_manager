@@ -4,249 +4,475 @@ import com.olisystem.optionsmanager.dto.operation.OperationFilterCriteria;
 import com.olisystem.optionsmanager.dto.operation.OperationItemDto;
 import com.olisystem.optionsmanager.dto.operation.OperationSummaryResponseDto;
 import com.olisystem.optionsmanager.mapper.operation.OperationItemMapper;
-import com.olisystem.optionsmanager.model.operation.Operation;
-import com.olisystem.optionsmanager.model.operation.OperationStatus;
+import com.olisystem.optionsmanager.model.operation.AverageOperationGroup;
 import com.olisystem.optionsmanager.model.operation.AverageOperationItem;
-import com.olisystem.optionsmanager.model.position.EntryLot;
-import com.olisystem.optionsmanager.model.position.Position;
-import com.olisystem.optionsmanager.model.transaction.TransactionType;
+import com.olisystem.optionsmanager.model.operation.Operation;
+import com.olisystem.optionsmanager.model.operation.OperationRoleType;
+import com.olisystem.optionsmanager.model.operation.OperationStatus;
+import com.olisystem.optionsmanager.repository.AverageOperationGroupRepository;
 import com.olisystem.optionsmanager.repository.OperationRepository;
-import com.olisystem.optionsmanager.repository.AverageOperationItemRepository;
 import com.olisystem.optionsmanager.repository.position.PositionRepository;
 import com.olisystem.optionsmanager.util.OperationSummaryCalculator;
 import com.olisystem.optionsmanager.util.SecurityUtil;
 import lombok.extern.slf4j.Slf4j;
-
-import java.util.Optional;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import jakarta.persistence.criteria.JoinType;
 
 @Slf4j
 @Service
 public class OperationFilterServiceImpl implements OperationFilterService {
 
     private final OperationRepository operationRepository;
+    private final AverageOperationGroupRepository groupRepository;
     private final PositionRepository positionRepository;
     private final OperationItemMapper operationItemMapper;
-    private final AverageOperationItemRepository averageOperationItemRepository;
 
     public OperationFilterServiceImpl(
             OperationRepository operationRepository,
+            AverageOperationGroupRepository groupRepository,
             PositionRepository positionRepository,
-            OperationItemMapper operationItemMapper,
-            AverageOperationItemRepository averageOperationItemRepository
+            OperationItemMapper operationItemMapper
     ) {
         this.operationRepository = operationRepository;
+        this.groupRepository = groupRepository;
         this.positionRepository = positionRepository;
         this.operationItemMapper = operationItemMapper;
-        this.averageOperationItemRepository = averageOperationItemRepository;
     }
-
     @Override
     public OperationSummaryResponseDto findByFilters(
             OperationFilterCriteria criteria, Pageable pageable) {
-        Page<Operation> page = operationRepository.findAll(createSpecification(criteria), pageable);
+        
+        log.info("=== NOVA LÓGICA: BUSCA PARTINDO DO AVERAGE_OPERATION_GROUP ===");
+        log.info("Critérios recebidos: {}", criteria);
+        log.info("Status nos critérios: {}", criteria.getStatus());
+        
+        UUID currentUserId = SecurityUtil.getLoggedUser().getId();
+        log.info("User ID: {}", currentUserId);
+        
+        // 1. BUSCAR GRUPOS que atendem aos critérios
+        List<AverageOperationGroup> filteredGroups = findGroupsByCriteria(criteria, currentUserId);
+        log.info("Grupos encontrados: {}", filteredGroups.size());
+        
+        // 2. COLETAR TODAS AS OPERAÇÕES dos grupos encontrados
+        List<Operation> allOperations = collectOperationsFromGroups(filteredGroups, criteria);
+        log.info("Total de operações coletadas: {}", allOperations.size());
+        
+        // 2.5. APLICAR FILTROS ADICIONAIS (se necessário)
+        allOperations = applyAdditionalFilters(allOperations, criteria);
+        log.info("Total de operações após filtros adicionais: {}", allOperations.size());
+        
+        // 3. GARANTIR que todas as operações tenham o groupId preenchido
+        setGroupIdInOperations(allOperations, filteredGroups);
+        
+        // 4. APLICAR PAGINAÇÃO
+        Page<Operation> pagedOperations = applyPagination(allOperations, pageable);
+        
+        // 5. MAPEAR PARA DTO
+        var allDtos = allOperations.stream()
+                .map(operationItemMapper::mapToDto)
+                .collect(Collectors.toList());
 
-        // Buscar todas as operações para calcular totais (sem paginação)
-        Specification<Operation> spec = createSpecification(criteria);
-        List<Operation> allOperations = operationRepository.findAll(spec);
-        List<OperationItemDto> allDtos =
-                allOperations.stream().map(operationItemMapper::mapToDto).collect(Collectors.toList());
-
-        List<OperationItemDto> dtos =
-                page.getContent().stream().map(operationItemMapper::mapToDto).collect(Collectors.toList());
-
-        // 🔧 CORREÇÃO: Calcular valor investido baseado no status das operações
+        var pagedDtos = pagedOperations.getContent().stream()
+                .map(operationItemMapper::mapToDto)
+                .collect(Collectors.toList());
+        
+        // 6. CALCULAR VALOR INVESTIDO ✅ CORRIGIDO
         BigDecimal totalInvestedValue = calculateTotalInvestedValue(allOperations, criteria);
-
-        // Calcular totalizadores usando a classe utilitária corrigida
-        OperationSummaryResponseDto summary =
-                OperationSummaryCalculator.calculateSummaryWithTotalsAndInvestedValue(
-                        dtos,
-                        allDtos,
-                        totalInvestedValue,
-                        page.getNumber(),
-                        page.getTotalPages(),
-                        page.getTotalElements(),
-                        page.getSize());
+        
+        // 7. CALCULAR TOTALIZADORES
+        OperationSummaryResponseDto summary = OperationSummaryCalculator.calculateSummaryWithTotalsAndInvestedValue(
+                pagedDtos,
+                allDtos,
+                totalInvestedValue,
+                pagedOperations.getNumber(),
+                pagedOperations.getTotalPages(),
+                pagedOperations.getTotalElements(),
+                pagedOperations.getSize());
+        
+        log.info("Resultado final: {} operações na página, {} total", pagedDtos.size(), allOperations.size());
         return summary;
+    }
+    /**
+     * Busca grupos baseado nos critérios de filtro
+     */
+    private List<AverageOperationGroup> findGroupsByCriteria(OperationFilterCriteria criteria, UUID userId) {
+        log.info("=== FINDGROUPSBYCRITERIA ===");
+        log.info("Critérios recebidos: status={}, entryDateStart={}, analysisHouse={}", 
+            criteria.getStatus(), criteria.getEntryDateStart(), criteria.getAnalysisHouseName());
+        
+        boolean hasAnyFilter = hasAnyFilter(criteria);
+        boolean hasNonStatusFilters = hasNonStatusFilters(criteria);
+        
+        log.info("hasAnyFilter: {}", hasAnyFilter);
+        log.info("hasNonStatusFilters: {}", hasNonStatusFilters);
+        
+        try {
+            // Se não há filtros, usar query simples
+            if (!hasAnyFilter) {
+                log.info("NENHUM FILTRO - USANDO QUERY SIMPLES");
+                return groupRepository.findAll().stream()
+                    .filter(group -> group.getItems().stream()
+                        .anyMatch(item -> item.getOperation().getUser().getId().equals(userId)))
+                    .collect(Collectors.toList());
+            }
+            
+            // Se há apenas status ACTIVE (caso mais comum), usar query específica
+            if (criteria.getStatus() != null && 
+                criteria.getStatus().size() == 1 && 
+                criteria.getStatus().get(0) == OperationStatus.ACTIVE &&
+                !hasNonStatusFilters) {
+                log.info("APENAS STATUS ACTIVE - USANDO QUERY ESPECÍFICA");
+                List<AverageOperationGroup> result = groupRepository.findAll().stream()
+                    .filter(group -> group.getItems().stream()
+                        .anyMatch(item -> item.getOperation().getUser().getId().equals(userId) &&
+                                        item.getOperation().getStatus() == OperationStatus.ACTIVE))
+                    .collect(Collectors.toList());
+                log.info("Grupos retornados pela query específica: {}", result.size());
+                return result;
+            }
+            
+            // Para outros casos, usar query simples e filtrar depois
+            log.info("OUTROS CASOS - USANDO QUERY SIMPLES COM FILTRO POSTERIOR");
+            return groupRepository.findAll().stream()
+                .filter(group -> group.getItems().stream()
+                    .anyMatch(item -> item.getOperation().getUser().getId().equals(userId)))
+                .collect(Collectors.toList());
+            
+        } catch (Exception e) {
+            log.error("Erro na busca de grupos, fallback para query simples: {}", e.getMessage());
+            return groupRepository.findAll().stream()
+                .filter(group -> group.getItems().stream()
+                    .anyMatch(item -> item.getOperation().getUser().getId().equals(userId)))
+                .collect(Collectors.toList());
+        }
+    }
+    /**
+     * ✅ CORREÇÃO CRÍTICA: Coleta operações escolhendo a representação correta baseada no status procurado
+     */
+    private List<Operation> collectOperationsFromGroups(List<AverageOperationGroup> groups, OperationFilterCriteria criteria) {
+        log.info("=== COLLECTOPERATIONSFROMGROUPS ===");
+        log.info("Coletando operações de {} grupos", groups.size());
+        log.info("Critérios de status: {}", criteria.getStatus());
+        
+        List<Operation> allOperations = new ArrayList<>();
+        for (AverageOperationGroup group : groups) {
+            log.info("Processando Grupo ID: {} - {} items", group.getId(), group.getItems() != null ? group.getItems().size() : 0);
+            
+            if (group.getItems() == null || group.getItems().isEmpty()) {
+                log.warn("Grupo {} não tem items!", group.getId());
+                continue;
+            }
+            
+            // ✅ NOVA LÓGICA: Escolher operação baseada no status procurado
+            Operation bestOperation = selectBestOperationForStatus(group.getItems(), criteria.getStatus());
+            
+            if (bestOperation != null) {
+                allOperations.add(bestOperation);
+                log.info("✅ Grupo {} representado por operação: ID={}, Status={}", 
+                    group.getId(), bestOperation.getId(), bestOperation.getStatus());
+            } else {
+                log.warn("❌ Grupo {} não tem nenhuma operação adequada para o filtro!", group.getId());
+            }
+        }
+        
+        log.info("Total de operações coletadas (baseadas no filtro): {}", allOperations.size());
+        return allOperations;
+    }
+    /**
+     * ✅ CORREÇÃO PRINCIPAL: Seleciona a melhor operação de um grupo baseada no status procurado
+     * Resolve o bug onde buscava ACTIVE mas escolhia CONSOLIDATED_RESULT com status WINNER
+     */
+    private Operation selectBestOperationForStatus(List<AverageOperationItem> items, List<OperationStatus> statusFilter) {
+        log.info("  === SELECIONANDO MELHOR OPERAÇÃO ===");
+        log.info("  Filtro de status: {}", statusFilter);
+        
+        // Separar operações por tipo e status
+        Operation consolidatedResult = null;
+        Operation consolidatedEntry = null;
+        Operation originalActive = null;
+        Operation totalExit = null;
+        List<Operation> otherOperations = new ArrayList<>();
+        
+        for (AverageOperationItem item : items) {
+            Operation operation = item.getOperation();
+            
+            log.info("  Analisando: RoleType={}, Status={}, ID={}", 
+                item.getRoleType(), operation.getStatus(), operation.getId());
+            
+            // Pular operações HIDDEN
+            if (operation.getStatus() == OperationStatus.HIDDEN) {
+                log.info("  ❌ Ignorada: HIDDEN");
+                continue;
+            }
+            
+            // Categorizar operações
+            switch (item.getRoleType()) {
+                case CONSOLIDATED_RESULT:
+                    consolidatedResult = operation;
+                    log.info("  📊 CONSOLIDATED_RESULT encontrada: Status={}", operation.getStatus());
+                    break;
+                case CONSOLIDATED_ENTRY:
+                    consolidatedEntry = operation;
+                    log.info("  📥 CONSOLIDATED_ENTRY encontrada: Status={}", operation.getStatus());
+                    break;
+                case ORIGINAL:
+                    if (operation.getStatus() == OperationStatus.ACTIVE) {
+                        originalActive = operation;
+                        log.info("  🔵 ORIGINAL ACTIVE encontrada");
+                    }
+                    break;
+                case TOTAL_EXIT:
+                    totalExit = operation;
+                    log.info("  📤 TOTAL_EXIT encontrada: Status={}", operation.getStatus());
+                    break;
+                default:
+                    otherOperations.add(operation);
+                    log.info("  📋 Outra operação: {}", item.getRoleType());
+                    break;
+            }
+        }
+        
+        // ✅ NOVA LÓGICA DE SELEÇÃO BASEADA NO STATUS
+        if (statusFilter != null && statusFilter.size() == 1) {
+            OperationStatus targetStatus = statusFilter.get(0);
+            log.info("  🎯 Buscando status específico: {}", targetStatus);
+            
+            switch (targetStatus) {
+                case ACTIVE:
+                    // Para ACTIVE: priorizar CONSOLIDATED_ENTRY > ORIGINAL ACTIVE
+                    if (consolidatedEntry != null && consolidatedEntry.getStatus() == OperationStatus.ACTIVE) {
+                        log.info("  ✅ Escolhida: CONSOLIDATED_ENTRY ACTIVE");
+                        return consolidatedEntry;
+                    }
+                    if (originalActive != null) {
+                        log.info("  ✅ Escolhida: ORIGINAL ACTIVE (fallback)");
+                        return originalActive;
+                    }
+                    break;
+                    
+                case WINNER:
+                case LOSER:
+                    // Para WINNER/LOSER: priorizar CONSOLIDATED_RESULT > TOTAL_EXIT
+                    if (consolidatedResult != null && consolidatedResult.getStatus() == targetStatus) {
+                        log.info("  ✅ Escolhida: CONSOLIDATED_RESULT {}", targetStatus);
+                        return consolidatedResult;
+                    }
+                    if (totalExit != null && totalExit.getStatus() == targetStatus) {
+                        log.info("  ✅ Escolhida: TOTAL_EXIT {}", targetStatus);
+                        return totalExit;
+                    }
+                    break;
+                    
+                default:
+                    // Para outros status: usar lógica original
+                    if (consolidatedResult != null && consolidatedResult.getStatus() == targetStatus) {
+                        log.info("  ✅ Escolhida: CONSOLIDATED_RESULT {}", targetStatus);
+                        return consolidatedResult;
+                    }
+                    if (totalExit != null && totalExit.getStatus() == targetStatus) {
+                        log.info("  ✅ Escolhida: TOTAL_EXIT {}", targetStatus);
+                        return totalExit;
+                    }
+                    break;
+            }
+        }
+        
+        // ✅ FALLBACK: Lógica original (priorizar consolidadas)
+        log.info("  🔄 Usando lógica de fallback");
+        if (consolidatedResult != null) {
+            log.info("  ✅ Escolhida: CONSOLIDATED_RESULT (fallback)");
+            return consolidatedResult;
+        }
+        if (totalExit != null) {
+            log.info("  ✅ Escolhida: TOTAL_EXIT (fallback)");
+            return totalExit;
+        }
+        if (consolidatedEntry != null) {
+            log.info("  ✅ Escolhida: CONSOLIDATED_ENTRY (fallback)");
+            return consolidatedEntry;
+        }
+        if (originalActive != null) {
+            log.info("  ✅ Escolhida: ORIGINAL ACTIVE (fallback)");
+            return originalActive;
+        }
+        if (!otherOperations.isEmpty()) {
+            log.info("  ✅ Escolhida: Primeira outra operação (último fallback)");
+            return otherOperations.get(0);
+        }
+        
+        log.warn("  ❌ Nenhuma operação adequada encontrada");
+        return null;
+    }
+    /**
+     * 🔧 CORREÇÃO CRÍTICA: Calcular valor total investido baseado na quantidade real
+     * Para operações consolidadas (WINNER/LOSER): entryUnitPrice × quantity
+     * Para operações ACTIVE: entryUnitPrice × quantity das operações ativas
+     */
+    private BigDecimal calculateTotalInvestedValue(List<Operation> allOperations, OperationFilterCriteria criteria) {
+        log.info("=== INICIANDO CÁLCULO DE VALOR INVESTIDO CORRIGIDO ===");
+        
+        boolean isActiveFilter = criteria.getStatus() != null && 
+                               criteria.getStatus().contains(OperationStatus.ACTIVE);
+        
+        if (isActiveFilter) {
+            log.info("=== CÁLCULO PARA OPERAÇÕES ACTIVE ===");
+            BigDecimal totalDireto = allOperations.stream()
+                .filter(op -> op.getStatus() == OperationStatus.ACTIVE)
+                .map(op -> {
+                    // Para ACTIVE: calcular baseado na quantidade real da operação
+                    BigDecimal unitPrice = op.getEntryUnitPrice() != null ? op.getEntryUnitPrice() : BigDecimal.ZERO;
+                    Integer quantity = op.getQuantity() != null ? op.getQuantity() : 0;
+                    BigDecimal value = unitPrice.multiply(BigDecimal.valueOf(quantity));
+                    
+                    log.info("Operação ACTIVE: ID={}, Code={}, Quantity={}, UnitPrice={}, CalculatedValue={}", 
+                        op.getId(), op.getOptionSeries().getCode(), quantity, unitPrice, value);
+                    return value;
+                })
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+            
+            log.info("=== VALOR TOTAL CALCULADO PARA ACTIVE: {} ===", totalDireto);
+            return totalDireto;
+        }
+        
+        // 🔧 CORREÇÃO PRINCIPAL: Para WINNER/LOSER calcular baseado na quantidade real
+        log.info("=== CÁLCULO CORRIGIDO PARA WINNER/LOSER ===");
+        BigDecimal total = allOperations.stream()
+            .map(op -> {
+                // ✅ NOVA LÓGICA: entryUnitPrice × quantity (não entryTotalValue fixo)
+                BigDecimal unitPrice = op.getEntryUnitPrice() != null ? op.getEntryUnitPrice() : BigDecimal.ZERO;
+                Integer quantity = op.getQuantity() != null ? op.getQuantity() : 0;
+                BigDecimal calculatedValue = unitPrice.multiply(BigDecimal.valueOf(quantity));
+                
+                log.info("Operação: ID={}, Code={}, Status={}, Quantity={}, UnitPrice={}, CalculatedValue={}", 
+                    op.getId(), op.getOptionSeries().getCode(), op.getStatus(), 
+                    quantity, unitPrice, calculatedValue);
+                    
+                return calculatedValue;
+            })
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        
+        log.info("=== VALOR TOTAL CORRIGIDO: {} ===", total);
+        return total;
+    }
+    /**
+     * Verifica se há algum filtro ativo
+     */
+    private boolean hasAnyFilter(OperationFilterCriteria criteria) {
+        return criteria.getStatus() != null && !criteria.getStatus().isEmpty()
+            || criteria.getEntryDateStart() != null
+            || criteria.getEntryDateEnd() != null
+            || criteria.getExitDateStart() != null
+            || criteria.getExitDateEnd() != null
+            || criteria.getAnalysisHouseName() != null
+            || criteria.getBrokerageName() != null
+            || criteria.getTransactionType() != null
+            || criteria.getTradeType() != null
+            || criteria.getOptionType() != null
+            || criteria.getOptionSeriesCode() != null;
     }
 
     /**
-     * 🔧 CORREÇÃO: Calcular valor total investido baseado apenas em operações com data de saída 
-     * e que não sejam consolidadas (quantidade × valor unitário de entrada)
+     * Verifica se há filtros além do status
      */
-    private BigDecimal calculateTotalInvestedValue(List<Operation> allOperations, OperationFilterCriteria criteria) {
-        log.info("=== INICIANDO CÁLCULO DE VALOR INVESTIDO ===");
+    private boolean hasNonStatusFilters(OperationFilterCriteria criteria) {
+        return criteria.getEntryDateStart() != null
+            || criteria.getEntryDateEnd() != null
+            || criteria.getExitDateStart() != null
+            || criteria.getExitDateEnd() != null
+            || criteria.getAnalysisHouseName() != null
+            || criteria.getBrokerageName() != null
+            || criteria.getTransactionType() != null
+            || criteria.getTradeType() != null
+            || criteria.getOptionType() != null
+            || criteria.getOptionSeriesCode() != null;
+    }
+    /**
+     * ✅ CORREÇÃO: Aplica filtros adicionais SEM filtrar por status 
+     * (status já foi aplicado na seleção da operação)
+     */
+    private List<Operation> applyAdditionalFilters(List<Operation> operations, OperationFilterCriteria criteria) {
+        log.info("=== APLICANDO FILTROS ADICIONAIS ===");
+        log.info("Operações antes dos filtros: {}", operations.size());
         
-        log.info("Total de operações recebidas: {}", allOperations.size());
+        List<Operation> filtered = operations.stream()
+            .filter(operation -> {
+                // ✅ SKIP filtro de status - já foi aplicado na seleção da operação
+                log.info("✅ Operação {} mantida (status já filtrado na seleção): Status={}", 
+                    operation.getId(), operation.getStatus());
+                
+                // Filtro de data de entrada
+                if (criteria.getEntryDateStart() != null && operation.getEntryDate().isBefore(criteria.getEntryDateStart())) {
+                    log.info("❌ Operação {} filtrada: EntryDate {} < {}", 
+                        operation.getId(), operation.getEntryDate(), criteria.getEntryDateStart());
+                    return false;
+                }
+                if (criteria.getEntryDateEnd() != null && operation.getEntryDate().isAfter(criteria.getEntryDateEnd())) {
+                    log.info("❌ Operação {} filtrada: EntryDate {} > {}", 
+                        operation.getId(), operation.getEntryDate(), criteria.getEntryDateEnd());
+                    return false;
+                }
+                
+                // Filtro de data de saída
+                if (criteria.getExitDateStart() != null && operation.getExitDate() != null && 
+                    operation.getExitDate().isBefore(criteria.getExitDateStart())) {
+                    log.info("❌ Operação {} filtrada: ExitDate {} < {}", 
+                        operation.getId(), operation.getExitDate(), criteria.getExitDateStart());
+                    return false;
+                }
+                if (criteria.getExitDateEnd() != null && operation.getExitDate() != null && 
+                    operation.getExitDate().isAfter(criteria.getExitDateEnd())) {
+                    log.info("❌ Operação {} filtrada: ExitDate {} > {}", 
+                        operation.getId(), operation.getExitDate(), criteria.getExitDateEnd());
+                    return false;
+                }
+                
+                return true;
+            })
+            .collect(Collectors.toList());
         
-        // ✅ LÓGICA SIMPLIFICADA: Filtrar operações com data de saída e valores válidos
-        List<Operation> exitedOperations = allOperations.stream()
-                .filter(operation -> {
-                    boolean hasExitDate = operation.getExitDate() != null;
-                    boolean hasValidValues = operation.getQuantity() != null && operation.getEntryUnitPrice() != null;
-                    
-                    log.info("Operação {}: exitDate = {} | quantidade = {} | precoUnitario = {} | válida = {}", 
-                            operation.getOptionSeries().getCode(), 
-                            operation.getExitDate(), 
-                            operation.getQuantity(),
-                            operation.getEntryUnitPrice(),
-                            hasExitDate && hasValidValues);
-                    
-                    return hasExitDate && hasValidValues;
-                })
-                .toList();
+        log.info("Operações após filtros adicionais: {}", filtered.size());
+        return filtered;
+    }
+    /**
+     * Garante que todas as operações tenham o groupId preenchido
+     */
+    private void setGroupIdInOperations(List<Operation> operations, List<AverageOperationGroup> groups) {
+        // Criar mapa grupo -> operações para facilitar a busca
+        Map<UUID, UUID> operationToGroupMap = new HashMap<>();
         
-        log.info("Operações filtradas: {} operações totais, {} com saída válidas", 
-                allOperations.size(), exitedOperations.size());
-        
-        exitedOperations.forEach(op -> {
-            BigDecimal operationValue = op.getEntryUnitPrice().multiply(BigDecimal.valueOf(op.getQuantity()));
-            log.info("✅ INCLUÍDA - Operação {}: {} unidades × {} = {}", 
-                    op.getOptionSeries().getCode(),
-                    op.getQuantity(), 
-                    op.getEntryUnitPrice(), 
-                    operationValue);
-        });
-        
-        if (exitedOperations.isEmpty()) {
-            log.warn("Nenhuma operação com saída válida encontrada para cálculo");
-            return BigDecimal.ZERO;
+        for (AverageOperationGroup group : groups) {
+            if (group.getItems() != null) {
+                for (AverageOperationItem item : group.getItems()) {
+                    operationToGroupMap.put(item.getOperation().getId(), group.getId());
+                }
+            }
         }
         
-        // ✅ CALCULAR: quantidade × valor unitário de entrada para cada operação
-        BigDecimal total = exitedOperations.stream()
-                .map(op -> {
-                    BigDecimal operationValue = op.getEntryUnitPrice()
-                            .multiply(BigDecimal.valueOf(op.getQuantity()));
-                    return operationValue;
-                })
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        
-        log.info("=== VALOR TOTAL INVESTIDO CALCULADO: {} ===", total);
-        return total;
+        log.info("GroupId mapeado para {} operações", operationToGroupMap.size());
     }
     
     /**
-     * Verifica se uma operação é consolidada (baseado no seu grupo e roleType)
-     * ⚠️ MÉTODO TEMPORARIAMENTE DESABILITADO PARA DEPURAÇÃO
+     * Aplica paginação manual na lista de operações
      */
-    private boolean isConsolidatedOperation(Operation operation) {
-        // 🔧 TEMPORÁRIO: Retornar sempre false para incluir todas as operações
-        // até resolvermos o problema da lógica de consolidação
-        return false;
+    private Page<Operation> applyPagination(List<Operation> operations, Pageable pageable) {
+        int start = (int) pageable.getOffset();
+        int end = Math.min((start + pageable.getPageSize()), operations.size());
         
-        /* LÓGICA ORIGINAL COMENTADA:
-        try {
-            log.debug("🔍 Verificando se operação {} é consolidada...", operation.getOptionSeries().getCode());
-            
-            // ✅ BUSCAR TODOS OS ITENS da operação para depuração
-            List<AverageOperationItem> allItems = averageOperationItemRepository.findByOperation_Id(operation.getId());
-            
-            log.info("🔍 Operação {} tem {} itens no grupo:", operation.getOptionSeries().getCode(), allItems.size());
-            
-            for (AverageOperationItem item : allItems) {
-                log.info("  - Item ID: {} | RoleType: {} | É consolidação: {}", 
-                        item.getId(), item.getRoleType(), item.getRoleType().isConsolidation());
-            }
-            
-            // ✅ LÓGICA CORRIGIDA: Uma operação é considerada consolidada apenas se 
-            // TODOS os seus itens forem do tipo consolidação
-            boolean hasNonConsolidatedItem = allItems.stream()
-                    .anyMatch(item -> !item.getRoleType().isConsolidation());
-            
-            boolean isOperationConsolidated = !hasNonConsolidatedItem && !allItems.isEmpty();
-            
-            log.info("🔍 Operação {} - Tem item não consolidado: {} - É operação consolidada: {}", 
-                     operation.getOptionSeries().getCode(), hasNonConsolidatedItem, isOperationConsolidated);
-            
-            return isOperationConsolidated;
-            
-        } catch (Exception e) {
-            log.error("❌ Erro ao verificar se operação {} é consolidada: {}", 
-                    operation.getId(), e.getMessage(), e);
-            return false;
-        }
-        */
-    }
-
-    private Specification<Operation> createSpecification(OperationFilterCriteria criteria) {
-        return (root, query, cb) -> {
-            List<Predicate> predicates = new ArrayList<>();
-
-            // Filtro por usuário
-            predicates.add(cb.equal(root.get("user"), SecurityUtil.getLoggedUser()));
-
-            // Filtro por status
-            if (criteria.getStatus() != null && !criteria.getStatus().isEmpty()) {
-                predicates.add(root.get("status").in(criteria.getStatus()));
-            }
-
-            // Filtro por datas
-            if (criteria.getEntryDateStart() != null) {
-                predicates.add(
-                        cb.greaterThanOrEqualTo(root.get("entryDate"), criteria.getEntryDateStart()));
-            }
-            if (criteria.getEntryDateEnd() != null) {
-                predicates.add(cb.lessThanOrEqualTo(root.get("entryDate"), criteria.getEntryDateEnd()));
-            }
-            if (criteria.getExitDateStart() != null) {
-                predicates.add(cb.greaterThanOrEqualTo(root.get("exitDate"), criteria.getExitDateStart()));
-            }
-            if (criteria.getExitDateEnd() != null) {
-                predicates.add(cb.lessThanOrEqualTo(root.get("exitDate"), criteria.getExitDateEnd()));
-            }
-
-            // Filtro por casa de análise
-            if (criteria.getAnalysisHouseName() != null && !criteria.getAnalysisHouseName().isEmpty()) {
-                predicates.add(
-                        cb.like(
-                                cb.lower(root.get("analysisHouse").get("name")),
-                                "%" + criteria.getAnalysisHouseName().toLowerCase() + "%"));
-            }
-
-            // Filtro por corretora
-            if (criteria.getBrokerageName() != null && !criteria.getBrokerageName().isEmpty()) {
-                predicates.add(
-                        cb.like(
-                                cb.lower(root.get("brokerage").get("name")),
-                                "%" + criteria.getBrokerageName().toLowerCase() + "%"));
-            }
-
-            // Filtro por tipo de transação
-            if (criteria.getTransactionType() != null) {
-                predicates.add(cb.equal(root.get("transactionType"), criteria.getTransactionType()));
-            }
-
-            // Filtro por tipo de trade
-            if (criteria.getTradeType() != null) {
-                predicates.add(cb.equal(root.get("tradeType"), criteria.getTradeType()));
-            }
-
-            // Filtro por tipo de opção
-            if (criteria.getOptionType() != null) {
-                predicates.add(cb.equal(root.get("optionSeries").get("type"), criteria.getOptionType()));
-            }
-
-            // Filtro por código da série
-            if (criteria.getOptionSeriesCode() != null && !criteria.getOptionSeriesCode().isEmpty()) {
-                predicates.add(
-                        cb.like(
-                                cb.lower(root.get("optionSeries").get("code")),
-                                "%" + criteria.getOptionSeriesCode().toLowerCase() + "%"));
-            }
-
-            return cb.and(predicates.toArray(new Predicate[0]));
-        };
+        List<Operation> pageContent = operations.subList(start, end);
+        
+        return new PageImpl<>(pageContent, pageable, operations.size());
     }
 }

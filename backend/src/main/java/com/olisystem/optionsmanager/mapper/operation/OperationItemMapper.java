@@ -17,6 +17,19 @@ public class OperationItemMapper {
         // Buscar o grupo da operação
         AverageOperationGroup group = averageOperationService.getGroupByOperation(op);
         
+        // Buscar o roleType da operação no grupo
+        String roleType = null;
+        Integer sequenceNumber = null;
+        if (group != null) {
+            var operationItem = group.getItems().stream()
+                    .filter(item -> item.getOperation().getId().equals(op.getId()))
+                    .findFirst();
+            if (operationItem.isPresent()) {
+                roleType = operationItem.get().getRoleType().getDescription();
+                sequenceNumber = operationItem.get().getSequenceNumber();
+            }
+        }
+        
         return OperationItemDto.builder()
                 .id(op.getId())
                 .optionSeriesCode(
@@ -41,6 +54,8 @@ public class OperationItemMapper {
                 .profitLoss(op.getProfitLoss())
                 .profitLossPercentage(op.getProfitLossPercentage())
                 .baseAssetLogoUrl(op.getOptionSeries().getAsset().getUrlLogo())
+                .roleType(roleType)
+                .sequenceNumber(sequenceNumber)
                 .groupId(group != null ? group.getId() : null)
                 .build();
     }

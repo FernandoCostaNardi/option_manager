@@ -14,6 +14,7 @@ import com.olisystem.optionsmanager.model.position.ExitRecord;
 import com.olisystem.optionsmanager.model.position.Position;
 import com.olisystem.optionsmanager.model.position.PositionOperation;
 import com.olisystem.optionsmanager.model.position.PositionOperationType;
+import com.olisystem.optionsmanager.service.operation.detector.PartialExitDetector;
 import com.olisystem.optionsmanager.model.position.PositionStatus;
 import com.olisystem.optionsmanager.model.transaction.TransactionType;
 import com.olisystem.optionsmanager.repository.OperationRepository;
@@ -52,6 +53,7 @@ public class PositionExitService {
   private final OperationRepository operationRepository;
   private final PositionCalculator calculator;
   private final PositionMapper mapper;
+  private final PartialExitDetector partialExitDetector;
   private final AverageOperationService averageOperationService;
 
   private static final int PRECISION = 6;
@@ -76,7 +78,31 @@ public class PositionExitService {
       throw new IllegalArgumentException("Quantidade inválida para saída");
     }
 
-    boolean isFullExit = request.getQuantity().equals(position.getRemainingQuantity());
+    // ✅ CORREÇÃO: Usar PartialExitDetector para detecção sofisticada
+    boolean isFirstPartial = partialExitDetector.isFirstPartialExit(position);
+    boolean isSubsequentPartial = partialExitDetector.isSubsequentPartialExit(position);
+    boolean isFinalFromPartial = partialExitDetector.isFinalExit(position, request.getQuantity()) 
+            && position.getStatus() == PositionStatus.PARTIAL;
+    boolean isPartialNormal = partialExitDetector.isPartialExit(position, request.getQuantity());
+    boolean isFullExit = partialExitDetector.isFinalExit(position, request.getQuantity());
+
+    log.debug("🔍 Análise de saída: isFirstPartial={}, isSubsequentPartial={}, isFinalFromPartial={}, isPartialNormal={}, isFullExit={}", 
+            isFirstPartial, isSubsequentPartial, isFinalFromPartial, isPartialNormal, isFullExit);
+
+    // 🎯 Determinar se é algum tipo de saída parcial
+    boolean isAnyPartialExit = isFirstPartial || isSubsequentPartial || isFinalFromPartial || isPartialNormal;
+    
+    if (isFinalFromPartial) {
+        log.info("🎯 FINAL_PARTIAL_EXIT detectada no PositionExitService");
+    } else if (isFirstPartial) {
+        log.info("🔄 FIRST_PARTIAL_EXIT detectada no PositionExitService");
+    } else if (isSubsequentPartial) {
+        log.info("➡️ SUBSEQUENT_PARTIAL_EXIT detectada no PositionExitService");
+    } else if (isPartialNormal) {
+        log.info("📝 PARTIAL_EXIT detectada no PositionExitService");
+    } else if (isFullExit) {
+        log.info("✅ TOTAL_EXIT detectada no PositionExitService");
+    }
 
     List<EntryLot> availableLots =
         entryLotRepository.findByPositionOrderByEntryDateAsc(position).stream()
@@ -225,40 +251,63 @@ public class PositionExitService {
           activeConsolidated.getId());
     }
 
-    // Se for saída total, processa grupo como full exit, senão parcial
-    if (isFullExit) {
-      averageOperationService.processFullExit(
-          exitOperations.get(0), exitOperations.get(1), activeConsolidated, position);
-    } else {
+    // ✅ CORREÇÃO: Usar lógica sofisticada em vez de isFullExit simples
+    // Se é qualquer tipo de saída parcial (incluindo final) → processParcialExit
+    // Se é saída total simples (position OPEN) → processFullExit
+    if (isAnyPartialExit) {
+      log.info("🔄 Usando processParcialExit (saída parcial detectada)");
       averageOperationService.processParcialExit(
           exitOperations.get(0), exitOperations.get(1), null, activeConsolidated, position);
+    } else {
+      log.info("✅ Usando processFullExit (saída total simples)");
+      averageOperationService.processFullExit(
+          exitOperations.get(0), exitOperations.get(1), activeConsolidated, position);
     }
 
     // 3. Criar operação consolidada de saída (visível)
     if (!exitOperations.isEmpty()) {
-      int totalExitedQuantity = exitOperations.stream().mapToInt(Operation::getQuantity).sum();
-      BigDecimal totalExitValue =
-          exitOperations.stream()
-              .map(Operation::getExitTotalValue)
-              .reduce(BigDecimal.ZERO, BigDecimal::add);
-      BigDecimal entryTotalValue =
-          exitOperations.stream()
-              .map(Operation::getEntryTotalValue)
-              .reduce(BigDecimal.ZERO, BigDecimal::add);
+      
+      // ✅ CORREÇÃO: Para FINAL_PARTIAL_EXIT, usar dados da posição completa
+      int consolidatedQuantity;
+      BigDecimal consolidatedEntryTotalValue;
+      BigDecimal consolidatedExitTotalValue;
+      BigDecimal consolidatedProfitLoss;
+      
+      if (isFinalFromPartial) {
+        log.info("🎯 Criando operação consolidada para FINAL_PARTIAL_EXIT com dados completos da posição");
+        
+        // Usar dados da posição completa
+        consolidatedQuantity = position.getTotalQuantity();
+        consolidatedEntryTotalValue = position.getAveragePrice().multiply(BigDecimal.valueOf(position.getTotalQuantity()));
+        consolidatedExitTotalValue = position.getTotalRealizedProfit().add(consolidatedEntryTotalValue);
+        consolidatedProfitLoss = position.getTotalRealizedProfit();
+        
+      } else {
+        log.info("📝 Criando operação consolidada para saída normal com dados da saída atual");
+        
+        // Usar dados apenas da saída atual (lógica original)
+        consolidatedQuantity = exitOperations.stream().mapToInt(Operation::getQuantity).sum();
+        consolidatedEntryTotalValue = exitOperations.stream()
+            .map(Operation::getEntryTotalValue)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        consolidatedExitTotalValue = exitOperations.stream()
+            .map(Operation::getExitTotalValue)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        consolidatedProfitLoss = exitOperations.stream()
+            .map(Operation::getProfitLoss)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+      }
+      
       BigDecimal entryUnitPrice =
-          entryTotalValue.divide(BigDecimal.valueOf(totalExitedQuantity), 6, RoundingMode.HALF_UP);
+          consolidatedEntryTotalValue.divide(BigDecimal.valueOf(consolidatedQuantity), 6, RoundingMode.HALF_UP);
       BigDecimal averageExitPrice =
-          totalExitValue.divide(BigDecimal.valueOf(totalExitedQuantity), 6, RoundingMode.HALF_UP);
-      BigDecimal totalProfitLoss =
-          exitOperations.stream()
-              .map(Operation::getProfitLoss)
-              .reduce(BigDecimal.ZERO, BigDecimal::add);
+          consolidatedExitTotalValue.divide(BigDecimal.valueOf(consolidatedQuantity), 6, RoundingMode.HALF_UP);
       BigDecimal profitLossPercentage =
-          totalProfitLoss
-              .divide(entryTotalValue, 6, RoundingMode.HALF_UP)
+          consolidatedProfitLoss
+              .divide(consolidatedEntryTotalValue, 6, RoundingMode.HALF_UP)
               .multiply(BigDecimal.valueOf(100));
       OperationStatus status =
-          totalProfitLoss.compareTo(BigDecimal.ZERO) > 0
+          consolidatedProfitLoss.compareTo(BigDecimal.ZERO) > 0
               ? OperationStatus.WINNER
               : OperationStatus.LOSER;
       TradeType tradeType =
@@ -273,12 +322,12 @@ public class PositionExitService {
               .tradeType(tradeType)
               .entryDate(position.getOpenDate())
               .exitDate(request.getExitDate())
-              .quantity(totalExitedQuantity)
+              .quantity(consolidatedQuantity)
               .entryUnitPrice(entryUnitPrice)
-              .entryTotalValue(entryTotalValue)
+              .entryTotalValue(consolidatedEntryTotalValue)
               .exitUnitPrice(averageExitPrice)
-              .exitTotalValue(totalExitValue)
-              .profitLoss(totalProfitLoss)
+              .exitTotalValue(consolidatedExitTotalValue)
+              .profitLoss(consolidatedProfitLoss)
               .profitLossPercentage(profitLossPercentage)
               .status(status)
               .user(SecurityUtil.getLoggedUser())
@@ -297,7 +346,7 @@ public class PositionExitService {
       log.info(
           "Operação consolidada de saída criada: {} ({} unidades, preço médio {}, status {})",
           consolidatedExit.getId(),
-          totalExitedQuantity,
+          consolidatedQuantity,
           entryUnitPrice,
           status);
     }

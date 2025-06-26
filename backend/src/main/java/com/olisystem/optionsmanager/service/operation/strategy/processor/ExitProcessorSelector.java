@@ -24,9 +24,11 @@ public class ExitProcessorSelector {
 
     /**
      * Seleciona o processador apropriado baseado no contexto da operação
-     * CORRIGIDO: Simplificado para evitar uso incorreto de processadores complexos
+     * CORRIGIDO: Usando lógica completa de detecção de cenários
      */
     public Operation selectAndProcess(OperationExitPositionContext context) {
+
+        validateContext(context);
 
         int lotCount = context.availableLots().size();
         Integer requestedQuantity = context.context().request().getQuantity();
@@ -34,11 +36,36 @@ public class ExitProcessorSelector {
         log.info("Selecionando processador: {} lotes, quantidade solicitada: {}, quantidade restante: {}",
                 lotCount, requestedQuantity, context.position().getRemainingQuantity());
 
-        // ✅ CORREÇÃO: Priorizar lógica simples primeiro
+        // 🔧 CORREÇÃO: Verificar cenário complexo primeiro
+        if (complexScenarioDetector.isComplexScenario(context.position(), requestedQuantity)) {
+            ComplexScenarioDetector.ScenarioType scenario = complexScenarioDetector.detectScenario(
+                    context.position(), requestedQuantity);
+            log.info("Cenário complexo detectado: {} - usando ComplexScenarioProcessor", scenario);
+            return complexScenarioProcessor.process(context);
+        }
+
+        // 🔧 CORREÇÃO: Usar detecção de cenários parciais para lote único
         if (lotCount == 1) {
-            // Cenário de lote único - usar sempre SingleLotExitProcessor por enquanto
-            log.info("Lote único detectado - usando SingleLotExitProcessor");
-            return singleLotProcessor.process(context);
+            PartialExitDetector.ExitType exitType = partialExitDetector.determineExitType(
+                    context.position(), requestedQuantity);
+
+            log.info("Lote único - Tipo de saída detectado: {}", exitType);
+
+            switch (exitType) {
+                case SINGLE_TOTAL_EXIT:
+                    log.info("Usando SingleLotExitProcessor para saída total única");
+                    return singleLotProcessor.process(context);
+                    
+                case FIRST_PARTIAL_EXIT:
+                case SUBSEQUENT_PARTIAL_EXIT:
+                case FINAL_PARTIAL_EXIT:
+                    log.info("Usando PartialExitProcessor para saída parcial tipo: {}", exitType);
+                    return partialExitProcessor.process(context);
+                    
+                default:
+                    log.warn("Tipo de saída não reconhecido: {} - usando SingleLotExitProcessor como fallback", exitType);
+                    return singleLotProcessor.process(context);
+            }
         }
         else if (lotCount > 1) {
             // Múltiplos lotes simples - usar MultipleLotExitProcessor

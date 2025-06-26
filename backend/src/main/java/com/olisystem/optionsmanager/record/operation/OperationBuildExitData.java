@@ -49,17 +49,17 @@ public record OperationBuildExitData(
                                                      TransactionType transactionType,
                                                      Integer totalQuantity) {
 
-        // ✅ CORREÇÃO: Determinar preço de entrada correto baseado no status da Position
+        // ✅ CORREÇÃO: Para operações consolidadas, sempre usar preço original do lote
+        // Em vez do preço médio da posição que é usado para break-even
         BigDecimal entryUnitPrice;
-        boolean isSubsequentOperation = context.position().getStatus() == 
-                com.olisystem.optionsmanager.model.position.PositionStatus.PARTIAL;
         
-        if (isSubsequentOperation) {
-            // Para operações após a primeira parcial, usar preço break-even da Position
-            entryUnitPrice = context.position().getAveragePrice();
-        } else {
-            // Para primeira operação, usar preço original do lote
+        // Para todas as operações de saída, usar o preço do lote que está sendo consumido
+        // não o preço médio da posição (que é para cálculo de break-even)
+        if (!context.availableLots().isEmpty()) {
             entryUnitPrice = context.availableLots().get(0).getUnitPrice();
+        } else {
+            // Fallback: usar preço da operação original se não houver lotes disponíveis
+            entryUnitPrice = context.context().activeOperation().getEntryUnitPrice();
         }
 
         // Calcular valores totais baseados na quantidade da operação

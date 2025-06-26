@@ -254,9 +254,6 @@ public class OperationSummaryCalculator {
     long callOperations =
         allOperations.stream().filter(op -> OptionType.CALL.equals(op.getOptionType())).count();
 
-    // 🔧 CORREÇÃO: Usar totalInvestedValue dos EntryLots ao invés de entryTotalValue das operações
-    BigDecimal totalEntryValue = totalInvestedValue;
-
     long winningOperations =
         allOperations.stream()
             .filter(
@@ -283,13 +280,37 @@ public class OperationSummaryCalculator {
             .filter(value -> value != null)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-    // 🔧 CORREÇÃO: Calcular porcentagem usando valor real investido dos EntryLots
+    // 🔧 CORREÇÃO CRÍTICA: Recalcular valor investido para operações consolidadas
+    BigDecimal correctedInvestedValue = totalInvestedValue;
+    
+    // Para operações WINNER/LOSER consolidadas: recalcular baseado na quantidade real
+    if (!allOperations.isEmpty()) {
+      OperationItemDto firstOp = allOperations.get(0);
+      if (firstOp.getStatus() == OperationStatus.WINNER || firstOp.getStatus() == OperationStatus.LOSER) {
+        BigDecimal recalculatedValue = allOperations.stream()
+          .filter(op -> op.getStatus() == OperationStatus.WINNER || op.getStatus() == OperationStatus.LOSER)
+          .map(op -> {
+            BigDecimal unitPrice = op.getEntryUnitPrice() != null ? op.getEntryUnitPrice() : BigDecimal.ZERO;
+            Integer quantity = op.getQuantity() != null ? op.getQuantity() : 0;
+            return unitPrice.multiply(BigDecimal.valueOf(quantity));
+          })
+          .reduce(BigDecimal.ZERO, BigDecimal::add);
+          
+        if (recalculatedValue.compareTo(BigDecimal.ZERO) > 0) {
+          correctedInvestedValue = recalculatedValue;
+        }
+      }
+    }
+    
+    BigDecimal totalEntryValue = correctedInvestedValue;
+
+    // 🔧 CORREÇÃO: Calcular porcentagem usando valor real investido corrigido
     BigDecimal totalProfitLossPercentage = BigDecimal.ZERO;
-    if (totalInvestedValue.compareTo(BigDecimal.ZERO) > 0) {
+    if (correctedInvestedValue.compareTo(BigDecimal.ZERO) > 0) {
       totalProfitLossPercentage =
           totalProfitLoss
               .multiply(new BigDecimal("100"))
-              .divide(totalInvestedValue, 2, RoundingMode.HALF_UP);
+              .divide(correctedInvestedValue, 2, RoundingMode.HALF_UP);
     }
 
     return OperationSummaryResponseDto.builder()

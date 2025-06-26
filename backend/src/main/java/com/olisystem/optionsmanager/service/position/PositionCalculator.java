@@ -23,24 +23,6 @@ public class PositionCalculator {
 
   private static final int PRECISION = 6;
 
-  /** Calcula o preço médio ponderado para uma posição */
-  public BigDecimal calculateWeightedAveragePrice(List<EntryLot> entryLots) {
-    BigDecimal totalQuantity = BigDecimal.ZERO;
-    BigDecimal weightedSum = BigDecimal.ZERO;
-
-    for (EntryLot lot : entryLots) {
-      BigDecimal lotQuantity = BigDecimal.valueOf(lot.getQuantity());
-      totalQuantity = totalQuantity.add(lotQuantity);
-      weightedSum = weightedSum.add(lot.getUnitPrice().multiply(lotQuantity));
-    }
-
-    if (totalQuantity.compareTo(BigDecimal.ZERO) > 0) {
-      return weightedSum.divide(totalQuantity, PRECISION, RoundingMode.HALF_UP);
-    }
-
-    return BigDecimal.ZERO;
-  }
-
   /** Calcula o preço médio de entrada com base nos lotes restantes */
   public BigDecimal calculateRemainingAveragePrice(List<EntryLot> entryLots) {
     BigDecimal totalRemainingQuantity = BigDecimal.ZERO;
