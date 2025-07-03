@@ -47,7 +47,11 @@ public class MainSecurityConfig {
 
     // Configura regras de autorização
     http.authorizeHttpRequests(
-        auth -> auth.requestMatchers("/api/auth/**").permitAll().anyRequest().authenticated());
+        auth -> auth
+            .requestMatchers("/api/auth/**").permitAll()
+            .requestMatchers("/api/invoice-processing/dashboard/**").permitAll() // Dashboard sem auth
+            .requestMatchers("/api/ocr/**").permitAll() // OCR sem auth (quando implementado)
+            .anyRequest().authenticated());
     // Adicione o filtro JWT antes do UsernamePasswordAuthenticationFilter
     http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
     return http.build();

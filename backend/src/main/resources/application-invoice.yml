@@ -1,0 +1,36 @@
+# ===================================================================
+# Configurações específicas do sistema de importação de notas de corretagem
+# ===================================================================
+
+app:
+  invoice:
+    import-config:
+      max-files-per-import: 5
+      processing-timeout-seconds: 300
+      parallel-processing: false
+      validate-duplicates: true
+    
+    file-config:
+      max-file-size-bytes: 10485760  # 10MB
+      min-content-length: 1000
+      allowed-extensions:
+        - pdf
+      compress-content: false
+    
+    parser-config:
+      default-parser: basic
+      use-brokerage-specific-parsers: true
+      parsing-timeout-seconds: 60
+      extract-detailed-financials: true
+      extract-item-observations: true
+
+# ===================================================================
+# Configurações adicionais para logging do sistema de invoices
+# ===================================================================
+
+logging:
+  level:
+    com.olisystem.optionsmanager.service.invoice: INFO
+    com.olisystem.optionsmanager.controller.invoice: INFO
+    com.olisystem.optionsmanager.parser.invoice: DEBUG
+    com.olisystem.optionsmanager.validator.invoice: DEBUG

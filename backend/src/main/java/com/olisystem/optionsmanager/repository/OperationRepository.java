@@ -11,6 +11,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface OperationRepository
     extends JpaRepository<Operation, UUID>, JpaSpecificationExecutor<Operation> {
@@ -29,4 +31,23 @@ public interface OperationRepository
 
   // Método para buscar uma operação por optionSeries, user e status
   Operation findByOptionSeriesAndUserAndStatus(OptionSerie optionSerie, User currentUser, OperationStatus active);
+  
+  // === MÉTODOS PARA VALIDAÇÃO DE DUPLICATAS (FASE 2) ===
+  
+  /**
+   * Busca operações por data de entrada e código da série (contendo)
+   */
+  @Query("SELECT o FROM Operation o WHERE o.entryDate = :entryDate AND UPPER(o.optionSeries.code) LIKE UPPER(CONCAT('%', :assetCode, '%'))")
+  List<Operation> findByEntryDateAndOptionSeriesCodeContaining(
+      @Param("entryDate") java.time.LocalDate entryDate, 
+      @Param("assetCode") String assetCode);
+  
+  /**
+   * Busca operações por usuário, data e código do ativo
+   */
+  @Query("SELECT o FROM Operation o WHERE o.user.id = :userId AND o.entryDate = :entryDate AND UPPER(o.optionSeries.code) LIKE UPPER(CONCAT('%', :assetCode, '%'))")
+  List<Operation> findByUserAndEntryDateAndAssetCode(
+      @Param("userId") UUID userId,
+      @Param("entryDate") java.time.LocalDate entryDate, 
+      @Param("assetCode") String assetCode);
 }
