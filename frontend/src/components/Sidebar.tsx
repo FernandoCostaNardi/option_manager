@@ -13,7 +13,8 @@ import {
   CreditCard,
   BarChart,
   Calendar,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Activity
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 
@@ -174,6 +175,12 @@ export function Sidebar() {
                   <div className="flex items-center gap-2">
                     <FileSpreadsheet className="h-4 w-4" />
                     <span>Notas de Corretagem</span>
+                  </div>
+                </Link>
+                <Link to="/importacoes/dashboard-processamento" className={`block p-2 rounded-md ${isActive('/importacoes/dashboard-processamento') ? 'bg-white/10 text-white' : 'text-purple-200 hover:text-white hover:bg-white/5'}`}>
+                  <div className="flex items-center gap-2">
+                    <Activity className="h-4 w-4" />
+                    <span>Dashboard Processamento</span>
                   </div>
                 </Link>
               </div>

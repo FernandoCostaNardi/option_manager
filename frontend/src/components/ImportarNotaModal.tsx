@@ -12,6 +12,11 @@ export function ImportarNotaModal({ isOpen, onClose, onSuccess }: ImportarNotaMo
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadResult, setUploadResult] = useState<{
+    processedFiles: number;
+    totalFiles: number;
+    results: Array<{file: string; success: boolean; result?: any; error?: string}>;
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
@@ -46,19 +51,28 @@ export function ImportarNotaModal({ isOpen, onClose, onSuccess }: ImportarNotaMo
     
     setIsUploading(true);
     setUploadError(null);
+    setUploadResult(null);
     
     try {
-      // Chamar o serviço de importação de notas
-      await NotasCorretagemService.importarNotas(selectedFiles);
+      // Chamar o serviço de importação de notas (agora processa um arquivo por vez)
+      const result = await NotasCorretagemService.importarNotas(selectedFiles);
       
-      // Limpar os arquivos selecionados
-      setSelectedFiles([]);
+      console.log('Resultado da importação:', result);
+      setUploadResult(result);
       
-      // Notificar o componente pai sobre o sucesso
-      onSuccess();
-      
-      // Fechar o modal
-      onClose();
+      // Se pelo menos um arquivo foi processado com sucesso
+      if (result.processedFiles > 0) {
+        // Limpar os arquivos selecionados
+        setSelectedFiles([]);
+        
+        // Notificar o componente pai sobre o sucesso
+        onSuccess();
+        
+        // Fechar o modal após um pequeno delay para mostrar o resultado
+        setTimeout(() => {
+          onClose();
+        }, 2000);
+      }
     } catch (error) {
       console.error('Erro ao importar notas:', error);
       setUploadError(error instanceof Error ? error.message : 'Erro ao importar as notas. Tente novamente.');
@@ -113,7 +127,10 @@ export function ImportarNotaModal({ isOpen, onClose, onSuccess }: ImportarNotaMo
             {isUploading ? (
               <div className="flex flex-col items-center">
                 <Loader2 className="h-12 w-12 animate-spin text-purple-500 mb-3" />
-                <p className="text-gray-700">Processando arquivos...</p>
+                <p className="text-gray-700 font-medium">Processando arquivos...</p>
+                <p className="text-sm text-gray-500 mt-1">
+                  Enviando {selectedFiles.length} arquivo{selectedFiles.length > 1 ? 's' : ''} para processamento OCR
+                </p>
               </div>
             ) : selectedFiles.length === 0 ? (
               <>
@@ -151,8 +168,36 @@ export function ImportarNotaModal({ isOpen, onClose, onSuccess }: ImportarNotaMo
           
           {/* Mensagem de erro */}
           {uploadError && (
-            <div className="mt-4 text-red-500 text-sm bg-red-50 p-2 rounded border border-red-200">
+            <div className="mt-4 text-red-500 text-sm bg-red-50 p-3 rounded border border-red-200">
+              <p className="font-medium">❌ Erro no upload:</p>
               <p>{uploadError}</p>
+            </div>
+          )}
+          
+          {/* Resultado do upload */}
+          {uploadResult && (
+            <div className="mt-4 text-sm bg-blue-50 p-3 rounded border border-blue-200">
+              <p className="font-medium text-blue-800 mb-2">
+                ✅ Upload concluído: {uploadResult.processedFiles}/{uploadResult.totalFiles} arquivos processados
+              </p>
+              
+              <div className="space-y-1 max-h-32 overflow-y-auto">
+                {uploadResult.results.map((result, index) => (
+                  <div key={index} className={`flex items-center gap-2 text-xs p-1 rounded ${
+                    result.success ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                  }`}>
+                    <span>{result.success ? '✅' : '❌'}</span>
+                    <span className="font-medium">{result.file}</span>
+                    {result.error && <span>- {result.error}</span>}
+                  </div>
+                ))}
+              </div>
+              
+              {uploadResult.processedFiles > 0 && (
+                <p className="text-blue-600 text-xs mt-2">
+                  Modal será fechado automaticamente em alguns segundos...
+                </p>
+              )}
             </div>
           )}
         </div>

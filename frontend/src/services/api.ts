@@ -71,15 +71,26 @@ export class ApiService {
     if (data) {
       if (data instanceof FormData) {
         // Se for FormData, remove o Content-Type para o navegador definir corretamente com boundary
+        console.log('[DEBUG API] Detectado FormData, removendo Content-Type');
         delete (options.headers as any)['Content-Type'];
         options.body = data;
+        
+        // Log das entradas do FormData
+        console.log('[DEBUG API] FormData entries:', Array.from(data.entries()).map(([key, value]) => [
+          key, 
+          value instanceof File ? `File: ${value.name} (${value.size} bytes, ${value.type})` : value
+        ]));
       } else {
         options.body = JSON.stringify(data);
       }
     }
     
     try {
-      console.log(`Fazendo requisição para: ${url}`);
+      console.log(`[DEBUG API] Fazendo requisição para: ${url}`);
+      console.log(`[DEBUG API] Método: ${method}`);
+      console.log(`[DEBUG API] Headers finais:`, options.headers);
+      console.log(`[DEBUG API] Tem body:`, !!options.body);
+      
       const response = await fetch(url, options);
       
       // Verifica se a resposta foi bem-sucedida
@@ -93,12 +104,27 @@ export class ApiService {
         }
         
         // Tenta extrair a mensagem de erro da resposta
+        let errorMessage = `Erro: ${response.status} ${response.statusText}`;
+        
         try {
-          const errorData = await response.json();
-          throw new Error(errorData.message || `Erro: ${response.status} ${response.statusText}`);
-        } catch (e) {
-          throw new Error(`Erro: ${response.status} ${response.statusText}`);
+          const responseClone = response.clone();
+          const errorData = await responseClone.json();
+          console.log('[DEBUG API] Erro detalhado do servidor (JSON):', errorData);
+          errorMessage = errorData.message || errorData.error || errorMessage;
+        } catch (jsonError) {
+          // Se não conseguir parsear JSON, tenta ler como texto
+          try {
+            const errorText = await response.text();
+            console.log('[DEBUG API] Erro como texto:', errorText);
+            if (errorText.trim()) {
+              errorMessage = `${errorMessage} - ${errorText}`;
+            }
+          } catch (textError) {
+            console.log('[DEBUG API] Não foi possível ler a resposta de erro');
+          }
         }
+        
+        throw new Error(errorMessage);
       }
       
       // Se for NoContent (204), retorna true em vez de tentar parser JSON
