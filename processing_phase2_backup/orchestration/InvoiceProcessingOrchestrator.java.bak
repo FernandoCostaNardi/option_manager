@@ -1,0 +1,520 @@
+package com.olisystem.optionsmanager.service.invoice.processing.orchestration;
+
+import com.olisystem.optionsmanager.model.invoice.Invoice;
+import com.olisystem.optionsmanager.model.invoice.InvoiceProcessingLog;
+import com.olisystem.optionsmanager.model.operation.Operation;
+import com.olisystem.optionsmanager.model.auth.User;
+import com.olisystem.optionsmanager.model.enums.InvoiceProcessingStatus;
+
+// Validation services
+import com.olisystem.optionsmanager.service.invoice.processing.validation.InvoiceValidationService;
+import com.olisystem.optionsmanager.service.invoice.processing.validation.DuplicateDetectionService;
+import com.olisystem.optionsmanager.service.invoice.processing.validation.ReprocessingValidationService;
+import com.olisystem.optionsmanager.service.invoice.processing.validation.BatchLimitValidator;
+
+// Detection services
+import com.olisystem.optionsmanager.service.invoice.processing.detection.ActiveOperationDetector;
+import com.olisystem.optionsmanager.service.invoice.processing.detection.TradeTypeAnalyzer;
+import com.olisystem.optionsmanager.service.invoice.processing.detection.OperationMatchingService;
+import com.olisystem.optionsmanager.service.invoice.processing.detection.InvoiceItemGrouper;
+
+// Integration services
+import com.olisystem.optionsmanager.service.invoice.processing.integration.InvoiceToOperationMapper;
+import com.olisystem.optionsmanager.service.invoice.processing.integration.ExistingOperationProcessor;
+import com.olisystem.optionsmanager.service.invoice.processing.integration.NewOperationCreator;
+import com.olisystem.optionsmanager.service.invoice.processing.integration.DayTradeProcessor;
+
+import com.olisystem.optionsmanager.repository.InvoiceProcessingLogRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+import java.time.LocalDateTime;
+import java.util.*;
+import java.util.stream.Collectors;
+
+/**
+ * Orquestrador principal do processamento de invoices
+ * Coordena todas as etapas: validação → detecção → processamento
+ * 
+ * @author Sistema de Gestão de Opções
+ * @since 2025-07-03
+ */
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class InvoiceProcessingOrchestrator {
+
+    // Validation services
+    private final InvoiceValidationService invoiceValidationService;
+    private final DuplicateDetectionService duplicateDetectionService;
+    private final ReprocessingValidationService reprocessingValidationService;
+    private final BatchLimitValidator batchLimitValidator;
+
+    // Detection services
+    private final ActiveOperationDetector activeOperationDetector;
+    private final TradeTypeAnalyzer tradeTypeAnalyzer;
+    private final OperationMatchingService operationMatchingService;
+    private final InvoiceItemGrouper invoiceItemGrouper;
+
+    // Integration services
+    private final InvoiceToOperationMapper operationMapper;
+    private final ExistingOperationProcessor existingOperationProcessor;
+    private final NewOperationCreator newOperationCreator;
+    private final DayTradeProcessor dayTradeProcessor;
+
+    // Orchestration services
+    private final TransactionManager transactionManager;
+    private final ProcessingProgressTracker progressTracker;
+    private final ErrorHandler errorHandler;
+    
+    private final InvoiceProcessingLogRepository processingLogRepository;
+
+    /**
+     * Processa uma única invoice
+     * 
+     * @param invoice Invoice a ser processada
+     * @param user Usuário solicitante
+     * @return Resultado do processamento
+     */
+    public InvoiceProcessingResult processInvoice(Invoice invoice, User user) {
+        return processInvoices(Arrays.asList(invoice), user);
+    }
+
+    /**
+     * Processa múltiplas invoices em lote
+     * 
+     * @param invoices Lista de invoices a serem processadas
+     * @param user Usuário solicitante
+     * @return Resultado consolidado do processamento
+     */
+    public InvoiceProcessingResult processInvoices(List<Invoice> invoices, User user) {
+        log.info("🚀 Iniciando processamento de {} invoices para usuário {}", 
+                invoices.size(), user.getUsername());
+        
+        // Inicializar rastreamento de progresso
+        UUID sessionId = progressTracker.startProcessingSession(
+                invoices.get(0), // Primeira invoice para contexto
+                invoices.stream().mapToInt(inv -> inv.getItems().size()).sum()
+        );
+        
+        InvoiceProcessingResult result;
+        
+        try {
+            result = executeProcessingPipeline(invoices, user, sessionId);
+            
+        } catch (Exception e) {
+            log.error("❌ Erro crítico no processamento: {}", e.getMessage(), e);
+            
+            result = InvoiceProcessingResult.builder()
+                    .successful(false)
+                    .processedInvoices(0)
+                    .totalOperationsCreated(0)
+                    .totalOperationsFinalized(0)
+                    .errors(Arrays.asList(e.getMessage()))
+                    .processingDuration(java.time.Duration.between(
+                            LocalDateTime.now().minusMinutes(1), LocalDateTime.now()))
+                    .build();
+        } finally {
+            // Finalizar sessão de progresso
+            progressTracker.finishSession(sessionId, result != null && result.isSuccessful());
+        }
+        
+        log.info("📊 Processamento concluído: {} invoices, {} operações criadas/finalizadas, {} erros",
+                result.getProcessedInvoices(), 
+                result.getTotalOperationsCreated() + result.getTotalOperationsFinalized(),
+                result.getErrors().size());
+        
+        return result;
+    }
+
+    /**
+     * Pipeline principal de processamento
+     */
+    private InvoiceProcessingResult executeProcessingPipeline(List<Invoice> invoices, User user, UUID sessionId) {
+        LocalDateTime startTime = LocalDateTime.now();
+        List<String> allErrors = new ArrayList<>();
+        List<Operation> allCreatedOperations = new ArrayList<>();
+        List<Operation> allFinalizedOperations = new ArrayList<>();
+        int processedInvoices = 0;
+        
+        try {
+            // FASE 1: VALIDAÇÃO EM LOTE
+            progressTracker.updatePhase(sessionId, ProcessingProgressTracker.ProcessingPhase.VALIDATING);
+            log.info("🔍 FASE 1: Validação em lote");
+            
+            batchLimitValidator.validateBatchLimits(invoices, user);
+            progressTracker.updatePhaseProgress(sessionId, ProcessingProgressTracker.ProcessingPhase.VALIDATING, 25);
+            
+            // FASE 2: PROCESSAMENTO INDIVIDUAL
+            progressTracker.updatePhase(sessionId, ProcessingProgressTracker.ProcessingPhase.PROCESSING_OPERATIONS);
+            log.info("🔄 FASE 2: Processamento individual");
+            
+            for (int i = 0; i < invoices.size(); i++) {
+                Invoice invoice = invoices.get(i);
+                
+                try {
+                    SingleInvoiceResult singleResult = processSingleInvoice(invoice, user, sessionId);
+                    
+                    if (singleResult.isSuccessful()) {
+                        processedInvoices++;
+                        allCreatedOperations.addAll(singleResult.getCreatedOperations());
+                        allFinalizedOperations.addAll(singleResult.getFinalizedOperations());
+                        
+                        progressTracker.recordItemProcessed(sessionId, true, false);
+                    } else {
+                        allErrors.addAll(singleResult.getErrors());
+                        progressTracker.recordItemProcessed(sessionId, false, false);
+                    }
+                    
+                } catch (Exception e) {
+                    String error = String.format("Erro na invoice %s: %s", 
+                                                invoice.getInvoiceNumber(), e.getMessage());
+                    allErrors.add(error);
+                    log.error("❌ {}", error, e);
+                    
+                    progressTracker.recordItemProcessed(sessionId, false, false);
+                }
+                
+                // Atualizar progresso geral
+                int overallProgress = ((i + 1) * 100) / invoices.size();
+                progressTracker.updatePhaseProgress(sessionId, 
+                        ProcessingProgressTracker.ProcessingPhase.PROCESSING_OPERATIONS, 
+                        overallProgress);
+            }
+            
+            // FASE 3: FINALIZAÇÃO
+            progressTracker.updatePhase(sessionId, ProcessingProgressTracker.ProcessingPhase.FINALIZING);
+            log.info("✅ FASE 3: Finalização");
+            
+            progressTracker.updatePhaseProgress(sessionId, ProcessingProgressTracker.ProcessingPhase.FINALIZING, 100);
+            
+        } catch (Exception e) {
+            log.error("❌ Erro na pipeline de processamento: {}", e.getMessage(), e);
+            allErrors.add("Erro na pipeline: " + e.getMessage());
+        }
+        
+        return InvoiceProcessingResult.builder()
+                .successful(allErrors.isEmpty() && processedInvoices > 0)
+                .processedInvoices(processedInvoices)
+                .totalInvoices(invoices.size())
+                .totalOperationsCreated(allCreatedOperations.size())
+                .totalOperationsFinalized(allFinalizedOperations.size())
+                .createdOperations(allCreatedOperations)
+                .finalizedOperations(allFinalizedOperations)
+                .errors(allErrors)
+                .processingDuration(java.time.Duration.between(startTime, LocalDateTime.now()))
+                .build();
+    }
+
+    /**
+     * Processa uma invoice individual
+     */
+    private SingleInvoiceResult processSingleInvoice(Invoice invoice, User user, UUID sessionId) {
+        log.debug("🔄 Processando invoice individual: {}", invoice.getInvoiceNumber());
+        
+        // Criar log de processamento
+        InvoiceProcessingLog processingLog = createProcessingLog(invoice, user);
+        
+        // Criar contexto de transação
+        TransactionManager.TransactionContext transactionContext = 
+                transactionManager.createTransactionContext(processingLog);
+        
+        // Executar processamento dentro de transação
+        TransactionManager.TransactionResult<SingleInvoiceResult> transactionResult = 
+                transactionManager.executeInTransaction(transactionContext, (context) -> {
+                    return executeInvoiceProcessingSteps(invoice, user, sessionId, context);
+                });
+        
+        if (transactionResult.isSuccessful()) {
+            return transactionResult.getResult();
+        } else {
+            // Em caso de erro, retornar resultado com erro
+            return SingleInvoiceResult.builder()
+                    .successful(false)
+                    .invoice(invoice)
+                    .errors(Arrays.asList(transactionResult.getError().getMessage()))
+                    .build();
+        }
+    }
+
+    /**
+     * Executa as etapas de processamento de uma invoice
+     */
+    private SingleInvoiceResult executeInvoiceProcessingSteps(
+            Invoice invoice, User user, UUID sessionId, 
+            TransactionManager.TransactionContext transactionContext) {
+        
+        List<String> errors = new ArrayList<>();
+        List<Operation> createdOperations = new ArrayList<>();
+        List<Operation> finalizedOperations = new ArrayList<>();
+        
+        try {
+            // Etapa 1: Validações
+            log.debug("🔍 Etapa 1: Validações para invoice {}", invoice.getInvoiceNumber());
+            executeValidationSteps(invoice, errors);
+            
+            if (!errors.isEmpty()) {
+                log.warn("⚠️ Validações falharam, pulando processamento");
+                return SingleInvoiceResult.builder()
+                        .successful(false)
+                        .invoice(invoice)
+                        .errors(errors)
+                        .build();
+            }
+            
+            // Etapa 2: Detecção e Análise
+            log.debug("🎯 Etapa 2: Detecção e análise");
+            DetectionResults detectionResults = executeDetectionSteps(invoice, user);
+            
+            // Etapa 3: Processamento de Operações
+            log.debug("⚙️ Etapa 3: Processamento de operações");
+            ProcessingResults processingResults = executeProcessingSteps(
+                    detectionResults, sessionId, transactionContext);
+            
+            createdOperations.addAll(processingResults.getCreatedOperations());
+            finalizedOperations.addAll(processingResults.getFinalizedOperations());
+            
+            return SingleInvoiceResult.builder()
+                    .successful(true)
+                    .invoice(invoice)
+                    .createdOperations(createdOperations)
+                    .finalizedOperations(finalizedOperations)
+                    .errors(errors)
+                    .build();
+            
+        } catch (Exception e) {
+            log.error("❌ Erro nas etapas de processamento: {}", e.getMessage(), e);
+            errors.add("Erro no processamento: " + e.getMessage());
+            
+            return SingleInvoiceResult.builder()
+                    .successful(false)
+                    .invoice(invoice)
+                    .errors(errors)
+                    .build();
+        }
+    }
+
+    /**
+     * Executa etapas de validação
+     */
+    private void executeValidationSteps(Invoice invoice, List<String> errors) {
+        try {
+            // Validação geral da invoice
+            invoiceValidationService.validateForProcessing(invoice);
+            
+            // Detecção de duplicatas
+            DuplicateDetectionService.DuplicateDetectionResult duplicateResult = 
+                    duplicateDetectionService.detectDuplicates(invoice);
+            
+            if (duplicateResult.hasDuplicates()) {
+                log.warn("⚠️ Duplicatas detectadas: {} itens", duplicateResult.getDuplicateItemsCount());
+                // Por enquanto, apenas avisar - não bloquear
+            }
+            
+            // Validação de reprocessamento se necessário
+            Optional<InvoiceProcessingLog> existingLog = processingLogRepository.findByInvoice(invoice);
+            if (existingLog.isPresent()) {
+                reprocessingValidationService.validateReprocessing(invoice);
+            }
+            
+        } catch (Exception e) {
+            errors.add("Validação falhou: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Executa etapas de detecção
+     */
+    private DetectionResults executeDetectionSteps(Invoice invoice, User user) {
+        // Detectar operações ativas
+        ActiveOperationDetector.ActiveOperationDetectionResult activeOperationResult = 
+                activeOperationDetector.detectActiveOperations(invoice.getItems(), user);
+        
+        // Analisar tipos de trade
+        TradeTypeAnalyzer.TradeTypeAnalysisResult tradeAnalysisResult = 
+                tradeTypeAnalyzer.analyzeTradeTypes(invoice);
+        
+        // Fazer matching de operações
+        OperationMatchingService.OperationMatchingResult matchingResult = 
+                operationMatchingService.processMatching(
+                        invoice.getItems(), activeOperationResult, tradeAnalysisResult);
+        
+        // Agrupar itens para processamento otimizado
+        InvoiceItemGrouper.InvoiceGroupingResult groupingResult = 
+                invoiceItemGrouper.groupInvoiceItems(invoice, matchingResult);
+        
+        return DetectionResults.builder()
+                .activeOperationResult(activeOperationResult)
+                .tradeAnalysisResult(tradeAnalysisResult)
+                .matchingResult(matchingResult)
+                .groupingResult(groupingResult)
+                .build();
+    }
+
+    /**
+     * Executa etapas de processamento de operações
+     */
+    private ProcessingResults executeProcessingSteps(
+            DetectionResults detectionResults, UUID sessionId,
+            TransactionManager.TransactionContext transactionContext) {
+        
+        List<Operation> createdOperations = new ArrayList<>();
+        List<Operation> finalizedOperations = new ArrayList<>();
+        
+        OperationMatchingService.OperationMatchingResult matchingResult = 
+                detectionResults.getMatchingResult();
+        
+        // Separar planos por tipo
+        List<OperationMatchingService.ItemProcessingPlan> newOperationPlans = 
+                matchingResult.getPlansByType(com.olisystem.optionsmanager.model.enums.OperationMappingType.NEW_OPERATION);
+        
+        List<OperationMatchingService.ItemProcessingPlan> existingOperationPlans = 
+                matchingResult.getPlansByType(com.olisystem.optionsmanager.model.enums.OperationMappingType.EXISTING_OPERATION_EXIT);
+        
+        // Processar Day Trades se houver
+        if (detectionResults.getTradeAnalysisResult().hasDayTrades()) {
+            DayTradeProcessor.MultipleDayTradeResult dayTradeResult = 
+                    dayTradeProcessor.processMultipleDayTrades(
+                            detectionResults.getTradeAnalysisResult().getDayTradeGroups(),
+                            matchingResult.getProcessingPlans());
+            
+            createdOperations.addAll(dayTradeResult.getAllEntryOperations());
+            finalizedOperations.addAll(dayTradeResult.getAllExitOperations());
+            
+            // Registrar operações no tracker de progresso
+            dayTradeResult.getAllEntryOperations().forEach(op -> 
+                    progressTracker.recordOperationCreated(sessionId, op));
+            dayTradeResult.getAllExitOperations().forEach(op -> 
+                    progressTracker.recordOperationFinalized(sessionId, op));
+        }
+        
+        // Processar novas operações
+        if (!newOperationPlans.isEmpty()) {
+            NewOperationCreator.NewOperationCreationResult creationResult = 
+                    newOperationCreator.createMultipleOperations(newOperationPlans);
+            
+            createdOperations.addAll(creationResult.getCreatedOperations());
+            
+            // Registrar no tracker
+            creationResult.getCreatedOperations().forEach(op -> 
+                    progressTracker.recordOperationCreated(sessionId, op));
+        }
+        
+        // Processar finalizações de operações existentes
+        if (!existingOperationPlans.isEmpty()) {
+            ExistingOperationProcessor.ExistingOperationProcessingResult finalizationResult = 
+                    existingOperationProcessor.processMultipleExits(existingOperationPlans);
+            
+            finalizedOperations.addAll(finalizationResult.getFinalizedOperations());
+            
+            // Registrar no tracker
+            finalizationResult.getFinalizedOperations().forEach(op -> 
+                    progressTracker.recordOperationFinalized(sessionId, op));
+        }
+        
+        return ProcessingResults.builder()
+                .createdOperations(createdOperations)
+                .finalizedOperations(finalizedOperations)
+                .build();
+    }
+
+    /**
+     * Cria log de processamento
+     */
+    private InvoiceProcessingLog createProcessingLog(Invoice invoice, User user) {
+        InvoiceProcessingLog log = InvoiceProcessingLog.builder()
+                .invoice(invoice)
+                .user(user)
+                .status(InvoiceProcessingStatus.PENDING)
+                .operationsCreated(0)
+                .operationsUpdated(0)
+                .operationsSkipped(0)
+                .build();
+        
+        return processingLogRepository.save(log);
+    }
+
+    /**
+     * Resultado de detecção
+     */
+    @lombok.Builder
+    @lombok.Data
+    private static class DetectionResults {
+        private ActiveOperationDetector.ActiveOperationDetectionResult activeOperationResult;
+        private TradeTypeAnalyzer.TradeTypeAnalysisResult tradeAnalysisResult;
+        private OperationMatchingService.OperationMatchingResult matchingResult;
+        private InvoiceItemGrouper.InvoiceGroupingResult groupingResult;
+    }
+
+    /**
+     * Resultado de processamento
+     */
+    @lombok.Builder
+    @lombok.Data
+    private static class ProcessingResults {
+        private List<Operation> createdOperations;
+        private List<Operation> finalizedOperations;
+    }
+
+    /**
+     * Resultado de uma invoice individual
+     */
+    @lombok.Builder
+    @lombok.Data
+    private static class SingleInvoiceResult {
+        private boolean successful;
+        private Invoice invoice;
+        private List<Operation> createdOperations;
+        private List<Operation> finalizedOperations;
+        private List<String> errors;
+        
+        {
+            createdOperations = createdOperations != null ? createdOperations : new ArrayList<>();
+            finalizedOperations = finalizedOperations != null ? finalizedOperations : new ArrayList<>();
+            errors = errors != null ? errors : new ArrayList<>();
+        }
+    }
+
+    /**
+     * Resultado consolidado do processamento
+     */
+    @lombok.Builder
+    @lombok.Data
+    public static class InvoiceProcessingResult {
+        private boolean successful;
+        private int processedInvoices;
+        private int totalInvoices;
+        private int totalOperationsCreated;
+        private int totalOperationsFinalized;
+        private List<Operation> createdOperations;
+        private List<Operation> finalizedOperations;
+        private List<String> errors;
+        private java.time.Duration processingDuration;
+        
+        {
+            createdOperations = createdOperations != null ? createdOperations : new ArrayList<>();
+            finalizedOperations = finalizedOperations != null ? finalizedOperations : new ArrayList<>();
+            errors = errors != null ? errors : new ArrayList<>();
+        }
+        
+        public boolean hasErrors() {
+            return !errors.isEmpty();
+        }
+        
+        public double getSuccessRate() {
+            return totalInvoices > 0 ? (double) processedInvoices / totalInvoices * 100 : 0;
+        }
+        
+        public int getTotalOperations() {
+            return totalOperationsCreated + totalOperationsFinalized;
+        }
+        
+        public String getSummary() {
+            return String.format("Processamento %s: %d/%d invoices (%.1f%%), %d operações em %s",
+                                successful ? "concluído" : "com erros",
+                                processedInvoices, totalInvoices, getSuccessRate(),
+                                getTotalOperations(), processingDuration);
+        }
+    }
+}

@@ -162,4 +162,9 @@ export class ApiService {
   static async delete(endpoint: string, headers: HeadersInit = {}) {
     return this.request(endpoint, 'DELETE', undefined, headers);
   }
+
+  // Método para obter a URL base (usado para SSE)
+  static getBaseUrl(): string {
+    return API_BASE_URL;
+  }
 }

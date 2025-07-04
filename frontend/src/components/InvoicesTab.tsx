@@ -11,8 +11,10 @@ interface InvoicesTabProps {
   currentPage: number;
   totalPages: number;
   totalItems: number;
+  selectedInvoiceIds: string[];
   onPageChange: (page: number) => void;
   onProcessSingle: (invoiceId: string) => void;
+  onSelectionChange: (selectedIds: string[]) => void;
 }
 
 interface InvoiceDetailsModalProps {
@@ -27,8 +29,10 @@ export function InvoicesTab({
   currentPage, 
   totalPages, 
   totalItems, 
+  selectedInvoiceIds,
   onPageChange, 
-  onProcessSingle 
+  onProcessSingle,
+  onSelectionChange 
 }: InvoicesTabProps) {
   const [selectedInvoice, setSelectedInvoice] = useState<SimpleInvoiceData | null>(null);
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
@@ -77,6 +81,26 @@ export function InvoicesTab({
     setDetailsModalOpen(true);
   };
 
+  // ===== FUNÇÕES DE SELEÇÃO =====
+  const handleSelectAll = () => {
+    if (selectedInvoiceIds.length === filteredInvoices.length) {
+      onSelectionChange([]);
+    } else {
+      onSelectionChange(filteredInvoices.map(inv => inv.id));
+    }
+  };
+
+  const handleSelectInvoice = (invoiceId: string) => {
+    if (selectedInvoiceIds.includes(invoiceId)) {
+      onSelectionChange(selectedInvoiceIds.filter(id => id !== invoiceId));
+    } else {
+      onSelectionChange([...selectedInvoiceIds, invoiceId]);
+    }
+  };
+
+  const isAllSelected = selectedInvoiceIds.length > 0 && selectedInvoiceIds.length === filteredInvoices.length;
+  const isIndeterminate = selectedInvoiceIds.length > 0 && selectedInvoiceIds.length < filteredInvoices.length;
+
   return (
     <div className="space-y-6">
       {/* FILTROS */}
@@ -107,7 +131,13 @@ export function InvoicesTab({
           </div>
 
           <div className="text-sm text-gray-500">
-            Total: {totalItems} notas
+            {selectedInvoiceIds.length > 0 ? (
+              <span className="text-purple-600 font-medium">
+                {selectedInvoiceIds.length} selecionada(s) • Total: {totalItems} notas
+              </span>
+            ) : (
+              `Total: ${totalItems} notas`
+            )}
           </div>
         </div>
       </div>
@@ -124,6 +154,17 @@ export function InvoicesTab({
               <table className="w-full">
                 <thead className="bg-gray-50">
                   <tr>
+                    <th className="px-6 py-3 text-left">
+                      <input
+                        type="checkbox"
+                        checked={isAllSelected}
+                        ref={(input) => {
+                          if (input) input.indeterminate = isIndeterminate;
+                        }}
+                        onChange={handleSelectAll}
+                        className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
+                      />
+                    </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Status
                     </th>
@@ -146,7 +187,18 @@ export function InvoicesTab({
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white">
                   {filteredInvoices.map((invoice) => (
-                    <tr key={invoice.id} className="hover:bg-gray-50">
+                    <tr key={invoice.id} className={`hover:bg-gray-50 ${
+                      selectedInvoiceIds.includes(invoice.id) ? 'bg-purple-50 border-purple-200' : ''
+                    }`}>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <input
+                          type="checkbox"
+                          checked={selectedInvoiceIds.includes(invoice.id)}
+                          onChange={() => handleSelectInvoice(invoice.id)}
+                          className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
+                        />
+                      </td>
+                      
                       <td className="px-6 py-4 whitespace-nowrap">
                         {getInvoiceStatusBadge()}
                       </td>
@@ -195,9 +247,8 @@ export function InvoicesTab({
                           
                           <button
                             onClick={() => onProcessSingle(invoice.id)}
-                            className="text-gray-400 cursor-not-allowed p-1"
-                            title="Processamento será implementado na Fase 2"
-                            disabled
+                            className="text-purple-600 hover:text-purple-900 p-1"
+                            title="Processar esta nota"
                           >
                             <Play className="h-4 w-4" />
                           </button>
@@ -320,7 +371,7 @@ function InvoiceDetailsModal({ invoice, isOpen, onClose }: InvoiceDetailsModalPr
                 </div>
                 <div>
                   <span className="text-gray-500">Valor Líquido:</span>
-                  <div className="font-medium">{formatCurrency(invoice.netOperationsValue)}</div>
+                  <div className="font-medium">{formatCurrency(invoice.netSettlementValue)}</div>
                 </div>
                 <div>
                   <span className="text-gray-500">Valor Bruto:</span>

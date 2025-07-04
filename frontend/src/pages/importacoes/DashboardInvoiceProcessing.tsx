@@ -2,13 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { 
   FileText, Upload, Settings, TrendingUp, AlertCircle, CheckCircle, 
   Clock, BarChart3, RefreshCw, Download, Eye, Play, Pause,
-  Target, Shield, Activity, DollarSign
+  Target, Shield, Activity, DollarSign, Zap
 } from 'lucide-react';
 import { InvoiceProcessingService, SimpleInvoiceData } from '../../services/invoiceProcessingService';
 import { ImportarNotaModal } from '../../components/ImportarNotaModal';
 import { InvoicesTab } from '../../components/InvoicesTab';
-// import { AnalyticsTab } from '../../components/AnalyticsTab';
-// import { ReconciliationTab } from '../../components/ReconciliationTab';
+import { ProcessingModal } from '../../components/ProcessingModal';
+import toast from 'react-hot-toast';
 
 export function DashboardInvoiceProcessing() {
   // ===== ESTADOS PRINCIPAIS =====
@@ -19,6 +19,10 @@ export function DashboardInvoiceProcessing() {
   const [processing, setProcessing] = useState(false);
   const [selectedTab, setSelectedTab] = useState<'overview' | 'invoices'>('overview');
   const [modalOpen, setModalOpen] = useState(false);
+  const [processingModalOpen, setProcessingModalOpen] = useState(false);
+  
+  // ===== ESTADOS DE SELEÇÃO =====
+  const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<string[]>([]);
   
   // ===== PAGINAÇÃO =====
   const [currentPage, setCurrentPage] = useState(0);
@@ -60,13 +64,44 @@ export function DashboardInvoiceProcessing() {
     }
   };
 
-  // ===== AÇÕES DE PROCESSAMENTO (FASE 2) =====
+  // ===== AÇÕES DE PROCESSAMENTO (FASE 2 - IMPLEMENTADO) =====
   const handleProcessAll = async () => {
-    alert('Funcionalidade de processamento será implementada na Fase 2 do sistema');
+    if (simpleInvoices.length === 0) {
+      toast.error('Nenhuma nota disponível para processamento');
+      return;
+    }
+    
+    setSelectedInvoiceIds(simpleInvoices.map(inv => inv.id));
+    setProcessingModalOpen(true);
   };
 
   const handleProcessSingle = async (invoiceId: string) => {
-    alert('Funcionalidade de processamento será implementada na Fase 2 do sistema');
+    setSelectedInvoiceIds([invoiceId]);
+    setProcessingModalOpen(true);
+  };
+
+  const handleProcessSelected = async () => {
+    if (selectedInvoiceIds.length === 0) {
+      toast.error('Selecione pelo menos uma nota para processar');
+      return;
+    }
+    
+    if (selectedInvoiceIds.length > 5) {
+      toast.error('Máximo 5 notas por vez. Selecione menos notas.');
+      return;
+    }
+    
+    setProcessingModalOpen(true);
+  };
+
+  const handleProcessingSuccess = () => {
+    // Recarregar dados após sucesso
+    loadDashboardData();
+    if (selectedTab === 'invoices') {
+      loadSimpleInvoices();
+    }
+    setSelectedInvoiceIds([]);
+    setProcessingModalOpen(false);
   };
 
   // ===== UTILITÁRIOS =====
@@ -112,6 +147,21 @@ export function DashboardInvoiceProcessing() {
               <Upload className="h-4 w-4" />
               Importar Notas
             </button>
+            
+            {selectedInvoiceIds.length > 0 && (
+              <button
+                onClick={handleProcessSelected}
+                disabled={processing}
+                className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {processing ? (
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Zap className="h-4 w-4" />
+                )}
+                Processar Selecionadas ({selectedInvoiceIds.length})
+              </button>
+            )}
             
             <button
               onClick={handleProcessAll}
@@ -230,26 +280,6 @@ export function DashboardInvoiceProcessing() {
             </div>
           </div>
 
-          {/* AVISO SOBRE FASE 2 */}
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <AlertCircle className="h-5 w-5 text-yellow-400" />
-              </div>
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-yellow-800">
-                  Sistema em Fase 1 - Importação
-                </h3>
-                <div className="mt-2 text-sm text-yellow-700">
-                  <p>
-                    Atualmente, o sistema está importando e exibindo as notas de corretagem. 
-                    O processamento automático para criar operações será implementado na Fase 2.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
           {/* ÚLTIMAS NOTAS IMPORTADAS */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100">
             <div className="px-6 py-4 border-b border-gray-200">
@@ -290,8 +320,10 @@ export function DashboardInvoiceProcessing() {
           currentPage={currentPage}
           totalPages={totalPages}
           totalItems={totalItems}
+          selectedInvoiceIds={selectedInvoiceIds}
           onPageChange={setCurrentPage}
           onProcessSingle={handleProcessSingle}
+          onSelectionChange={setSelectedInvoiceIds}
         />
       )}
 
@@ -303,6 +335,15 @@ export function DashboardInvoiceProcessing() {
           setModalOpen(false);
           loadDashboardData();
         }}
+      />
+
+      {/* MODAL DE PROCESSAMENTO */}
+      <ProcessingModal
+        isOpen={processingModalOpen}
+        onClose={() => setProcessingModalOpen(false)}
+        invoiceIds={selectedInvoiceIds}
+        selectedInvoices={simpleInvoices.filter(inv => selectedInvoiceIds.includes(inv.id))}
+        onSuccess={handleProcessingSuccess}
       />
     </div>
   );

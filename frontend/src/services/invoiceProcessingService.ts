@@ -114,30 +114,88 @@ export class InvoiceProcessingService {
     return ApiService.get(`/invoices-v2/${invoiceId}`);
   }
 
-  // ===== MÉTODOS FUTUROS (FASE 2) =====
+  // ===== MÉTODOS DE PROCESSAMENTO (FASE 2 - IMPLEMENTADOS) =====
   
   /**
-   * Processa todas as invoices não processadas (FUTURO)
+   * Estima o processamento de invoices
    */
-  static async processAllUnprocessed(): Promise<InvoiceProcessingResponse> {
-    // TODO: Implementar na Fase 2
-    throw new Error('Funcionalidade de processamento ainda não implementada');
+  static async estimateProcessing(invoiceIds: string[]): Promise<any> {
+    return ApiService.post('/processing/estimate', { invoiceIds });
   }
 
   /**
-   * Processa uma invoice específica (FUTURO)
+   * Processa múltiplas invoices
    */
-  static async processInvoice(invoiceId: string): Promise<InvoiceProcessingResponse> {
-    // TODO: Implementar na Fase 2
-    throw new Error('Funcionalidade de processamento ainda não implementada');
+  static async processBatch(invoiceIds: string[], options: {
+    dryRun?: boolean;
+    maxOperations?: number;
+    skipDuplicates?: boolean;
+  } = {}): Promise<InvoiceProcessingResponse> {
+    return ApiService.post('/processing/process', {
+      invoiceIds,
+      ...options
+    });
   }
 
   /**
-   * Processa múltiplas invoices (FUTURO)
+   * Processa uma invoice específica
    */
-  static async processBatch(invoiceIds: string[]): Promise<InvoiceProcessingResponse> {
-    // TODO: Implementar na Fase 2
-    throw new Error('Funcionalidade de processamento ainda não implementada');
+  static async processInvoice(invoiceId: string, options: {
+    dryRun?: boolean;
+    maxOperations?: number;
+  } = {}): Promise<InvoiceProcessingResponse> {
+    return ApiService.post(`/processing/process/${invoiceId}`, options);
+  }
+
+  /**
+   * Obtém status de processamento em tempo real via SSE
+   */
+  static createProcessingEventSource(sessionId: string): EventSource {
+    const token = localStorage.getItem('token');
+    
+    // ✅ VALIDAR TOKEN
+    if (!token) {
+      console.error('❌ Token não encontrado para SSE');
+      throw new Error('Token de autenticação não encontrado');
+    }
+
+    // ✅ CONSTRUIR URL COM ENCODING CORRETO
+    const baseUrl = ApiService.getBaseUrl().replace(/\/$/, ''); // Remove barra final se existir
+    const encodedToken = encodeURIComponent(token);
+    const url = `${baseUrl}/processing/status/${sessionId}/stream?token=${encodedToken}`;
+    
+    console.log('🔗 Criando EventSource para sessão:', sessionId);
+    console.log('   URL (sem token):', url.substring(0, url.indexOf('?token=')) + '?token=***');
+    
+    // ✅ CRIAR EVENTSOURCE
+    const eventSource = new EventSource(url);
+    
+    // ✅ LOG DE DEBUG
+    eventSource.addEventListener('open', () => {
+      console.log('✅ EventSource aberto com sucesso para sessão:', sessionId);
+    });
+    
+    eventSource.addEventListener('error', (e) => {
+      console.error('❌ EventSource erro para sessão:', sessionId);
+      console.error('   ReadyState:', eventSource.readyState);
+      console.error('   Event:', e);
+    });
+    
+    return eventSource;
+  }
+
+  /**
+   * Obtém status de uma sessão específica
+   */
+  static async getProcessingStatus(sessionId: string): Promise<any> {
+    return ApiService.get(`/processing/status/${sessionId}`);
+  }
+
+  /**
+   * Cancela uma sessão de processamento
+   */
+  static async cancelProcessing(sessionId: string): Promise<void> {
+    return ApiService.post(`/processing/status/${sessionId}/cancel`);
   }
 
   // ===== DASHBOARD E ESTATÍSTICAS (FUTURO) =====
