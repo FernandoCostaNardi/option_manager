@@ -38,7 +38,7 @@ public class MainSecurityConfig {
     // Desabilita CSRF porque estamos usando tokens JWT
     http.csrf(csrf -> csrf.disable());
 
-    // Configura CORS
+    // Usa configuração CORS global do CorsConfig.java
     http.cors(cors -> cors.configurationSource(corsConfigurationSource()));
 
     // Define política de sessão como STATELESS
@@ -51,6 +51,7 @@ public class MainSecurityConfig {
             .requestMatchers("/api/auth/**").permitAll()
             .requestMatchers("/api/invoice-processing/dashboard/**").permitAll() // Dashboard sem auth
             .requestMatchers("/api/ocr/**").permitAll() // OCR sem auth (quando implementado)
+            .requestMatchers("/api/processing/**").permitAll() // Todo processing sem auth para teste
             .anyRequest().authenticated());
     // Adicione o filtro JWT antes do UsernamePasswordAuthenticationFilter
     http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
@@ -60,15 +61,12 @@ public class MainSecurityConfig {
   @Bean
   CorsConfigurationSource corsConfigurationSource() {
     CorsConfiguration configuration = new CorsConfiguration();
-    configuration.setAllowedOrigins(
-        Arrays.asList(
-            "http://localhost:3000",
-            "http://localhost:5173",
-            "http://127.0.0.1:5173",
-            "http://127.0.0.1:3000"));
+    configuration.setAllowedOriginPatterns(Arrays.asList("http://localhost:*")); // Permite qualquer porta localhost
     configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
     configuration.setAllowedHeaders(List.of("*"));
+    configuration.setExposedHeaders(List.of("*")); // Para SSE funcionar
     configuration.setAllowCredentials(true);
+    configuration.setMaxAge(3600L); // Cache preflight por 1 hora
     UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
     source.registerCorsConfiguration("/**", configuration);
     return source;
