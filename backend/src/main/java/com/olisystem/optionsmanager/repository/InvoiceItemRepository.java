@@ -15,6 +15,15 @@ public interface InvoiceItemRepository extends JpaRepository<InvoiceItem, UUID> 
     // Buscar itens por invoice
     List<InvoiceItem> findByInvoiceIdOrderBySequenceNumber(UUID invoiceId);
     
+    // ✅ NOVO: Buscar itens com todas as relações carregadas para processamento
+    @Query("SELECT ii FROM InvoiceItem ii " +
+           "JOIN FETCH ii.invoice i " +
+           "JOIN FETCH i.brokerage b " +
+           "JOIN FETCH i.user u " +
+           "WHERE ii.invoice.id = :invoiceId " +
+           "ORDER BY ii.sequenceNumber")
+    List<InvoiceItem> findByInvoiceIdWithAllRelations(@Param("invoiceId") UUID invoiceId);
+    
     // Buscar operações de Day Trade
     List<InvoiceItem> findByIsDayTradeTrue();
     

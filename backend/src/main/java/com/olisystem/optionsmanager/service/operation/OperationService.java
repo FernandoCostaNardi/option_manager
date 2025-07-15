@@ -4,6 +4,7 @@ import com.olisystem.optionsmanager.dto.operation.OperationDataRequest;
 import com.olisystem.optionsmanager.dto.operation.OperationFilterCriteria;
 import com.olisystem.optionsmanager.dto.operation.OperationFinalizationRequest;
 import com.olisystem.optionsmanager.dto.operation.OperationSummaryResponseDto;
+import com.olisystem.optionsmanager.model.auth.User;
 import com.olisystem.optionsmanager.model.operation.Operation;
 import com.olisystem.optionsmanager.model.operation.OperationStatus;
 import org.springframework.data.domain.Pageable;
@@ -19,9 +20,21 @@ public interface OperationService {
   Operation createOperation(OperationDataRequest request);
 
   /**
+   * Cria uma nova operação usando um usuário específico
+   * (Para processamento de invoices sem contexto de segurança)
+   */
+  Operation createOperation(OperationDataRequest request, User user);
+
+  /**
    * Faz uma saída total ou parcial de uma operação ativa
    */
   Operation createExitOperation(OperationFinalizationRequest request);
+
+  /**
+   * Faz uma saída total ou parcial usando um usuário específico
+   * (Para processamento de invoices sem contexto de segurança)
+   */
+  Operation createExitOperation(OperationFinalizationRequest request, User user);
 
   /**
    * Atualiza uma operação existente

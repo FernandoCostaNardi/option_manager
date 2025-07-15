@@ -2,6 +2,7 @@ package com.olisystem.optionsmanager.record.operation;
 
 import com.olisystem.optionsmanager.dto.operation.OperationDataRequest;
 import com.olisystem.optionsmanager.model.operation.Operation;
+import com.olisystem.optionsmanager.model.transaction.TransactionType;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -12,7 +13,8 @@ public record OperationBuildData(
         UUID analysisHouseId,
         LocalDate entryDate,
         Integer quantity,
-        BigDecimal entryUnitPrice
+        BigDecimal entryUnitPrice,
+        TransactionType transactionType
 ) {
     // Factory method para criar a partir de uma operação existente
     public static OperationBuildData fromOperation(Operation operation) {
@@ -21,7 +23,8 @@ public record OperationBuildData(
                 operation.getAnalysisHouse() != null ? operation.getAnalysisHouse().getId() : null,
                 operation.getEntryDate(),
                 operation.getQuantity(),
-                operation.getEntryUnitPrice()
+                operation.getEntryUnitPrice(),
+                operation.getTransactionType()
         );
     }
 
@@ -32,7 +35,8 @@ public record OperationBuildData(
                 request.getAnalysisHouseId(),
                 request.getEntryDate(),
                 request.getQuantity(),
-                request.getEntryUnitPrice()
+                request.getEntryUnitPrice(),
+                request.getTransactionType()
         );
     }
 }

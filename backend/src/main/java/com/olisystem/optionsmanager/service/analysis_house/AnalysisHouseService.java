@@ -43,6 +43,10 @@ public class AnalysisHouseService {
 
   public Optional<AnalysisHouse> findById(UUID id) {
     User user = SecurityUtil.getLoggedUser();
+    return findById(id, user);
+  }
+
+  public Optional<AnalysisHouse> findById(UUID id, User user) {
     return analysisHouseRepository.findByIdAndUser(id, user);
   }
 

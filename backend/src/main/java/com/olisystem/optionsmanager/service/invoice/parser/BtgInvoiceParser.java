@@ -8,6 +8,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -277,6 +278,16 @@ public class BtgInvoiceParser extends AbstractInvoiceParser {
                     }
                 }
                 
+                // ✅ NOVO: Extrair strike price do código da opção
+                log.info("🔍 TESTANDO EXTRAÇÃO STRIKE PRICE para asset: {}", assetCode);
+                BigDecimal strikePrice = extractStrikePrice(assetCode);
+                if (strikePrice != null) {
+                    item.setStrikePrice(strikePrice);
+                    log.info("✅ Strike price extraído: {} para {}", strikePrice, assetCode);
+                } else {
+                    log.warn("❌ Strike price NÃO encontrado para: {}", assetCode);
+                }
+                
                 setupInvoiceItem(item, invoice, sequenceNumber - 1);
                 items.add(item);
                 
@@ -435,6 +446,71 @@ public class BtgInvoiceParser extends AbstractInvoiceParser {
         }
     }
     
+    /**
+     * Extrai o strike price do código da opção
+     * 
+     * Exemplos:
+     * - BOVAR136 = strike 136.00
+     * - ASAIF980 = strike 98.00 
+     * - PETRF336 = strike 33.60
+     * - VALEF541 = strike 54.10
+     */
+    private BigDecimal extractStrikePrice(String assetCode) {
+        log.info("🎯 INICIANDO EXTRAÇÃO STRIKE PRICE para: '{}'", assetCode);
+        
+        if (assetCode == null || assetCode.length() < 6) {
+            log.warn("🚫 Asset code inválido: {}", assetCode);
+            return null;
+        }
+        
+        try {
+            // Padrão: [ATIVO][LETRA][NUMEROS] onde NUMEROS = strike * 100 ou * 10
+            // Remove o código base do ativo (4-5 caracteres) e a letra do tipo (1 caractere)
+            String baseAsset = assetCode.replaceAll("([A-Z]+\\d*)[A-Z]\\d+", "$1");
+            
+            // Extrai apenas os números do final
+            String strikeNumbers = assetCode.replaceAll("^[A-Z]+\\d*[A-Z]", "");
+            
+            if (strikeNumbers.isEmpty() || !strikeNumbers.matches("\\d+")) {
+                return null;
+            }
+            
+            int strikeInt = Integer.parseInt(strikeNumbers);
+            
+            // Determinar divisor baseado no número de dígitos
+            // 3 dígitos (136) = 136.00
+            // 3 dígitos (980) = 98.00 (quando > 500)
+            // 3 dígitos (336) = 33.60 (quando <= 500)
+            // 3 dígitos (541) = 54.10 (quando <= 500)
+            
+            BigDecimal strikePrice;
+            if (strikeInt >= 1000) {
+                // 4+ dígitos = dividir por 100 (1234 = 12.34)
+                strikePrice = BigDecimal.valueOf(strikeInt).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+            } else if (strikeInt >= 500) {
+                // >= 500 = dividir por 10 (980 = 98.0, 567 = 56.7)
+                strikePrice = BigDecimal.valueOf(strikeInt).divide(BigDecimal.valueOf(10), 2, RoundingMode.HALF_UP);
+            } else {
+                // < 500 = dividir por 100 mas com lógica especial
+                // 336 = 33.60, 541 = 54.10, 136 = 136.00
+                if (strikeInt >= 100 && strikeInt <= 199) {
+                    // 100-199 = valor literal (136 = 136.00)
+                    strikePrice = BigDecimal.valueOf(strikeInt);
+                } else {
+                    // Outros = dividir por 10 (336 = 33.60, 541 = 54.10)
+                    strikePrice = BigDecimal.valueOf(strikeInt).divide(BigDecimal.valueOf(10), 2, RoundingMode.HALF_UP);
+                }
+            }
+            
+            log.debug("🎯 Strike extraído: {} -> {} (original: {})", assetCode, strikePrice, strikeInt);
+            return strikePrice;
+            
+        } catch (Exception e) {
+            log.warn("Erro ao extrair strike price de {}: {}", assetCode, e.getMessage());
+            return null;
+        }
+    }
+
     @Override
     public String getBrokerageName() {
         return "BTG PACTUAL";

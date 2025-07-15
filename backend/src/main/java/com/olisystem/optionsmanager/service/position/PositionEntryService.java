@@ -48,7 +48,7 @@ public class PositionEntryService {
             .remainingQuantity(operation.getQuantity())
             .totalRealizedProfit(BigDecimal.ZERO)
             .totalRealizedProfitPercentage(BigDecimal.ZERO)
-            .user(SecurityUtil.getLoggedUser())
+            .user(operation.getUser()) // ✅ Usar User da Operation
             .build();
 
     // Salvar a posição

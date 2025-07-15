@@ -3,6 +3,7 @@ package com.olisystem.optionsmanager.model.operation;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -44,9 +45,12 @@ public class AverageOperationGroup {
   @Column private UUID positionId;
 
   @OneToMany(mappedBy = "group")
-  private List<AverageOperationItem> items;
+  private List<AverageOperationItem> items = new ArrayList<>();
 
   public List<Operation> getOperations() {
+    if (items == null) {
+      return new ArrayList<>();
+    }
     return items.stream().map(AverageOperationItem::getOperation).collect(Collectors.toList());
   }
 }

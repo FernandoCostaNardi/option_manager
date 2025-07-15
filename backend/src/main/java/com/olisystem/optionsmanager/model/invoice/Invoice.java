@@ -116,7 +116,7 @@ public class Invoice {
 
   // === RELACIONAMENTOS ===
   @OneToMany(mappedBy = "invoice", cascade = CascadeType.ALL, orphanRemoval = true)
-  private List<InvoiceItem> items;
+  private List<InvoiceItem> items = new java.util.ArrayList<>();
 
   // === CONTROLE ===
   @Column(name = "imported_at")

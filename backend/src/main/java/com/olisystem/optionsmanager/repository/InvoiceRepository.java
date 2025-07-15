@@ -19,6 +19,13 @@ public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
     // Buscar por hash do arquivo para evitar duplicatas
     Optional<Invoice> findByFileHash(String fileHash);
     
+    // ✅ NOVO: Buscar invoice com todas as relações carregadas para processamento
+    @Query("SELECT i FROM Invoice i " +
+           "JOIN FETCH i.brokerage b " +
+           "JOIN FETCH i.user u " +
+           "WHERE i.id = :invoiceId")
+    Optional<Invoice> findByIdWithAllRelations(@Param("invoiceId") UUID invoiceId);
+    
     // Buscar por número da nota e corretora
     @Query("SELECT i FROM Invoice i WHERE i.invoiceNumber = :invoiceNumber AND i.brokerage.id = :brokerageId")
     Optional<Invoice> findByInvoiceNumberAndBrokerageId(@Param("invoiceNumber") String invoiceNumber, 

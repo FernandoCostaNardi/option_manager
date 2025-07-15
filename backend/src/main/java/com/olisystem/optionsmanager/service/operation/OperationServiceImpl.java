@@ -82,23 +82,30 @@ public class OperationServiceImpl implements OperationService {
     @Override
     @Transactional
     public Operation createOperation(OperationDataRequest request) {
-        log.info("Iniciando criação de operação com quantidade {} e preço {}",
-                request.getQuantity(), request.getEntryUnitPrice());
+        final User currentUser = SecurityUtil.getLoggedUser();
+        return createOperation(request, currentUser);
+    }
+
+    @Override
+    @Transactional
+    public Operation createOperation(OperationDataRequest request, User user) {
+        log.info("🚀 Criando operação: {} {} - {} cotas @ R$ {} (user: {})",
+                request.getTransactionType(), request.getOptionSeriesCode(),
+                request.getQuantity(), request.getEntryUnitPrice(), user.getUsername());
 
         // 1. Validar e preparar recursos básicos
         operationValidator.validateCreate(request);
-        final User currentUser = SecurityUtil.getLoggedUser();
 
         // 2. Criar ou recuperar entidades base
         Asset asset = assetService.findOrCreateAsset(request);
         OptionSerie optionSerie = optionSerieService.findOrCreateOptionSerie(request, asset);
 
         // 3. Criar contexto básico reutilizável
-        OperationContext context = new OperationContext(request, optionSerie, currentUser);
+        OperationContext context = new OperationContext(request, optionSerie, user);
 
         // 4. Determinar estratégia de operação
         Operation activeOperation = operationRepository.findByOptionSeriesAndUserAndStatus(
-                optionSerie, currentUser, OperationStatus.ACTIVE);
+                optionSerie, user, OperationStatus.ACTIVE);
 
         // 5. Delegar à estratégia adequada
         if (activeOperation == null) {
@@ -111,13 +118,21 @@ public class OperationServiceImpl implements OperationService {
     @Override
     @Transactional
     public Operation createExitOperation(OperationFinalizationRequest request) {
-        log.info("Processando finalização de operação: {}", request.getOperationId());
+        User currentUser = SecurityUtil.getLoggedUser();
+        return createExitOperation(request, currentUser);
+    }
+
+    @Override
+    @Transactional
+    public Operation createExitOperation(OperationFinalizationRequest request, User user) {
+        log.info("🏁 Processando finalização de operação: {} (user: {})", 
+                request.getOperationId(), user.getUsername());
 
         // 1. Buscar operação ativa
         Operation activeOperation = findActiveOperation(request.getOperationId());
 
-        // 2. Criar contexto de execução
-        OperationExitContext context = createExitContext(request, activeOperation);
+        // 2. Criar contexto de execução com usuário específico
+        OperationExitContext context = createExitContext(request, activeOperation, user);
 
         // 3. Resolver estratégia apropriada e processar
         ExitOperationStrategy strategy = exitOperationStrategyResolver.resolveStrategy(context);
@@ -132,7 +147,11 @@ public class OperationServiceImpl implements OperationService {
 
     private OperationExitContext createExitContext(OperationFinalizationRequest request, Operation activeOperation) {
         User currentUser = SecurityUtil.getLoggedUser();
-        return new OperationExitContext(request, activeOperation, currentUser);
+        return createExitContext(request, activeOperation, currentUser);
+    }
+
+    private OperationExitContext createExitContext(OperationFinalizationRequest request, Operation activeOperation, User user) {
+        return new OperationExitContext(request, activeOperation, user);
     }
 
     @Override

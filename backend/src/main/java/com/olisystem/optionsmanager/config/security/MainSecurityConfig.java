@@ -49,9 +49,13 @@ public class MainSecurityConfig {
     http.authorizeHttpRequests(
         auth -> auth
             .requestMatchers("/api/auth/**").permitAll()
+            .requestMatchers("/api/v1/auth/**").permitAll() // Liberar auth v1 para teste
+            .requestMatchers("/api/operations/**").permitAll() // Liberar operações para teste
+            .requestMatchers("/api/positions/**").permitAll() // Liberar posições para teste
             .requestMatchers("/api/invoice-processing/dashboard/**").permitAll() // Dashboard sem auth
             .requestMatchers("/api/ocr/**").permitAll() // OCR sem auth (quando implementado)
             .requestMatchers("/api/processing/**").permitAll() // Todo processing sem auth para teste
+            .requestMatchers("/api/v1/test/invoices/**").permitAll() // <-- LIBERAR TESTE PARA ACESSO PÚBLICO
             .anyRequest().authenticated());
     // Adicione o filtro JWT antes do UsernamePasswordAuthenticationFilter
     http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

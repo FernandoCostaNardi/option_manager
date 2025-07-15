@@ -44,24 +44,48 @@ public class OperationCreationServiceImpl implements OperationCreationService {
     @Override
     @Transactional
     public Operation createActiveOperation(OperationDataRequest request, OptionSerie optionSerie, User currentUser) {
+        log.info("🟢 [DEBUG] TransactionType recebido no createActiveOperation: {}", request.getTransactionType());
+        
+        // ✅ CORREÇÃO: Validar TransactionType antes de processar
+        validateTransactionType(request);
+        
         Operation operation = buildOperation(
                 OperationBuildData.fromRequest(request),
                 optionSerie,
                 OperationStatus.ACTIVE,
                 currentUser
         );
-
+        
+        // ✅ CORREÇÃO: Verificar se TransactionType foi preservado
+        if (!operation.getTransactionType().equals(request.getTransactionType())) {
+            log.error("❌ ERRO CRÍTICO: TransactionType foi alterado durante construção! Original: {}, Final: {}", 
+                request.getTransactionType(), operation.getTransactionType());
+            operation.setTransactionType(request.getTransactionType()); // Forçar correção
+        }
+        
+        log.info("🟢 [DEBUG] TransactionType no Operation (antes do save): {}", operation.getTransactionType());
         Operation savedOperation = operationRepository.save(operation);
+        log.info("🟢 [DEBUG] TransactionType no Operation (depois do save): {}", savedOperation.getTransactionType());
+        
+        // ✅ CORREÇÃO: Verificar se TransactionType foi preservado após save
+        if (!savedOperation.getTransactionType().equals(request.getTransactionType())) {
+            log.error("❌ ERRO CRÍTICO: TransactionType foi alterado após save! Original: {}, Final: {}", 
+                request.getTransactionType(), savedOperation.getTransactionType());
+            savedOperation.setTransactionType(request.getTransactionType());
+            savedOperation = operationRepository.save(savedOperation); // Salvar correção
+        }
+        
         logOperationCreation(OperationStatus.ACTIVE, savedOperation);
-
         targetService.processOperationTargets(request, savedOperation);
-
         return savedOperation;
     }
 
     @Override
     @Transactional
     public Operation createHiddenOperation(OperationDataRequest request, OptionSerie optionSerie, User currentUser) {
+        // ✅ CORREÇÃO: Validar TransactionType antes de processar
+        validateTransactionType(request);
+        
         Operation operation = buildOperation(
                 OperationBuildData.fromRequest(request),
                 optionSerie,
@@ -69,7 +93,23 @@ public class OperationCreationServiceImpl implements OperationCreationService {
                 currentUser
         );
 
+        // ✅ CORREÇÃO: Verificar se TransactionType foi preservado
+        if (!operation.getTransactionType().equals(request.getTransactionType())) {
+            log.error("❌ ERRO CRÍTICO: TransactionType foi alterado durante construção! Original: {}, Final: {}", 
+                request.getTransactionType(), operation.getTransactionType());
+            operation.setTransactionType(request.getTransactionType()); // Forçar correção
+        }
+
         Operation savedOperation = operationRepository.save(operation);
+        
+        // ✅ CORREÇÃO: Verificar se TransactionType foi preservado após save
+        if (!savedOperation.getTransactionType().equals(request.getTransactionType())) {
+            log.error("❌ ERRO CRÍTICO: TransactionType foi alterado após save! Original: {}, Final: {}", 
+                request.getTransactionType(), savedOperation.getTransactionType());
+            savedOperation.setTransactionType(request.getTransactionType());
+            savedOperation = operationRepository.save(savedOperation); // Salvar correção
+        }
+        
         logOperationCreation(OperationStatus.HIDDEN, savedOperation);
 
         targetService.processOperationTargets(request, savedOperation);
@@ -119,9 +159,9 @@ public class OperationCreationServiceImpl implements OperationCreationService {
     }
 
     private Operation buildExitOperation(OperationBuildExitData data, OptionSerie optionSeries, OperationStatus status, User currentUser) {
-        var brokerage = brokerageService.getBrokerageById(data.brokerageId());
+        var brokerage = brokerageService.getBrokerageById(data.brokerageId(), currentUser);
         var analysisHouse = data.analysisHouseId() != null ?
-                analysisHouseService.findById(data.analysisHouseId()).orElse(null) :
+                analysisHouseService.findById(data.analysisHouseId(), currentUser).orElse(null) :
                 null;
 
         // 2. Calcular valor total
@@ -152,25 +192,23 @@ public class OperationCreationServiceImpl implements OperationCreationService {
 
     /**
      * Método unificado para construir uma operação, independentemente da fonte de dados
+     * ✅ CORREÇÃO: Garantir que TransactionType seja preservado
      */
     private Operation buildOperation(OperationBuildData data, OptionSerie optionSerie,
                                      OperationStatus status, User currentUser) {
-        // 1. Buscar entidades relacionadas
+        log.debug("🔧 Construindo operação com TransactionType: {}", data.transactionType());
+        // Buscar entidades relacionadas usando apenas o ID da corretora
         var brokerage = brokerageService.getBrokerageById(data.brokerageId());
         var analysisHouse = data.analysisHouseId() != null ?
-                analysisHouseService.findById(data.analysisHouseId()).orElse(null) :
+                analysisHouseService.findById(data.analysisHouseId(), currentUser).orElse(null) :
                 null;
-
-        // 2. Calcular valor total
         BigDecimal entryTotalValue = data.entryUnitPrice()
                 .multiply(BigDecimal.valueOf(data.quantity()));
-
-        // 3. Criar a entidade usando Builder
-        return Operation.builder()
+        Operation operation = Operation.builder()
                 .optionSeries(optionSerie)
                 .brokerage(brokerage)
                 .analysisHouse(analysisHouse)
-                .transactionType(TransactionType.BUY)
+                .transactionType(data.transactionType())
                 .entryDate(data.entryDate())
                 .quantity(data.quantity())
                 .entryUnitPrice(data.entryUnitPrice())
@@ -178,6 +216,13 @@ public class OperationCreationServiceImpl implements OperationCreationService {
                 .status(status)
                 .user(currentUser)
                 .build();
+        if (!operation.getTransactionType().equals(data.transactionType())) {
+            log.error("❌ ERRO: TransactionType não foi definido corretamente! Esperado: {}, Atual: {}", 
+                data.transactionType(), operation.getTransactionType());
+            operation.setTransactionType(data.transactionType());
+        }
+        log.debug("✅ Operação construída com TransactionType: {}", operation.getTransactionType());
+        return operation;
     }
 
     @Override
@@ -231,6 +276,17 @@ public class OperationCreationServiceImpl implements OperationCreationService {
                 savedOperation.getId(), profitLoss, tradeType);
         
         return savedOperation;
+    }
+
+    /**
+     * ✅ NOVO MÉTODO: Validar TransactionType antes de processar
+     */
+    private void validateTransactionType(OperationDataRequest request) {
+        if (request.getTransactionType() == null) {
+            throw new IllegalArgumentException("TransactionType não pode ser nulo");
+        }
+        
+        log.info("✅ TransactionType validado: {}", request.getTransactionType());
     }
 
     /**

@@ -56,8 +56,13 @@ public class BrokerageService {
   }
 
   public Brokerage getBrokerageById(UUID id) {
-    User user = SecurityUtil.getLoggedUser();
-    return brokerageRepository.findByIdAndUser(id, user).orElse(null);
+    return brokerageRepository.findById(id).orElse(null);
+  }
+
+  public Brokerage getBrokerageById(UUID id, User user) {
+    // ✅ CORREÇÃO: Buscar corretora diretamente pelo ID, sem filtrar por usuário
+    // A corretora pode ser compartilhada entre usuários
+    return brokerageRepository.findById(id).orElse(null);
   }
 
   public Brokerage save(Brokerage brokerage) {
