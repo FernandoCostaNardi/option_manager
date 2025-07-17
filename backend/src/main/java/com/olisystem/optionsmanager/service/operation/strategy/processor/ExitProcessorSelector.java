@@ -44,7 +44,22 @@ public class ExitProcessorSelector {
             return complexScenarioProcessor.process(context);
         }
 
-        // 🔧 CORREÇÃO: Usar detecção de cenários parciais para lote único
+        // 🔧 CORREÇÃO: Verificar se é uma posição que já teve saídas parciais
+        boolean hasConsolidatedOperations = consolidatedOperationService.hasConsolidatedOperations(
+                context.position().getUser(), 
+                context.position().getOptionSeries(), 
+                context.position().getBrokerage()
+        );
+        
+        log.info("Posição tem operações consolidadas: {}", hasConsolidatedOperations);
+        
+        // 🔧 CORREÇÃO: Se já tem operações consolidadas, usar PartialExitProcessor
+        if (hasConsolidatedOperations) {
+            log.info("✅ Posição com operações consolidadas - usando PartialExitProcessor");
+            return partialExitProcessor.process(context);
+        }
+        
+        // 🔧 CORREÇÃO: Para posições sem consolidadas, usar lógica baseada em lotes
         if (lotCount == 1) {
             PartialExitDetector.ExitType exitType = partialExitDetector.determineExitType(
                     context.position(), requestedQuantity);

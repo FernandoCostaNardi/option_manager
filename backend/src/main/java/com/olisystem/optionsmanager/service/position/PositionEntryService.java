@@ -48,11 +48,14 @@ public class PositionEntryService {
             .remainingQuantity(operation.getQuantity())
             .totalRealizedProfit(BigDecimal.ZERO)
             .totalRealizedProfitPercentage(BigDecimal.ZERO)
-            .user(operation.getUser()) // ✅ Usar User da Operation
+            .user(operation.getUser())
             .build();
 
     // Salvar a posição
     position = positionRepository.save(position);
+
+    // Buscar do banco a quantidade de EntryLots já existentes para garantir sequenceNumber correto
+    int nextSequence = (int) entryLotRepository.countByPosition(position) + 1;
 
     // Criar o lote de entrada inicial
     EntryLot entryLot =
@@ -63,7 +66,7 @@ public class PositionEntryService {
             .unitPrice(operation.getEntryUnitPrice())
             .totalValue(operation.getEntryTotalValue())
             .remainingQuantity(operation.getQuantity())
-            .sequenceNumber(1)
+            .sequenceNumber(nextSequence)
             .isFullyConsumed(false)
             .build();
 
@@ -76,7 +79,7 @@ public class PositionEntryService {
             .operation(operation)
             .type(PositionOperationType.ENTRY)
             .timestamp(LocalDateTime.now())
-            .sequenceNumber(1)
+            .sequenceNumber(nextSequence)
             .build();
 
     positionOperationRepository.save(posOp);
@@ -88,8 +91,8 @@ public class PositionEntryService {
   public Position addEntryToPosition(Position position, Operation operation) {
     log.debug("Adicionando entrada à posição: {}", position.getId());
 
-    // Determinar o próximo número de sequência para o lote
-    int nextSequence = position.getEntryLots().size() + 1;
+    // Buscar do banco a quantidade de EntryLots já existentes para garantir sequenceNumber correto
+    int nextSequence = (int) entryLotRepository.countByPosition(position) + 1;
 
     // CAPTURAR quantidade restante ANTES de atualizar a Position
     int originalRemainingQuantity = position.getRemainingQuantity();

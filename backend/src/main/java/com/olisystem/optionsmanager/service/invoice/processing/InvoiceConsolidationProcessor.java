@@ -189,6 +189,24 @@ public class InvoiceConsolidationProcessor {
                                 continue;
                             }
                             
+                            // ✅ CORREÇÃO: Determinar se é saída total ou parcial
+                            int requestedQuantity = operationRequest.getQuantity();
+                            int availableQuantity = position.getRemainingQuantity();
+                            int quantityToUse = requestedQuantity;
+                            boolean isTotalExit = false;
+                            
+                            if (requestedQuantity >= availableQuantity) {
+                                // Saída total: usar quantidade disponível
+                                quantityToUse = availableQuantity;
+                                isTotalExit = true;
+                                log.info("🎯 Saída TOTAL detectada: solicitado={}, disponível={}, usando={}", 
+                                    requestedQuantity, availableQuantity, quantityToUse);
+                            } else {
+                                // Saída parcial: usar quantidade solicitada
+                                log.info("🎯 Saída PARCIAL detectada: solicitado={}, disponível={}, usando={}", 
+                                    requestedQuantity, availableQuantity, quantityToUse);
+                            }
+                            
                             // ✅ CORREÇÃO: Buscar especificamente a operação CONSOLIDATED_ENTRY com status ACTIVE
                             // Esta é a operação que deve ser usada para saídas parciais
                             Operation consolidatedEntryOperation = operationRepository.findByOptionSeriesAndUserAndStatusAndTransactionType(
@@ -251,6 +269,9 @@ public class InvoiceConsolidationProcessor {
                             // ✅ NOVO: Log detalhado para debug da segunda operação
                             log.info("🔍 === DEBUG SEGUNDA OPERAÇÃO ===");
                             log.info("🔍   - Quantidade solicitada: {}", operationRequest.getQuantity());
+                            log.info("🔍   - Quantidade disponível: {}", availableQuantity);
+                            log.info("🔍   - Quantidade a usar: {}", quantityToUse);
+                            log.info("🔍   - É saída total: {}", isTotalExit);
                             log.info("🔍   - Preço de saída: {}", operationRequest.getEntryUnitPrice());
                             log.info("🔍   - Data de saída: {}", operationRequest.getEntryDate());
                             log.info("🔍   - TransactionType: {}", operationRequest.getTransactionType());
@@ -259,7 +280,7 @@ public class InvoiceConsolidationProcessor {
                             // converte operationRequest para OperationFinalizationRequest
                             OperationFinalizationRequest finalizationRequest = new OperationFinalizationRequest();
                             finalizationRequest.setOperationId(consolidatedEntryOperation.getId());
-                            finalizationRequest.setQuantity(operationRequest.getQuantity());
+                            finalizationRequest.setQuantity(quantityToUse);
                             finalizationRequest.setExitUnitPrice(operationRequest.getEntryUnitPrice());
                             finalizationRequest.setExitDate(operationRequest.getEntryDate());
                             
@@ -396,7 +417,10 @@ public class InvoiceConsolidationProcessor {
             group = averageOperationService.getGroupByOperation(lastEntry);
         }
         if (group != null) {
-            averageOperationService.addNewItemGroup(group, operation, OperationRoleType.ORIGINAL);
+            // ✅ CORREÇÃO: Usar roleType correto baseado no tipo de transação
+            OperationRoleType roleType = (request.getTransactionType() == TransactionType.SELL) ? 
+                OperationRoleType.PARTIAL_EXIT : OperationRoleType.ORIGINAL;
+            averageOperationService.addNewItemGroup(group, operation, roleType);
         } else {
             log.warn("⚠️ Não foi encontrado AverageOperationGroup para usuário {} e série {} ao adicionar operação {}.", currentUser.getId(), operation.getOptionSeries().getId(), operation.getId());
         }

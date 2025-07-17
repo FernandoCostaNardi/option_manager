@@ -212,9 +212,11 @@ public class OperationFilterServiceImpl implements OperationFilterService {
             log.info("  Analisando: RoleType={}, Status={}, ID={}", 
                 item.getRoleType(), operation.getStatus(), operation.getId());
             
-            // Pular operações HIDDEN
-            if (operation.getStatus() == OperationStatus.HIDDEN) {
-                log.info("  ❌ Ignorada: HIDDEN");
+            // ✅ CORREÇÃO: Não pular operações HIDDEN automaticamente
+            // Só pular se for HIDDEN E não for CONSOLIDATED_RESULT
+            if (operation.getStatus() == OperationStatus.HIDDEN && 
+                item.getRoleType() != OperationRoleType.CONSOLIDATED_RESULT) {
+                log.info("  ❌ Ignorada: HIDDEN (não CONSOLIDATED_RESULT)");
                 continue;
             }
             
@@ -245,6 +247,12 @@ public class OperationFilterServiceImpl implements OperationFilterService {
             }
         }
         
+        // ✅ CORREÇÃO: Sempre priorizar CONSOLIDATED_RESULT quando existir
+        if (consolidatedResult != null) {
+            log.info("  ✅ Escolhida: CONSOLIDATED_RESULT (sempre priorizada)");
+            return consolidatedResult;
+        }
+        
         // ✅ NOVA LÓGICA DE SELEÇÃO BASEADA NO STATUS
         if (statusFilter != null && statusFilter.size() == 1) {
             OperationStatus targetStatus = statusFilter.get(0);
@@ -265,11 +273,7 @@ public class OperationFilterServiceImpl implements OperationFilterService {
                     
                 case WINNER:
                 case LOSER:
-                    // Para WINNER/LOSER: priorizar CONSOLIDATED_RESULT > TOTAL_EXIT
-                    if (consolidatedResult != null && consolidatedResult.getStatus() == targetStatus) {
-                        log.info("  ✅ Escolhida: CONSOLIDATED_RESULT {}", targetStatus);
-                        return consolidatedResult;
-                    }
+                    // Para WINNER/LOSER: priorizar TOTAL_EXIT
                     if (totalExit != null && totalExit.getStatus() == targetStatus) {
                         log.info("  ✅ Escolhida: TOTAL_EXIT {}", targetStatus);
                         return totalExit;
@@ -278,10 +282,6 @@ public class OperationFilterServiceImpl implements OperationFilterService {
                     
                 default:
                     // Para outros status: usar lógica original
-                    if (consolidatedResult != null && consolidatedResult.getStatus() == targetStatus) {
-                        log.info("  ✅ Escolhida: CONSOLIDATED_RESULT {}", targetStatus);
-                        return consolidatedResult;
-                    }
                     if (totalExit != null && totalExit.getStatus() == targetStatus) {
                         log.info("  ✅ Escolhida: TOTAL_EXIT {}", targetStatus);
                         return totalExit;
@@ -292,10 +292,6 @@ public class OperationFilterServiceImpl implements OperationFilterService {
         
         // ✅ FALLBACK: Lógica original (priorizar consolidadas)
         log.info("  🔄 Usando lógica de fallback");
-        if (consolidatedResult != null) {
-            log.info("  ✅ Escolhida: CONSOLIDATED_RESULT (fallback)");
-            return consolidatedResult;
-        }
         if (totalExit != null) {
             log.info("  ✅ Escolhida: TOTAL_EXIT (fallback)");
             return totalExit;

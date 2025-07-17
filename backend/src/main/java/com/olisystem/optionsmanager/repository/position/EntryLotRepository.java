@@ -68,4 +68,6 @@ public interface EntryLotRepository extends JpaRepository<EntryLot, UUID> {
       @Param("transactionType") com.olisystem.optionsmanager.model.transaction.TransactionType transactionType,
       @Param("optionType") com.olisystem.optionsmanager.model.option_serie.OptionType optionType,
       @Param("optionSeriesCode") String optionSeriesCode);
+
+  long countByPosition(Position position);
 }

@@ -8,6 +8,7 @@ import com.olisystem.optionsmanager.model.operation.TradeType;
 import com.olisystem.optionsmanager.model.position.EntryLot;
 import com.olisystem.optionsmanager.model.position.ExitStrategy;
 import com.olisystem.optionsmanager.model.position.PositionOperationType;
+import com.olisystem.optionsmanager.model.transaction.TransactionType;
 import com.olisystem.optionsmanager.record.operation.OperationExitPositionContext;
 import com.olisystem.optionsmanager.service.operation.averageOperation.AverageOperationGroupService;
 import com.olisystem.optionsmanager.service.operation.averageOperation.AverageOperationService;
@@ -202,8 +203,16 @@ public class MultipleLotExitProcessor {
                 break;
         }
 
-        log.info("Plano de consumo criado: {} lotes serão consumidos, estratégia: {}",
+        log.info("Plano de consumo criado: {} lotes serão consumidos, estratégia: {}", 
                 consumptions.size(), strategy);
+        
+        // Log detalhado do plano de consumo
+        for (int i = 0; i < consumptions.size(); i++) {
+            LotConsumption consumption = consumptions.get(i);
+            log.info("  Consumo {}: Lote={}, Quantidade={}, TradeType={}, Strategy={}", 
+                    i + 1, consumption.lot.getId(), consumption.quantityToConsume, 
+                    consumption.tradeType, consumption.strategy);
+        }
 
         return new ConsumptionPlan(strategy, consumptions);
     }
@@ -224,44 +233,67 @@ public class MultipleLotExitProcessor {
     }
 
     private List<LotConsumption> createDayTradeConsumptions(List<EntryLot> lots, Integer quantityToConsume) {
-        // LIFO: Mais recente primeiro (ordenar por data DESC, depois por sequência DESC)
+        // LIFO: Mais recente primeiro (ordenar por data DESC, depois por sequência DESC, depois por UUID DESC)
         List<EntryLot> sortedLots = lots.stream()
                 .sorted(Comparator
                         .comparing(EntryLot::getEntryDate).reversed()
-                        .thenComparing(EntryLot::getSequenceNumber).reversed())
+                        .thenComparing(EntryLot::getSequenceNumber).reversed()
+                        .thenComparing(EntryLot::getId).reversed())
                 .collect(Collectors.toList());
+
+        log.info("Lotes ordenados para DAY_TRADE (LIFO):");
+        for (int i = 0; i < sortedLots.size(); i++) {
+            EntryLot lot = sortedLots.get(i);
+            log.info("  {}: ID={}, Data={}, Sequência={}, Quantidade={}", 
+                    i + 1, lot.getId(), lot.getEntryDate(), lot.getSequenceNumber(), lot.getRemainingQuantity());
+        }
 
         return createConsumptionsFromSortedLots(sortedLots, quantityToConsume, TradeType.DAY, ExitStrategy.LIFO);
     }
 
     private List<LotConsumption> createSwingTradeConsumptions(List<EntryLot> lots, Integer quantityToConsume) {
-        // FIFO: Mais antigo primeiro (ordenar por data ASC, depois por sequência ASC)
+        // FIFO: Mais antigo primeiro (ordenar por data ASC, depois por sequência ASC, depois por UUID ASC)
         List<EntryLot> sortedLots = lots.stream()
                 .sorted(Comparator
                         .comparing(EntryLot::getEntryDate)
-                        .thenComparing(EntryLot::getSequenceNumber))
+                        .thenComparing(EntryLot::getSequenceNumber)
+                        .thenComparing(EntryLot::getId))
                 .collect(Collectors.toList());
+
+        log.info("Lotes ordenados para SWING_TRADE (FIFO):");
+        for (int i = 0; i < sortedLots.size(); i++) {
+            EntryLot lot = sortedLots.get(i);
+            log.info("  {}: ID={}, Data={}, Sequência={}, Quantidade={}", 
+                    i + 1, lot.getId(), lot.getEntryDate(), lot.getSequenceNumber(), lot.getRemainingQuantity());
+        }
 
         return createConsumptionsFromSortedLots(sortedLots, quantityToConsume, TradeType.SWING, ExitStrategy.FIFO);
     }
 
     private List<LotConsumption> createConsumptionsFromSortedLots(List<EntryLot> sortedLots,
                                                                   Integer quantityToConsume, TradeType tradeType, ExitStrategy strategy) {
-
         List<LotConsumption> consumptions = new ArrayList<>();
-        Integer remaining = quantityToConsume;
+        int remaining = quantityToConsume;
+
+        log.info("Criando consumos para {} unidades restantes, estratégia: {}", remaining, strategy);
 
         for (EntryLot lot : sortedLots) {
-            if (remaining <= 0) break;
-
-            Integer quantityFromThisLot = Math.min(lot.getRemainingQuantity(), remaining);
-
+            if (remaining <= 0) {
+                log.info("Quantidade restante é 0, parando consumo");
+                break;
+            }
+            int available = lot.getRemainingQuantity();
+            int quantityFromThisLot = Math.min(available, remaining);
             if (quantityFromThisLot > 0) {
                 consumptions.add(new LotConsumption(lot, quantityFromThisLot, tradeType, strategy));
                 remaining -= quantityFromThisLot;
+                log.info("Lote {} consumido: {} unidades, restante: {}", 
+                        lot.getId(), quantityFromThisLot, remaining);
+            } else {
+                log.info("Lote {} ignorado: quantidade disponível = 0", lot.getId());
             }
         }
-
+        log.info("Total de consumos criados: {}", consumptions.size());
         return consumptions;
     }
 
@@ -380,15 +412,20 @@ public class MultipleLotExitProcessor {
             // ✅ CORREÇÃO: Calcular dados médios corretos para esta operação
             TradeOperationData operationData = calculateTradeOperationData(lotResults, context.context().request());
 
-            // Criar operação de saída com dados corretos
-            Operation exitOperation = createExitOperationWithCorrectData(
-                    context, tradeType, operationData);
+            // ✅ CORREÇÃO: Só criar operação se a quantidade for maior que 0
+            if (operationData.quantity > 0) {
+                // Criar operação de saída com dados corretos
+                Operation exitOperation = createExitOperationWithCorrectData(
+                        context, tradeType, operationData);
 
-            exitOperations.add(exitOperation);
+                exitOperations.add(exitOperation);
 
-            log.info("Operação de saída {} criada: tipo={}, quantidade={}, preço_médio_entrada={}, lucro/prejuízo={}, percentual={}%",
-                    exitOperation.getId(), tradeType, operationData.quantity,
-                    operationData.averageEntryPrice, operationData.profitLoss, operationData.profitLossPercentage);
+                log.info("Operação de saída {} criada: tipo={}, quantidade={}, preço_médio_entrada={}, lucro/prejuízo={}, percentual={}%",
+                        exitOperation.getId(), tradeType, operationData.quantity,
+                        operationData.averageEntryPrice, operationData.profitLoss, operationData.profitLossPercentage);
+            } else {
+                log.warn("⚠️ Ignorando criação de operação para tradeType={} com quantidade=0", tradeType);
+            }
         }
 
         return exitOperations;
@@ -477,7 +514,8 @@ public class MultipleLotExitProcessor {
         exitOperation.setOptionSeries(activeOperation.getOptionSeries());
         exitOperation.setBrokerage(activeOperation.getBrokerage());
         exitOperation.setAnalysisHouse(activeOperation.getAnalysisHouse());
-        exitOperation.setTransactionType(activeOperation.getTransactionType());
+        // ✅ CORREÇÃO: Operações de saída devem ter TransactionType SELL (inverso da operação original)
+        exitOperation.setTransactionType(TransactionType.SELL);
         exitOperation.setTradeType(tradeType);
         exitOperation.setExitDate(request.getExitDate());
         exitOperation.setUser(activeOperation.getUser());
@@ -535,9 +573,21 @@ public class MultipleLotExitProcessor {
                     lotResult.lot, correspondingOperation, context.context(), lotResult.quantityConsumed);
         }
 
-        // ✅ CORREÇÃO: AGORA sim atualizar os lotes (após criar todos os ExitRecords)
-        log.debug("Atualizando {} lotes após criação dos ExitRecords", result.lotResults.size());
+        // ✅ CORREÇÃO CRÍTICA: Calcular total disponível ANTES de atualizar os lotes
+        int totalAvailableBeforeConsumption = result.lotResults.stream()
+                .mapToInt(r -> r.lot.getRemainingQuantity() + r.quantityConsumed)
+                .sum();
+        
+        boolean isTotalExit = result.totalQuantityConsumed.equals(totalAvailableBeforeConsumption);
+        
+        log.info("🔍 Detecção de saída total: quantidade_consumida={}, total_disponível_antes={}, isTotalExit={}", 
+                result.totalQuantityConsumed, totalAvailableBeforeConsumption, isTotalExit);
+
+        // ✅ CORREÇÃO: AGORA sim atualizar os lotes (após calcular total disponível)
+        log.info("Atualizando {} lotes após cálculo do total disponível", result.lotResults.size());
         for (LotConsumptionResult lotResult : result.lotResults) {
+            log.info("Atualizando lote {}: consumindo {} unidades (quantidade atual: {})", 
+                    lotResult.lot.getId(), lotResult.quantityConsumed, lotResult.lot.getRemainingQuantity());
             entryLotUpdateService.updateEntryLot(lotResult.lot, lotResult.quantityConsumed);
         }
 
@@ -548,8 +598,6 @@ public class MultipleLotExitProcessor {
                 exitOperations.size(), result.lotResults.size(), result.lotResults.size());
 
         // ================= LÓGICA DE CONSOLIDAÇÃO =================
-        // ✅ CORREÇÃO: Usar a informação do ConsumptionResult para determinar se é saída total
-        boolean isTotalExit = result.totalQuantityConsumed.equals(context.position().getTotalQuantity());
         
         // ✅ CORREÇÃO CRÍTICA: Marcar todas as operações de saída como HIDDEN primeiro
         for (Operation exitOperation : exitOperations) {
@@ -558,10 +606,11 @@ public class MultipleLotExitProcessor {
         }
         
         if (isTotalExit) {
-            // ✅ CORREÇÃO: Adicionar como TOTAL_EXIT (apenas uma vez)
+            // ✅ CORREÇÃO: Marcar a última operação de saída como HIDDEN e TOTAL_EXIT
             for (Operation exitOperation : exitOperations) {
+                consolidatedOperationService.markOperationAsHidden(exitOperation);
                 averageOperationService.addNewItemGroup(context.group(), exitOperation, com.olisystem.optionsmanager.model.operation.OperationRoleType.TOTAL_EXIT);
-                log.info("Operação de saída final adicionada ao grupo como TOTAL_EXIT: {}", exitOperation.getId());
+                log.info("Operação de saída final adicionada ao grupo como TOTAL_EXIT e marcada como HIDDEN: {}", exitOperation.getId());
             }
             // Atualizar ou criar CONSOLIDATED_RESULT
             Optional<Operation> existingConsolidatedResult = consolidatedOperationService.findExistingConsolidatedResult(context.group());

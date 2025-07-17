@@ -5,6 +5,7 @@ import com.olisystem.optionsmanager.model.operation.AverageOperationItem;
 import com.olisystem.optionsmanager.model.operation.Operation;
 import com.olisystem.optionsmanager.model.operation.OperationRoleType;
 import com.olisystem.optionsmanager.model.operation.OperationStatus;
+import com.olisystem.optionsmanager.model.transaction.TransactionType;
 import com.olisystem.optionsmanager.repository.AverageOperationItemRepository;
 import com.olisystem.optionsmanager.repository.OperationRepository;
 import com.olisystem.optionsmanager.service.operation.average.AveragePriceCalculator;
@@ -14,9 +15,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -78,6 +81,54 @@ public class ConsolidatedOperationService {
             log.warn("⚠️ EntryDate não encontrada no grupo, usando da operação: {}", entryDate);
         }
         
+        // ✅ CORREÇÃO: Calcular quantidade total das SAÍDAS (SELL) para operação consolidada
+        int totalQuantity = group.getItems().stream()
+            .map(AverageOperationItem::getOperation)
+            .filter(op -> op.getTransactionType() == TransactionType.SELL &&
+                         (op.getStatus() == OperationStatus.HIDDEN || op.getStatus() == OperationStatus.WINNER || op.getStatus() == OperationStatus.LOSER) &&
+                         op.getQuantity() > 0)
+            .mapToInt(Operation::getQuantity)
+            .sum();
+        log.info("🔧 Quantidade total das SAÍDAS (SELL) para CONSOLIDATED_RESULT: {}", totalQuantity);
+        
+        // ✅ CORREÇÃO: Calcular preço médio de saída e lucro total baseado nas operações SELL existentes (quantidade > 0)
+        List<Operation> sellOperations = group.getItems().stream()
+            .map(AverageOperationItem::getOperation)
+            .filter(op -> op.getTransactionType() == TransactionType.SELL &&
+                         (op.getStatus() == OperationStatus.HIDDEN || op.getStatus() == OperationStatus.WINNER || op.getStatus() == OperationStatus.LOSER) &&
+                         op.getQuantity() > 0)
+            .collect(Collectors.toList());
+        
+        BigDecimal totalExitValue = sellOperations.stream()
+            .map(op -> op.getExitUnitPrice().multiply(BigDecimal.valueOf(op.getQuantity())))
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        
+        BigDecimal totalExitQuantity = sellOperations.stream()
+            .map(op -> BigDecimal.valueOf(op.getQuantity()))
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        
+        BigDecimal averageExitPrice = totalExitQuantity.compareTo(BigDecimal.ZERO) > 0 ?
+            totalExitValue.divide(totalExitQuantity, 6, RoundingMode.HALF_UP) :
+            firstExitOperation.getExitUnitPrice();
+        
+        BigDecimal totalProfitLoss = sellOperations.stream()
+            .map(Operation::getProfitLoss)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        
+        BigDecimal totalEntryValue = group.getItems().stream()
+            .map(AverageOperationItem::getOperation)
+            .filter(op -> op.getTransactionType() == TransactionType.BUY &&
+                         (op.getStatus() == OperationStatus.ACTIVE || op.getStatus() == OperationStatus.HIDDEN))
+            .map(Operation::getEntryTotalValue)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        
+        BigDecimal profitLossPercentage = totalEntryValue.compareTo(BigDecimal.ZERO) > 0 ?
+            totalProfitLoss.divide(totalEntryValue, 6, RoundingMode.HALF_UP).multiply(BigDecimal.valueOf(100)) :
+            BigDecimal.ZERO;
+        
+        log.info("🔧 Preço médio de saída calculado: {}, Lucro total: {}, Percentual: {}%", 
+                averageExitPrice, totalProfitLoss, profitLossPercentage);
+        
         Operation consolidatedExit = Operation.builder()
                 .optionSeries(firstExitOperation.getOptionSeries())
                 .brokerage(firstExitOperation.getBrokerage())
@@ -85,15 +136,15 @@ public class ConsolidatedOperationService {
                 .transactionType(firstExitOperation.getTransactionType())
                 .tradeType(firstExitOperation.getTradeType())
                 .entryDate(entryDate)
-                .exitDate(exitDate)  // ✅ Usar exitDate da operação atual
-                .quantity(firstExitOperation.getQuantity())
+                .exitDate(exitDate)
+                .quantity(totalQuantity)  // ✅ CORREÇÃO: Quantidade total das entradas
                 .entryUnitPrice(firstExitOperation.getEntryUnitPrice())
-                .entryTotalValue(firstExitOperation.getEntryTotalValue())
-                .exitUnitPrice(firstExitOperation.getExitUnitPrice())
-                .exitTotalValue(firstExitOperation.getExitTotalValue())
-                .profitLoss(firstExitOperation.getProfitLoss())
-                .profitLossPercentage(firstExitOperation.getProfitLossPercentage())
-                .status(firstExitOperation.getStatus())
+                .entryTotalValue(totalEntryValue)  // ✅ CORREÇÃO: Valor total das entradas
+                .exitUnitPrice(averageExitPrice)  // ✅ CORREÇÃO: Preço médio de saída
+                .exitTotalValue(totalExitValue)  // ✅ CORREÇÃO: Valor total de saída
+                .profitLoss(totalProfitLoss)  // ✅ CORREÇÃO: Lucro total
+                .profitLossPercentage(profitLossPercentage)  // ✅ CORREÇÃO: Percentual correto
+                .status(totalProfitLoss.compareTo(BigDecimal.ZERO) > 0 ? OperationStatus.WINNER : OperationStatus.LOSER)
                 .user(firstExitOperation.getUser())
                 .build();
 
@@ -306,6 +357,13 @@ public class ConsolidatedOperationService {
     public Operation transformToTotalExit(Operation consolidatedResult, AverageOperationGroup group) {
         log.info("Transformando CONSOLIDATED_RESULT em TOTAL_EXIT: {}", consolidatedResult.getId());
         
+        // ✅ CORREÇÃO: Calcular quantidade total correta para a operação WINNER
+        int totalQuantity = calculateTotalQuantityFromGroup(group);
+        log.info("Quantidade total calculada para TOTAL_EXIT: {}", totalQuantity);
+        
+        // ✅ CORREÇÃO: Atualizar quantidade da operação
+        consolidatedResult.setQuantity(totalQuantity);
+        
         if (consolidatedResult.getProfitLoss().compareTo(BigDecimal.ZERO) > 0) {
             consolidatedResult.setStatus(OperationStatus.WINNER);
         } else if (consolidatedResult.getProfitLoss().compareTo(BigDecimal.ZERO) < 0) {
@@ -327,6 +385,28 @@ public class ConsolidatedOperationService {
         }
         
         return savedTotalExit;
+    }
+    
+    /**
+     * ✅ NOVO MÉTODO: Calcular quantidade total correta para operação WINNER
+     */
+    private int calculateTotalQuantityFromGroup(AverageOperationGroup group) {
+        log.info("Calculando quantidade total do grupo: {}", group.getId());
+        
+        if (group.getItems() == null) {
+            log.warn("Items é null para o grupo: {}", group.getId());
+            return 0;
+        }
+        
+        int totalQuantity = group.getItems().stream()
+            .map(AverageOperationItem::getOperation)
+            .filter(op -> op.getTransactionType() == TransactionType.BUY &&
+                         (op.getStatus() == OperationStatus.ACTIVE || op.getStatus() == OperationStatus.HIDDEN))
+            .mapToInt(Operation::getQuantity)
+            .sum();
+        
+        log.info("Quantidade total calculada: {}", totalQuantity);
+        return totalQuantity;
     }
 
     /**

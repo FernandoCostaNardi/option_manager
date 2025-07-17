@@ -8,6 +8,7 @@ import com.olisystem.optionsmanager.model.operation.AverageOperationItem;
 import com.olisystem.optionsmanager.model.operation.Operation;
 import com.olisystem.optionsmanager.model.operation.OperationRoleType;
 import com.olisystem.optionsmanager.model.operation.TradeType;
+import com.olisystem.optionsmanager.model.transaction.TransactionType;
 import com.olisystem.optionsmanager.model.position.EntryLot;
 import com.olisystem.optionsmanager.model.position.PositionOperationType;
 import com.olisystem.optionsmanager.model.position.Position;
@@ -466,9 +467,20 @@ public class PartialExitProcessor {
         TradeType tradeType = tradeTypeResolver.determineTradeType(
                 availableLots.get(0).getEntryDate(), request.getExitDate());
 
+        // ✅ CORREÇÃO: Garantir que a operação de saída seja criada com TransactionType.SELL
+        log.info("🔧 Criando operação de saída com TransactionType: {} (context: {})", 
+                context.transactionType(), context.transactionType());
+        
         // Criar operação de saída consolidada
         Operation exitOperation = operationCreationService.createExitOperation(
-                context, tradeType, totalProfitLoss, context.transactionType(), totalQuantityConsumed);
+                context, tradeType, totalProfitLoss, TransactionType.SELL, totalQuantityConsumed);
+        
+        // ✅ CORREÇÃO: Verificar se TransactionType foi definido corretamente
+        if (exitOperation.getTransactionType() != TransactionType.SELL) {
+            log.error("❌ ERRO: Operação de saída criada com TransactionType incorreto! Esperado: SELL, Atual: {}", 
+                    exitOperation.getTransactionType());
+            exitOperation.setTransactionType(TransactionType.SELL);
+        }
 
         // CORREÇÃO: Garantir que os valores foram definidos corretamente
         if (exitOperation.getProfitLoss() == null || exitOperation.getProfitLoss().compareTo(BigDecimal.ZERO) == 0) {
