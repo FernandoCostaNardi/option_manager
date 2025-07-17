@@ -13,6 +13,8 @@ import com.olisystem.optionsmanager.record.operation.OperationExitPositionContex
 import com.olisystem.optionsmanager.repository.OperationRepository;
 import com.olisystem.optionsmanager.service.analysis_house.AnalysisHouseService;
 import com.olisystem.optionsmanager.service.brokerage.BrokerageService;
+import com.olisystem.optionsmanager.service.operation.consolidate.ConsolidatedOperationService;
+import com.olisystem.optionsmanager.service.operation.averageOperation.finder.OperationGroupFinder;
 import com.olisystem.optionsmanager.service.operation.target.OperationTargetService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -28,6 +30,8 @@ public class OperationCreationServiceImpl implements OperationCreationService {
     private final BrokerageService brokerageService;
     private final AnalysisHouseService analysisHouseService;
     private final OperationRepository operationRepository;
+    private final ConsolidatedOperationService consolidatedOperationService;
+    private final OperationGroupFinder operationGroupFinder;
     private final OperationTargetService targetService;
 
     // Construtor com injeção de dependências
@@ -35,11 +39,15 @@ public class OperationCreationServiceImpl implements OperationCreationService {
             BrokerageService brokerageService,
             AnalysisHouseService analysisHouseService,
             OperationRepository operationRepository,
-            OperationTargetService targetService) {
+            OperationTargetService targetService,
+            ConsolidatedOperationService consolidatedOperationService,
+            OperationGroupFinder operationGroupFinder) {
         this.brokerageService = brokerageService;
         this.analysisHouseService = analysisHouseService;
         this.operationRepository = operationRepository;
         this.targetService = targetService;
+        this.consolidatedOperationService = consolidatedOperationService;
+        this.operationGroupFinder = operationGroupFinder;
     }
 
     @Override
@@ -78,6 +86,7 @@ public class OperationCreationServiceImpl implements OperationCreationService {
         
         logOperationCreation(OperationStatus.ACTIVE, savedOperation);
         targetService.processOperationTargets(request, savedOperation);
+
         return savedOperation;
     }
 
@@ -176,7 +185,7 @@ public class OperationCreationServiceImpl implements OperationCreationService {
         Operation operation = buildExitOperation(
                 OperationBuildExitData.fromRequest(context, profitLoss, tradeType, type, totalQuantity),
                 context.context().activeOperation().getOptionSeries(),
-                profitLoss.compareTo(BigDecimal.ZERO) > 0 ? OperationStatus.WINNER : OperationStatus.LOSER,
+                OperationStatus.HIDDEN, // ✅ CORREÇÃO: Operações individuais devem ser HIDDEN
                 context.context().currentUser()
         );
 
@@ -280,9 +289,8 @@ public class OperationCreationServiceImpl implements OperationCreationService {
         BigDecimal entryTotalValue = entryUnitPrice.multiply(BigDecimal.valueOf(quantity));
         BigDecimal exitTotalValue = exitUnitPrice.multiply(BigDecimal.valueOf(quantity));
 
-        // Determinar status baseado no P&L
-                OperationStatus status = profitLoss.compareTo(BigDecimal.ZERO) > 0 ?
-                OperationStatus.WINNER : OperationStatus.LOSER;
+        // ✅ CORREÇÃO: Operações individuais devem ser HIDDEN
+        OperationStatus status = OperationStatus.HIDDEN;
 
         // Criar a operação de saída
         Operation exitOperation = Operation.builder()

@@ -2,8 +2,12 @@ package com.olisystem.optionsmanager.service.operation.averageOperation;
 
 import com.olisystem.optionsmanager.model.operation.*;
 import com.olisystem.optionsmanager.model.position.Position;
+import com.olisystem.optionsmanager.model.auth.User;
+import com.olisystem.optionsmanager.model.option_serie.OptionSerie;
+import com.olisystem.optionsmanager.model.transaction.TransactionType;
 import com.olisystem.optionsmanager.repository.AverageOperationGroupRepository;
 import com.olisystem.optionsmanager.repository.AverageOperationItemRepository;
+import com.olisystem.optionsmanager.repository.OperationRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -30,7 +34,8 @@ public class AverageOperationService {
   private AverageOperationGroupRepository groupRepository;
   @Autowired
   private AverageOperationItemRepository itemRepository;
-
+  @Autowired
+  private OperationRepository operationRepository;
 
 
   /** Cria um novo grupo para uma operação inicial. */
@@ -358,6 +363,27 @@ public class AverageOperationService {
     return item != null ? item.getGroup() : null;
   }
 
+  /**
+   * Busca o grupo de operações médias associado a uma posição
+   */
+  public AverageOperationGroup getGroupByPosition(Position position) {
+    if (position == null || position.getId() == null) {
+      log.debug("❌ Position ou positionId é null");
+      return null;
+    }
+    
+    log.debug("🔍 Buscando grupo para posição: {}", position.getId());
+    AverageOperationGroup group = groupRepository.findByPositionId(position.getId());
+    
+    if (group != null) {
+      log.debug("✅ Grupo encontrado: {} (items: {})", group.getId(), group.getItems().size());
+    } else {
+      log.debug("❌ Nenhum grupo encontrado para posição: {}", position.getId());
+    }
+    
+    return group;
+  }
+
 
   /**
    * Atualiza o grupo de operações médias
@@ -372,5 +398,52 @@ public class AverageOperationService {
     groupRepository.save(group);
 
     return group;
-}
+  }
+
+  /**
+   * ✅ CORREÇÃO: Buscar operação CONSOLIDATED_ENTRY para uma série de opções e usuário
+   * Agora busca especificamente por grupo para evitar múltiplos resultados
+   */
+  public Operation findConsolidatedEntryOperation(OptionSerie optionSerie, User user) {
+    log.debug("Buscando operação CONSOLIDATED_ENTRY para série: {} e usuário: {}", 
+        optionSerie.getCode(), user.getUsername());
+
+    // ✅ CORREÇÃO: Buscar primeiro o grupo da posição para esta série e usuário
+    // Isso garante que só buscamos operações CONSOLIDATED_ENTRY do grupo correto
+    List<Operation> buyOperations = operationRepository.findByOptionSeriesAndUserAndTransactionType(
+        optionSerie, user, TransactionType.BUY);
+    
+    if (buyOperations.isEmpty()) {
+      log.debug("❌ Nenhuma operação BUY encontrada para série: {} e usuário: {}", 
+          optionSerie.getCode(), user.getUsername());
+      return null;
+    }
+    
+    // Buscar o grupo da primeira operação BUY (que deve ser a mais antiga)
+    Operation firstBuyOperation = buyOperations.get(0);
+    AverageOperationGroup group = getGroupByOperation(firstBuyOperation);
+    
+    if (group == null) {
+      log.debug("❌ Nenhum grupo encontrado para operação: {}", firstBuyOperation.getId());
+      return null;
+    }
+    
+    log.debug("🔍 Buscando CONSOLIDATED_ENTRY no grupo: {}", group.getId());
+    
+    // Buscar CONSOLIDATED_ENTRY especificamente neste grupo
+    List<AverageOperationItem> consolidatedEntryItems = itemRepository.findByGroupAndRoleType(
+        group, OperationRoleType.CONSOLIDATED_ENTRY);
+    
+    if (consolidatedEntryItems.isEmpty()) {
+      log.debug("❌ Nenhuma CONSOLIDATED_ENTRY encontrada no grupo: {}", group.getId());
+      return null;
+    }
+    
+    // Deve haver apenas uma CONSOLIDATED_ENTRY por grupo
+    Operation consolidatedEntry = consolidatedEntryItems.get(0).getOperation();
+    log.debug("✅ Operação CONSOLIDATED_ENTRY encontrada: {} (status: {})", 
+        consolidatedEntry.getId(), consolidatedEntry.getStatus());
+    
+    return consolidatedEntry;
+  }
 }

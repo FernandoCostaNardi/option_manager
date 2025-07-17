@@ -209,6 +209,7 @@ public class PartialExitDetector {
 
         ExitType result;
         if (isFinal) {
+            // ✅ CORREÇÃO CRÍTICA: Se é saída final, sempre é SINGLE_TOTAL_EXIT ou FINAL_PARTIAL_EXIT
             if (isFirst) {
                 result = ExitType.SINGLE_TOTAL_EXIT; // Saída única que fecha tudo
                 log.info("🎯 TIPO DETECTADO: SINGLE_TOTAL_EXIT (primeira e única saída)");

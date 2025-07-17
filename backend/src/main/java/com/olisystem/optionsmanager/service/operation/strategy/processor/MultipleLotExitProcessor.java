@@ -341,8 +341,21 @@ public class MultipleLotExitProcessor {
                 .mapToInt(r -> r.quantityConsumed)
                 .sum();
 
-        // Atualizar posição consolidadamente
-        positionUpdateService.updatePosition(context.position(), request, totalProfitLoss, consolidatedPercentage);
+        // ✅ CORREÇÃO: DETECTAR SE É SAÍDA TOTAL ANTES de atualizar a posição
+        boolean isTotalExit = totalQuantityConsumed.equals(context.position().getRemainingQuantity());
+        log.info("🔍 Detecção de saída total (ANTES da atualização): quantidade_solicitada={}, remaining_quantity={}, isTotalExit={}", 
+                totalQuantityConsumed, context.position().getRemainingQuantity(), isTotalExit);
+
+        // ✅ CORREÇÃO: Usar método apropriado baseado no tipo de saída
+        if (isTotalExit) {
+            // Saída total - usar updatePosition (que fecha a posição)
+            log.info("🎯 Processando como SAÍDA TOTAL - usando updatePosition()");
+            positionUpdateService.updatePosition(context.position(), request, totalProfitLoss, consolidatedPercentage);
+        } else {
+            // Saída parcial - usar updatePositionPartial (que mantém posição aberta)
+            log.info("🎯 Processando como SAÍDA PARCIAL - usando updatePositionPartial()");
+            positionUpdateService.updatePositionPartial(context.position(), request, totalProfitLoss, consolidatedPercentage, totalQuantityConsumed);
+        }
 
         // Atualizar status da operação de entrada original
         operationStatusService.updateOperationStatus(
@@ -520,9 +533,8 @@ public class MultipleLotExitProcessor {
         exitOperation.setExitDate(request.getExitDate());
         exitOperation.setUser(activeOperation.getUser());
 
-        // Status baseado no resultado
-        exitOperation.setStatus(operationData.profitLoss.compareTo(BigDecimal.ZERO) > 0 ?
-                OperationStatus.WINNER : OperationStatus.LOSER);
+        // ✅ CORREÇÃO: Operações individuais devem ser HIDDEN
+        exitOperation.setStatus(OperationStatus.HIDDEN);
 
         // ✅ IMPORTANTE: Salvar a operação com os dados corretos
         // (O OperationCreationService já salva, mas precisamos salvar novamente após as alterações)
@@ -573,15 +585,13 @@ public class MultipleLotExitProcessor {
                     lotResult.lot, correspondingOperation, context.context(), lotResult.quantityConsumed);
         }
 
-        // ✅ CORREÇÃO CRÍTICA: Calcular total disponível ANTES de atualizar os lotes
-        int totalAvailableBeforeConsumption = result.lotResults.stream()
-                .mapToInt(r -> r.lot.getRemainingQuantity() + r.quantityConsumed)
-                .sum();
+        // ✅ CORREÇÃO CRÍTICA: Usar a detecção já feita anteriormente - posição foi atualizada
+        // A detecção deve ser baseada no estado ATUAL da posição (após atualização)
+        boolean isTotalExit = context.position().getStatus() == com.olisystem.optionsmanager.model.position.PositionStatus.CLOSED 
+                           || context.position().getRemainingQuantity() == 0;
         
-        boolean isTotalExit = result.totalQuantityConsumed.equals(totalAvailableBeforeConsumption);
-        
-        log.info("🔍 Detecção de saída total: quantidade_consumida={}, total_disponível_antes={}, isTotalExit={}", 
-                result.totalQuantityConsumed, totalAvailableBeforeConsumption, isTotalExit);
+        log.info("🔍 Detecção de saída total (APÓS atualização da posição): positionStatus={}, remainingQuantity={}, isTotalExit={}", 
+                context.position().getStatus(), context.position().getRemainingQuantity(), isTotalExit);
 
         // ✅ CORREÇÃO: AGORA sim atualizar os lotes (após calcular total disponível)
         log.info("Atualizando {} lotes após cálculo do total disponível", result.lotResults.size());
@@ -612,18 +622,16 @@ public class MultipleLotExitProcessor {
                 averageOperationService.addNewItemGroup(context.group(), exitOperation, com.olisystem.optionsmanager.model.operation.OperationRoleType.TOTAL_EXIT);
                 log.info("Operação de saída final adicionada ao grupo como TOTAL_EXIT e marcada como HIDDEN: {}", exitOperation.getId());
             }
-            // Atualizar ou criar CONSOLIDATED_RESULT
+            // ✅ CORREÇÃO: Transformar CONSOLIDATED_RESULT existente em TOTAL_EXIT com valores corretos
             Optional<Operation> existingConsolidatedResult = consolidatedOperationService.findExistingConsolidatedResult(context.group());
             if (existingConsolidatedResult.isPresent()) {
-                log.info("Atualizando CONSOLIDATED_RESULT final: {}", existingConsolidatedResult.get().getId());
-                consolidatedOperationService.updateConsolidatedResult(
-                    existingConsolidatedResult.get(),
-                    exitOperations.get(0),
-                    context.group()
-                );
+                log.info("Transformando CONSOLIDATED_RESULT existente em TOTAL_EXIT com valores corretos: {}", existingConsolidatedResult.get().getId());
+                consolidatedOperationService.transformToTotalExit(existingConsolidatedResult.get(), context.group());
             } else {
                 log.info("Criando CONSOLIDATED_RESULT final");
-                consolidatedOperationService.createConsolidatedExit(exitOperations.get(0), context.group());
+                Operation firstExitOp = exitOperations.get(0);
+                consolidatedOperationService.createConsolidatedExit(context.group(), firstExitOp, 
+                    firstExitOp.getExitUnitPrice(), firstExitOp.getExitDate());
             }
             // Marcar CONSOLIDATED_ENTRY como HIDDEN
             markConsolidatedEntryAsHidden(context);
@@ -644,7 +652,9 @@ public class MultipleLotExitProcessor {
                 );
             } else {
                 log.info("Criando CONSOLIDATED_RESULT parcial");
-                consolidatedOperationService.createConsolidatedExit(exitOperations.get(0), context.group());
+                Operation firstExitOp = exitOperations.get(0);
+                consolidatedOperationService.createConsolidatedExit(context.group(), firstExitOp, 
+                    firstExitOp.getExitUnitPrice(), firstExitOp.getExitDate());
             }
         }
         log.info("=== GERENCIAMENTO DE OPERAÇÕES CONSOLIDADAS CONCLUÍDO ===");

@@ -44,43 +44,45 @@ public class ExitProcessorSelector {
             return complexScenarioProcessor.process(context);
         }
 
-        // 🔧 CORREÇÃO: Verificar se é uma posição que já teve saídas parciais
-        boolean hasConsolidatedOperations = consolidatedOperationService.hasConsolidatedOperations(
-                context.position().getUser(), 
-                context.position().getOptionSeries(), 
-                context.position().getBrokerage()
-        );
-        
-        log.info("Posição tem operações consolidadas: {}", hasConsolidatedOperations);
-        
-        // 🔧 CORREÇÃO: Se já tem operações consolidadas, usar PartialExitProcessor
-        if (hasConsolidatedOperations) {
-            log.info("✅ Posição com operações consolidadas - usando PartialExitProcessor");
-            return partialExitProcessor.process(context);
-        }
-        
-        // 🔧 CORREÇÃO: Para posições sem consolidadas, usar lógica baseada em lotes
+        // 🔧 CORREÇÃO CRÍTICA: Para lote único, sempre determinar o tipo de saída primeiro
         if (lotCount == 1) {
             PartialExitDetector.ExitType exitType = partialExitDetector.determineExitType(
                     context.position(), requestedQuantity);
 
             log.info("Lote único - Tipo de saída detectado: {}", exitType);
 
-            switch (exitType) {
-                case SINGLE_TOTAL_EXIT:
-                    log.info("✅ Usando SingleLotExitProcessor para saída total única");
-                    return singleLotProcessor.process(context);
-                    
-                case FIRST_PARTIAL_EXIT:
-                case SUBSEQUENT_PARTIAL_EXIT:
-                case FINAL_PARTIAL_EXIT:
-                    log.info("✅ Usando PartialExitProcessor para saída parcial tipo: {}", exitType);
-                    return partialExitProcessor.process(context);
-                    
-                default:
-                    log.warn("❌ Tipo de saída não reconhecido: {} - usando SingleLotExitProcessor como fallback", exitType);
-                    return singleLotProcessor.process(context);
+            // ✅ CORREÇÃO: Saídas totais sempre vão para SingleLotExitProcessor
+            if (exitType == PartialExitDetector.ExitType.SINGLE_TOTAL_EXIT) {
+                log.info("✅ Usando SingleLotExitProcessor para saída total única");
+                return singleLotProcessor.process(context);
             }
+            
+            // ✅ CORREÇÃO: Saídas parciais podem ir para PartialExitProcessor se há consolidadas
+            if (exitType == PartialExitDetector.ExitType.FIRST_PARTIAL_EXIT || 
+                exitType == PartialExitDetector.ExitType.SUBSEQUENT_PARTIAL_EXIT ||
+                exitType == PartialExitDetector.ExitType.FINAL_PARTIAL_EXIT) {
+                
+                // Verificar se é uma posição que já teve saídas parciais
+                boolean hasConsolidatedOperations = consolidatedOperationService.hasConsolidatedOperations(
+                        context.position().getUser(), 
+                        context.position().getOptionSeries(), 
+                        context.position().getBrokerage()
+                );
+                
+                log.info("Posição tem operações consolidadas: {}", hasConsolidatedOperations);
+                
+                if (hasConsolidatedOperations) {
+                    log.info("✅ Posição com operações consolidadas - usando PartialExitProcessor");
+                    return partialExitProcessor.process(context);
+                } else {
+                    log.info("✅ Posição sem operações consolidadas - usando SingleLotExitProcessor");
+                    return singleLotProcessor.process(context);
+                }
+            }
+            
+            // Fallback para casos não reconhecidos
+            log.warn("❌ Tipo de saída não reconhecido: {} - usando SingleLotExitProcessor como fallback", exitType);
+            return singleLotProcessor.process(context);
         }
         else if (lotCount > 1) {
             // Múltiplos lotes simples - usar MultipleLotExitProcessor
@@ -153,16 +155,30 @@ public class ExitProcessorSelector {
             PartialExitDetector.ExitType exitType = partialExitDetector.determineExitType(
                     context.position(), requestedQuantity);
 
-            switch (exitType) {
-                case SINGLE_TOTAL_EXIT:
-                    return "SingleLotExitProcessor";
-                case FIRST_PARTIAL_EXIT:
-                case SUBSEQUENT_PARTIAL_EXIT:
-                case FINAL_PARTIAL_EXIT:
-                    return "PartialExitProcessor";
-                default:
-                    return "SingleLotExitProcessor (fallback)";
+            // ✅ CORREÇÃO: Saídas totais sempre vão para SingleLotExitProcessor
+            if (exitType == PartialExitDetector.ExitType.SINGLE_TOTAL_EXIT) {
+                return "SingleLotExitProcessor";
             }
+            
+            // ✅ CORREÇÃO: Saídas parciais podem ir para PartialExitProcessor se há consolidadas
+            if (exitType == PartialExitDetector.ExitType.FIRST_PARTIAL_EXIT || 
+                exitType == PartialExitDetector.ExitType.SUBSEQUENT_PARTIAL_EXIT ||
+                exitType == PartialExitDetector.ExitType.FINAL_PARTIAL_EXIT) {
+                
+                boolean hasConsolidatedOperations = consolidatedOperationService.hasConsolidatedOperations(
+                        context.position().getUser(), 
+                        context.position().getOptionSeries(), 
+                        context.position().getBrokerage()
+                );
+                
+                if (hasConsolidatedOperations) {
+                    return "PartialExitProcessor";
+                } else {
+                    return "SingleLotExitProcessor";
+                }
+            }
+            
+            return "SingleLotExitProcessor (fallback)";
         } else if (lotCount > 1) {
             return "MultipleLotExitProcessor";
         } else {

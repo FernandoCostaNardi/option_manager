@@ -135,8 +135,7 @@ public class PartialExitProcessor {
                     exitResult.profitLoss, exitResult.profitLossPercentage);
         }
 
-        // ✅ CORREÇÃO CRÍTICA: Verificar se já existe CONSOLIDATED_ENTRY antes de criar
-        // PASSO 4: Criar ou buscar operação consolidadora de entrada
+        // PASSO 2: Criar/atualizar operação consolidadora de entrada
         log.info("🔧 Verificando se CONSOLIDATED_ENTRY já existe");
         Optional<Operation> existingConsolidatedEntry = consolidatedOperationService.findExistingConsolidatedEntry(context.group());
         
@@ -150,26 +149,28 @@ public class PartialExitProcessor {
                     context.context().activeOperation(), context.group());
         }
 
-        // PASSO 3: Gerenciar operação consolidadora de saída
+        // ✅ CORREÇÃO: PRIMEIRO adicionar operação de saída ao grupo ANTES de criar CONSOLIDATED_RESULT
+        log.info("🔧 Adicionando operação de saída ao grupo como PARTIAL_EXIT: {}", exitResult.exitOperation.getId());
+        averageOperationService.addNewItemGroup(context.group(), exitResult.exitOperation, 
+                com.olisystem.optionsmanager.model.operation.OperationRoleType.PARTIAL_EXIT);
+
+        // PASSO 3: DEPOIS gerenciar operação consolidadora de saída (agora com dados corretos)
         Operation consolidatedExit;
         Optional<Operation> existingConsolidatedResult = consolidatedOperationService.findExistingConsolidatedResult(context.group());
         
         if (existingConsolidatedResult.isPresent()) {
             // Atualizar CONSOLIDATED_RESULT existente (passos 6, 10)
-            log.info("Atualizando CONSOLIDATED_RESULT existente");
+            log.info("🔧 Atualizando CONSOLIDATED_RESULT existente");
             consolidatedExit = consolidatedOperationService.updateConsolidatedResult(
                     existingConsolidatedResult.get(), exitResult.exitOperation, context.group());
         } else {
-            // Criar primeira CONSOLIDATED_RESULT (passo 4)
-            log.info("Criando primeira CONSOLIDATED_RESULT");
+            // Criar primeira CONSOLIDATED_RESULT (passo 4) - agora com dados corretos do grupo
+            log.info("🔧 Criando primeira CONSOLIDATED_RESULT com dados corretos do grupo");
             consolidatedExit = consolidatedOperationService.createConsolidatedExit(
-                    exitResult.exitOperation, context.group());
+                    context.group(), exitResult.exitOperation, 
+                    exitResult.exitOperation.getExitUnitPrice(), 
+                    exitResult.exitOperation.getExitDate());
         }
-
-        // PASSO NOVO: Adicionar operação de saída como PARTIAL_EXIT no grupo (passos 3, 5)
-        averageOperationService.addNewItemGroup(context.group(), exitResult.exitOperation, 
-                com.olisystem.optionsmanager.model.operation.OperationRoleType.PARTIAL_EXIT);
-        log.info("Operação de saída adicionada ao grupo como PARTIAL_EXIT: {}", exitResult.exitOperation.getId());
 
         // PASSO 5 & 6: Calcular e atualizar novo preço médio
         updateConsolidatedEntryAfterExit(consolidatedEntry, exitResult, context);
@@ -232,6 +233,12 @@ public class PartialExitProcessor {
         }
 
         Operation consolidatedEntry = consolidatedEntryOpt.get();
+        
+        // ✅ CORREÇÃO: PRIMEIRO adicionar operação de saída ao grupo ANTES de criar CONSOLIDATED_RESULT
+        averageOperationService.addNewItemGroup(context.group(), exitResult.exitOperation, 
+                com.olisystem.optionsmanager.model.operation.OperationRoleType.PARTIAL_EXIT);
+        log.info("✅ Operação de saída SUBSEQUENTE adicionada ao grupo como PARTIAL_EXIT: {}", exitResult.exitOperation.getId());
+        
         Operation consolidatedExit;
         
         if (consolidatedResultOpt.isPresent()) {
@@ -239,10 +246,12 @@ public class PartialExitProcessor {
             consolidatedExit = consolidatedResultOpt.get();
             log.info("✅ CONSOLIDATED_RESULT encontrada: {}", consolidatedExit.getId());
         } else {
-            // ✅ CONSOLIDATED_RESULT não existe - criar nova
-            log.info("🔧 CONSOLIDATED_RESULT não encontrada - criando nova");
+            // ✅ CONSOLIDATED_RESULT não existe - criar nova (agora com dados corretos do grupo)
+            log.info("🔧 CONSOLIDATED_RESULT não encontrada - criando nova com dados corretos");
             consolidatedExit = consolidatedOperationService.createConsolidatedExit(
-                    exitResult.exitOperation, context.group());
+                    context.group(), exitResult.exitOperation, 
+                    exitResult.exitOperation.getExitUnitPrice(), 
+                    exitResult.exitOperation.getExitDate());
             log.info("✅ Nova CONSOLIDATED_RESULT criada: {}", consolidatedExit.getId());
         }
         
@@ -251,9 +260,9 @@ public class PartialExitProcessor {
         log.info("✅ CONSOLIDATED_RESULT: {}", consolidatedExit.getId());
 
         // ✅ CORREÇÃO CRÍTICA: Adicionar operação de saída como PARTIAL_EXIT no grupo
-        averageOperationService.addNewItemGroup(context.group(), exitResult.exitOperation, 
-                com.olisystem.optionsmanager.model.operation.OperationRoleType.PARTIAL_EXIT);
-        log.info("✅ Operação de saída SUBSEQUENTE adicionada ao grupo como PARTIAL_EXIT: {}", exitResult.exitOperation.getId());
+        // averageOperationService.addNewItemGroup(context.group(), exitResult.exitOperation, 
+        //         com.olisystem.optionsmanager.model.operation.OperationRoleType.PARTIAL_EXIT);
+        // log.info("✅ Operação de saída SUBSEQUENTE adicionada ao grupo como PARTIAL_EXIT: {}", exitResult.exitOperation.getId());
 
         // PASSO 11: Atualizar operação consolidadora de saída
         consolidatedOperationService.updateConsolidatedExit(
@@ -304,71 +313,35 @@ public class PartialExitProcessor {
                     exitResult.profitLoss, exitResult.profitLossPercentage);
         }
 
+        // ✅ CORREÇÃO: PRIMEIRO adicionar operação de saída ao grupo ANTES de atualizar CONSOLIDATED_RESULT
+        averageOperationService.addNewItemGroup(context.group(), exitResult.exitOperation, 
+                com.olisystem.optionsmanager.model.operation.OperationRoleType.TOTAL_EXIT);
+        log.info("✅ Operação de saída FINAL adicionada ao grupo como TOTAL_EXIT: {}", exitResult.exitOperation.getId());
+
         // 🔧 CORREÇÃO: Adicionar lógica de atualização da operação consolidada (igual aos outros métodos)
         Operation consolidatedExit;
         Optional<Operation> existingConsolidatedResult = consolidatedOperationService.findExistingConsolidatedResult(context.group());
         
         if (existingConsolidatedResult.isPresent()) {
-            // Atualizar CONSOLIDATED_RESULT existente
-            log.info("🔧 FINAL_PARTIAL_EXIT: Atualizando CONSOLIDATED_RESULT existente");
+            // Atualizar CONSOLIDATED_RESULT existente (agora com dados corretos)
+            log.info("🔧 FINAL_PARTIAL_EXIT: Atualizando CONSOLIDATED_RESULT existente com dados corretos");
             consolidatedExit = consolidatedOperationService.updateConsolidatedResult(
                     existingConsolidatedResult.get(), exitResult.exitOperation, context.group());
         } else {
             // Não deveria acontecer no cenário 3.3, mas tratando como segurança
-            log.warn("🔧 FINAL_PARTIAL_EXIT: CONSOLIDATED_RESULT não encontrada - criando nova");
+            log.warn("🔧 FINAL_PARTIAL_EXIT: CONSOLIDATED_RESULT não encontrada - criando nova com dados corretos");
             consolidatedExit = consolidatedOperationService.createConsolidatedExit(
-                    exitResult.exitOperation, context.group());
+                    context.group(), exitResult.exitOperation, 
+                    exitResult.exitOperation.getExitUnitPrice(), 
+                    exitResult.exitOperation.getExitDate());
         }
 
-        // PASSO NOVO: Adicionar operação de saída como TOTAL_EXIT no grupo
-        averageOperationService.addNewItemGroup(context.group(), exitResult.exitOperation, 
-                com.olisystem.optionsmanager.model.operation.OperationRoleType.TOTAL_EXIT);
-        log.info("✅ Operação de saída FINAL adicionada ao grupo como TOTAL_EXIT: {}", exitResult.exitOperation.getId());
-
-        // ✅ CORREÇÃO: Buscar operação consolidadora de entrada com logs detalhados
-        log.info("🔍 Buscando CONSOLIDATED_ENTRY no grupo: {}", context.group().getId());
-        
-        // ✅ NOVA CORREÇÃO: Usar método específico do repositório
+        // ✅ BUSCAR CONSOLIDATED_ENTRY para finalização
         Optional<Operation> consolidatedEntryOpt = consolidatedOperationService.findExistingConsolidatedEntry(context.group());
-        
-        Operation consolidatedEntry;
-        if (consolidatedEntryOpt.isPresent()) {
-            consolidatedEntry = consolidatedEntryOpt.get();
-            log.info("✅ CONSOLIDATED_ENTRY encontrada via repositório: {}", consolidatedEntry.getId());
-        } else {
-            log.error("❌ CONSOLIDATED_ENTRY não encontrada no grupo: {}", context.group().getId());
-            log.error("❌ Items do grupo: {}", context.group().getItems());
-            
-            // ✅ CORREÇÃO: Tentar buscar diretamente no repositório
-            List<AverageOperationItem> allItems = groupRepository.findById(context.group().getId())
-                    .map(group -> group.getItems())
-                    .orElse(new ArrayList<>());
-            
-            log.info("🔍 Items encontrados diretamente: {}", allItems.size());
-            
-            // ✅ NOVA CORREÇÃO: Log detalhado de todos os items
-            for (AverageOperationItem item : allItems) {
-                log.info("🔍 Item: RoleType={}, OperationId={}, Status={}", 
-                    item.getRoleType(), item.getOperation().getId(), item.getOperation().getStatus());
-            }
-            
-            Optional<AverageOperationItem> entryItem = allItems.stream()
-                    .filter(item -> item.getRoleType() == OperationRoleType.CONSOLIDATED_ENTRY)
-                    .findFirst();
-            
-            if (entryItem.isPresent()) {
-                consolidatedEntry = entryItem.get().getOperation();
-                log.info("✅ CONSOLIDATED_ENTRY encontrada via busca direta: {}", consolidatedEntry.getId());
-            } else {
-                log.error("❌ CONSOLIDATED_ENTRY não encontrada mesmo via busca direta");
-                throw new BusinessException("Operação consolidadora de entrada não encontrada para saída final");
-            }
+        if (!consolidatedEntryOpt.isPresent()) {
+            throw new BusinessException("Operação consolidadora de entrada não encontrada para saída final");
         }
-
-        if (consolidatedExit == null) {
-            log.error("❌ CONSOLIDATED_EXIT é null");
-            throw new BusinessException("Operação consolidadora de saída não encontrada para saída final");
-        }
+        Operation consolidatedEntry = consolidatedEntryOpt.get();
 
         // PASSO 18: Finalizar operação consolidadora de entrada (quantidade = 0)
         consolidatedOperationService.updateConsolidatedEntry(
@@ -395,16 +368,9 @@ public class PartialExitProcessor {
         log.info("✅ CONSOLIDATED_RESULT marcada como {} (P&L consolidado: {})", 
                 consolidatedExit.getStatus(), consolidatedExit.getProfitLoss());
 
-        // Marcar CONSOLIDATED_ENTRY como HIDDEN (passo 11)
-        Optional<AverageOperationItem> consolidatedEntryItem = context.group().getItems().stream()
-                .filter(item -> item.getRoleType() == OperationRoleType.CONSOLIDATED_ENTRY)
-                .findFirst();
-                
-        if (consolidatedEntryItem.isPresent()) {
-            Operation consolidatedEntryOp = consolidatedEntryItem.get().getOperation();
-            log.info("Marcando CONSOLIDATED_ENTRY como HIDDEN: {}", consolidatedEntryOp.getId());
-            consolidatedOperationService.markOperationAsHidden(consolidatedEntryOp);
-        }
+        // ✅ CORREÇÃO: Marcar CONSOLIDATED_ENTRY como HIDDEN usando método específico (passo 11)
+        log.info("🔧 Marcando CONSOLIDATED_ENTRY como HIDDEN para grupo: {}", context.group().getId());
+        consolidatedOperationService.markConsolidatedEntryAsHidden(context.group());
 
         // PASSO 19: Atualizar entidades finais
         updateEntitiesAfterFinalExit(context, exitResult);

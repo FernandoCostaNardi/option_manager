@@ -203,7 +203,9 @@ public class ComplexScenarioProcessor {
             
             // Criar CONSOLIDATED_RESULT
             consolidatedOperation = consolidatedOperationService.createConsolidatedExit(
-                tempExitOperation, context.group());
+                context.group(), tempExitOperation, 
+                tempExitOperation.getExitUnitPrice(), 
+                tempExitOperation.getExitDate());
             
             if (isTotalExit) {
                 log.info("Saída total imediata - transformando em TOTAL_EXIT");
@@ -366,7 +368,9 @@ public class ComplexScenarioProcessor {
                 );
             } else {
                 log.info("Criando CONSOLIDATED_RESULT final");
-                consolidatedOperationService.createConsolidatedExit(primaryExitOperation, context.group());
+                consolidatedOperationService.createConsolidatedExit(context.group(), primaryExitOperation, 
+                    primaryExitOperation.getExitUnitPrice(), 
+                    primaryExitOperation.getExitDate());
             }
             
             // PASSO 5: Marcar CONSOLIDATED_ENTRY como HIDDEN (passo 11)

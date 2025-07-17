@@ -41,4 +41,7 @@ public interface AverageOperationItemRepository extends JpaRepository<AverageOpe
   List<AverageOperationItem> findExitedNonConsolidatedOperationsByGroupId(
       @Param("groupId") UUID groupId, 
       @Param("consolidatedTypes") List<OperationRoleType> consolidatedTypes);
+
+  // Buscar todos os itens por tipo de papel (roleType)
+  List<AverageOperationItem> findByRoleType(OperationRoleType roleType);
 }

@@ -39,6 +39,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import com.olisystem.optionsmanager.model.transaction.TransactionType;
+import com.olisystem.optionsmanager.service.operation.averageOperation.AverageOperationService;
 
 @Slf4j
 @Service
@@ -53,6 +55,7 @@ public class OperationServiceImpl implements OperationService {
     private final OperationTargetRepository operationTargetRepository;
     private final OperationFilterService operationFilterService;
     private final ExitOperationStrategyResolver exitOperationStrategyResolver;
+    private final AverageOperationService averageOperationService;
 
     // Construtor com injeção de dependências
     public OperationServiceImpl(
@@ -65,7 +68,8 @@ public class OperationServiceImpl implements OperationService {
             AnalysisHouseService analysisHouseService,
             OperationTargetRepository operationTargetRepository,
             OperationFilterService operationFilterService,
-            ExitOperationStrategyResolver exitOperationStrategyResolver
+            ExitOperationStrategyResolver exitOperationStrategyResolver,
+            AverageOperationService averageOperationService
             ) {
         this.operationValidator = operationValidator;
         this.assetService = assetService;
@@ -77,6 +81,7 @@ public class OperationServiceImpl implements OperationService {
         this.operationTargetRepository = operationTargetRepository;
         this.operationFilterService = operationFilterService;
         this.exitOperationStrategyResolver = exitOperationStrategyResolver;
+        this.averageOperationService = averageOperationService;
     }
 
     @Override
@@ -104,9 +109,25 @@ public class OperationServiceImpl implements OperationService {
         OperationContext context = new OperationContext(request, optionSerie, user);
 
         // 4. Determinar estratégia de operação
-        // ✅ CORREÇÃO: Buscar operação ativa considerando o TransactionType
-        Operation activeOperation = operationRepository.findByOptionSeriesAndUserAndStatusAndTransactionType(
-                optionSerie, user, OperationStatus.ACTIVE, request.getTransactionType());
+        // ✅ CORREÇÃO: Buscar apenas a operação consolidada (CONSOLIDATED_ENTRY) em vez de todas as operações BUY ativas
+        Operation activeOperation = null;
+        
+        // Se for operação de compra, buscar a CONSOLIDATED_ENTRY
+        if (request.getTransactionType() == TransactionType.BUY) {
+            // Buscar operação consolidada através do AverageOperationService
+            activeOperation = averageOperationService.findConsolidatedEntryOperation(optionSerie, user);
+            
+            if (activeOperation != null) {
+                log.info("✅ Operação CONSOLIDATED_ENTRY encontrada: {} (status: {})", 
+                    activeOperation.getId(), activeOperation.getStatus());
+            } else {
+                log.info("ℹ️ Nenhuma operação CONSOLIDATED_ENTRY encontrada - criando nova operação");
+            }
+        } else {
+            // Para operações de venda, buscar operação ativa normal
+            activeOperation = operationRepository.findByOptionSeriesAndUserAndStatusAndTransactionType(
+                    optionSerie, user, OperationStatus.ACTIVE, request.getTransactionType());
+        }
 
         // 5. Delegar à estratégia adequada
         if (activeOperation == null) {

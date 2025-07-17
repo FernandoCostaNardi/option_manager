@@ -207,10 +207,10 @@ public class InvoiceConsolidationProcessor {
                                     requestedQuantity, availableQuantity, quantityToUse);
                             }
                             
-                            // ✅ CORREÇÃO: Buscar especificamente a operação CONSOLIDATED_ENTRY com status ACTIVE
+                            // ✅ CORREÇÃO: Buscar especificamente a operação CONSOLIDATED_ENTRY usando roleType
                             // Esta é a operação que deve ser usada para saídas parciais
-                            Operation consolidatedEntryOperation = operationRepository.findByOptionSeriesAndUserAndStatusAndTransactionType(
-                                optionSerie, currentUser, OperationStatus.ACTIVE, TransactionType.BUY);
+                            Operation consolidatedEntryOperation = averageOperationService.findConsolidatedEntryOperation(
+                                optionSerie, currentUser);
                             
                             if (consolidatedEntryOperation == null) {
                                 log.error("❌ Operação CONSOLIDATED_ENTRY não encontrada: {}", item.getAssetCode());
@@ -383,13 +383,8 @@ public class InvoiceConsolidationProcessor {
                 } else {
                     operation.setProfitLossPercentage(BigDecimal.ZERO);
                 }
-                if (profitLoss.compareTo(BigDecimal.ZERO) > 0) {
-                    operation.setStatus(OperationStatus.WINNER);
-                } else if (profitLoss.compareTo(BigDecimal.ZERO) < 0) {
-                    operation.setStatus(OperationStatus.LOSER);
-                } else {
-                    operation.setStatus(OperationStatus.ACTIVE);
-                }
+                // ✅ CORREÇÃO: Operações individuais devem ser HIDDEN
+                operation.setStatus(OperationStatus.HIDDEN);
             } else {
                 operation.setProfitLoss(BigDecimal.ZERO);
                 operation.setProfitLossPercentage(BigDecimal.ZERO);
