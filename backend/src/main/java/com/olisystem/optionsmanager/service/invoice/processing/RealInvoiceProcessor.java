@@ -49,7 +49,7 @@ public class RealInvoiceProcessor {
      * ✅ CORREÇÃO: Adicionado @Transactional para resolver problema de rollback
      */
     @Transactional(readOnly = false)
-    public CompletableFuture<ProcessingResult> processInvoicesAsync(
+    public CompletableFuture<ProcessingResult>  processInvoicesAsync(
             List<UUID> invoiceIds, 
             User currentUser,
             Consumer<ProcessingProgress> progressCallback) {

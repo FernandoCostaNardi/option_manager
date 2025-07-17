@@ -10,6 +10,8 @@ import com.olisystem.optionsmanager.model.position.ExitStrategy;
 import com.olisystem.optionsmanager.model.position.PositionOperationType;
 import com.olisystem.optionsmanager.record.operation.OperationExitPositionContext;
 import com.olisystem.optionsmanager.service.operation.averageOperation.AverageOperationGroupService;
+import com.olisystem.optionsmanager.service.operation.averageOperation.AverageOperationService;
+import com.olisystem.optionsmanager.service.operation.consolidate.ConsolidatedOperationService;
 import com.olisystem.optionsmanager.service.operation.creation.OperationCreationService;
 import com.olisystem.optionsmanager.service.operation.exitRecord.ExitRecordService;
 import com.olisystem.optionsmanager.service.operation.profit.ProfitCalculationService;
@@ -41,6 +43,8 @@ public class MultipleLotExitProcessor {
     private final PositionOperationService positionOperationService;
     private final AverageOperationGroupService averageOperationGroupService;
     private final OperationCreationService operationCreationService;
+    private final ConsolidatedOperationService consolidatedOperationService;
+    private final AverageOperationService averageOperationService;
 
     /**
      * Processa a saída de operação com múltiplos lotes
@@ -479,7 +483,7 @@ public class MultipleLotExitProcessor {
         exitOperation.setUser(activeOperation.getUser());
 
         // Status baseado no resultado
-        exitOperation.setStatus(operationData.profitLoss.compareTo(BigDecimal.ZERO) >= 0 ?
+        exitOperation.setStatus(operationData.profitLoss.compareTo(BigDecimal.ZERO) > 0 ?
                 OperationStatus.WINNER : OperationStatus.LOSER);
 
         // ✅ IMPORTANTE: Salvar a operação com os dados corretos
@@ -508,6 +512,9 @@ public class MultipleLotExitProcessor {
                 context.position().getTotalQuantity()) ?
                 PositionOperationType.FULL_EXIT : PositionOperationType.PARTIAL_EXIT;
 
+        // Consolidar operações de saída
+        // consolidatedOperationService.consolidateExitOperations(exitOperations, context.context());
+
         // Criar PositionOperations para cada operação de saída
         for (Operation exitOperation : exitOperations) {
             positionOperationService.createPositionOperation(
@@ -534,14 +541,79 @@ public class MultipleLotExitProcessor {
             entryLotUpdateService.updateEntryLot(lotResult.lot, lotResult.quantityConsumed);
         }
 
-        // Atualizar AverageOperationGroup com todas as operações
-        for (Operation exitOperation : exitOperations) {
-            averageOperationGroupService.updateOperationGroup(
-                    context.group(), context.position(), exitOperation, exitOperation.getProfitLoss());
-        }
-
+        // ✅ CORREÇÃO: Atualizar AverageOperationGroup com todas as operações
+        // (Removido para evitar duplicação - será feito na lógica de consolidação abaixo)
+        
         log.info("Processamento finalizado: {} operações criadas, {} ExitRecords criados, {} lotes atualizados",
                 exitOperations.size(), result.lotResults.size(), result.lotResults.size());
+
+        // ================= LÓGICA DE CONSOLIDAÇÃO =================
+        // ✅ CORREÇÃO: Usar a informação do ConsumptionResult para determinar se é saída total
+        boolean isTotalExit = result.totalQuantityConsumed.equals(context.position().getTotalQuantity());
+        
+        // ✅ CORREÇÃO CRÍTICA: Marcar todas as operações de saída como HIDDEN primeiro
+        for (Operation exitOperation : exitOperations) {
+            log.info("Marcando operação de saída como HIDDEN: {}", exitOperation.getId());
+            consolidatedOperationService.markOperationAsHidden(exitOperation);
+        }
+        
+        if (isTotalExit) {
+            // ✅ CORREÇÃO: Adicionar como TOTAL_EXIT (apenas uma vez)
+            for (Operation exitOperation : exitOperations) {
+                averageOperationService.addNewItemGroup(context.group(), exitOperation, com.olisystem.optionsmanager.model.operation.OperationRoleType.TOTAL_EXIT);
+                log.info("Operação de saída final adicionada ao grupo como TOTAL_EXIT: {}", exitOperation.getId());
+            }
+            // Atualizar ou criar CONSOLIDATED_RESULT
+            Optional<Operation> existingConsolidatedResult = consolidatedOperationService.findExistingConsolidatedResult(context.group());
+            if (existingConsolidatedResult.isPresent()) {
+                log.info("Atualizando CONSOLIDATED_RESULT final: {}", existingConsolidatedResult.get().getId());
+                consolidatedOperationService.updateConsolidatedResult(
+                    existingConsolidatedResult.get(),
+                    exitOperations.get(0),
+                    context.group()
+                );
+            } else {
+                log.info("Criando CONSOLIDATED_RESULT final");
+                consolidatedOperationService.createConsolidatedExit(exitOperations.get(0), context.group());
+            }
+            // Marcar CONSOLIDATED_ENTRY como HIDDEN
+            markConsolidatedEntryAsHidden(context);
+        } else {
+            // Adicionar como PARTIAL_EXIT
+            for (Operation exitOperation : exitOperations) {
+                averageOperationService.addNewItemGroup(context.group(), exitOperation, com.olisystem.optionsmanager.model.operation.OperationRoleType.PARTIAL_EXIT);
+                log.info("Operação de saída parcial adicionada ao grupo como PARTIAL_EXIT: {}", exitOperation.getId());
+            }
+            // Atualizar ou criar CONSOLIDATED_RESULT
+            Optional<Operation> existingConsolidatedResult = consolidatedOperationService.findExistingConsolidatedResult(context.group());
+            if (existingConsolidatedResult.isPresent()) {
+                log.info("Atualizando CONSOLIDATED_RESULT parcial: {}", existingConsolidatedResult.get().getId());
+                consolidatedOperationService.updateConsolidatedResult(
+                    existingConsolidatedResult.get(),
+                    exitOperations.get(0),
+                    context.group()
+                );
+            } else {
+                log.info("Criando CONSOLIDATED_RESULT parcial");
+                consolidatedOperationService.createConsolidatedExit(exitOperations.get(0), context.group());
+            }
+        }
+        log.info("=== GERENCIAMENTO DE OPERAÇÕES CONSOLIDADAS CONCLUÍDO ===");
+    }
+
+    /**
+     * Marca a CONSOLIDATED_ENTRY como HIDDEN, se existir no grupo.
+     */
+    private void markConsolidatedEntryAsHidden(OperationExitPositionContext context) {
+        Optional<com.olisystem.optionsmanager.model.operation.AverageOperationItem> consolidatedEntryItem =
+            context.group().getItems().stream()
+                .filter(item -> item.getRoleType() == com.olisystem.optionsmanager.model.operation.OperationRoleType.CONSOLIDATED_ENTRY)
+                .findFirst();
+        if (consolidatedEntryItem.isPresent()) {
+            Operation consolidatedEntryOp = consolidatedEntryItem.get().getOperation();
+            log.info("Marcando CONSOLIDATED_ENTRY como HIDDEN: {}", consolidatedEntryOp.getId());
+            consolidatedOperationService.markOperationAsHidden(consolidatedEntryOp);
+        }
     }
 
     // ======================================================================================

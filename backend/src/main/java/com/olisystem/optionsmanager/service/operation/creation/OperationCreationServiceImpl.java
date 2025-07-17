@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 
 @Slf4j
@@ -120,15 +121,48 @@ public class OperationCreationServiceImpl implements OperationCreationService {
     @Override
     @Transactional
     public Operation createConsolidatedOperation(Operation originalOperation, OptionSerie optionSerie, User currentUser) {
+        // ✅ CORREÇÃO: Calcular P&L baseado nos valores da operação consolidada
+        BigDecimal entryTotalValue = originalOperation.getEntryTotalValue();
+        BigDecimal exitTotalValue = originalOperation.getExitTotalValue();
+        
+        BigDecimal profitLoss = null;
+        OperationStatus status;
+        
+        if (entryTotalValue != null && exitTotalValue != null) {
+            profitLoss = exitTotalValue.subtract(entryTotalValue);
+            
+            if (profitLoss.compareTo(BigDecimal.ZERO) > 0) {
+                status = OperationStatus.WINNER;
+            } else if (profitLoss.compareTo(BigDecimal.ZERO) < 0) {
+                status = OperationStatus.LOSER;
+            } else {
+                status = OperationStatus.NEUTRAl;
+            }
+        } else {
+            // Se não há valores calculados ainda, usar ACTIVE temporariamente
+            status = OperationStatus.ACTIVE;
+        }
+        
         Operation operation = buildOperation(
                 OperationBuildData.fromOperation(originalOperation),
                 optionSerie,
-                OperationStatus.ACTIVE,
+                status,
                 currentUser
         );
+        
+        // Definir o P&L calculado
+        if (profitLoss != null) {
+            operation.setProfitLoss(profitLoss);
+            // Calcular percentual se necessário
+            if (entryTotalValue != null && entryTotalValue.compareTo(BigDecimal.ZERO) != 0) {
+                BigDecimal percentage = profitLoss.divide(entryTotalValue, 4, RoundingMode.HALF_UP)
+                        .multiply(BigDecimal.valueOf(100));
+                operation.setProfitLossPercentage(percentage);
+            }
+        }
 
         Operation savedOperation = operationRepository.save(operation);
-        logOperationCreation(OperationStatus.ACTIVE, savedOperation);
+        logOperationCreation(status, savedOperation);
 
         return savedOperation;
     }
@@ -142,7 +176,7 @@ public class OperationCreationServiceImpl implements OperationCreationService {
         Operation operation = buildExitOperation(
                 OperationBuildExitData.fromRequest(context, profitLoss, tradeType, type, totalQuantity),
                 context.context().activeOperation().getOptionSeries(),
-                profitLoss.compareTo(BigDecimal.ZERO) >= 0 ? OperationStatus.WINNER : OperationStatus.LOSER,
+                profitLoss.compareTo(BigDecimal.ZERO) > 0 ? OperationStatus.WINNER : OperationStatus.LOSER,
                 context.context().currentUser()
         );
 
@@ -247,8 +281,8 @@ public class OperationCreationServiceImpl implements OperationCreationService {
         BigDecimal exitTotalValue = exitUnitPrice.multiply(BigDecimal.valueOf(quantity));
 
         // Determinar status baseado no P&L
-        OperationStatus status = profitLoss.compareTo(BigDecimal.ZERO) >= 0 ? 
-            OperationStatus.WINNER : OperationStatus.LOSER;
+                OperationStatus status = profitLoss.compareTo(BigDecimal.ZERO) > 0 ?
+                OperationStatus.WINNER : OperationStatus.LOSER;
 
         // Criar a operação de saída
         Operation exitOperation = Operation.builder()

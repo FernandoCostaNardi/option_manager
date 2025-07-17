@@ -53,17 +53,17 @@ public class ExitProcessorSelector {
 
             switch (exitType) {
                 case SINGLE_TOTAL_EXIT:
-                    log.info("Usando SingleLotExitProcessor para saída total única");
+                    log.info("✅ Usando SingleLotExitProcessor para saída total única");
                     return singleLotProcessor.process(context);
                     
                 case FIRST_PARTIAL_EXIT:
                 case SUBSEQUENT_PARTIAL_EXIT:
                 case FINAL_PARTIAL_EXIT:
-                    log.info("Usando PartialExitProcessor para saída parcial tipo: {}", exitType);
+                    log.info("✅ Usando PartialExitProcessor para saída parcial tipo: {}", exitType);
                     return partialExitProcessor.process(context);
                     
                 default:
-                    log.warn("Tipo de saída não reconhecido: {} - usando SingleLotExitProcessor como fallback", exitType);
+                    log.warn("❌ Tipo de saída não reconhecido: {} - usando SingleLotExitProcessor como fallback", exitType);
                     return singleLotProcessor.process(context);
             }
         }

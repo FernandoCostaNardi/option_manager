@@ -13,10 +13,12 @@ import com.olisystem.optionsmanager.repository.position.ExitRecordRepository;
 import com.olisystem.optionsmanager.repository.position.PositionRepository;
 import com.olisystem.optionsmanager.service.option_series.OptionSerieService;
 import com.olisystem.optionsmanager.util.SecurityUtil;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,7 +41,7 @@ public class PositionServiceImpl implements PositionService {
   // Serviços especializados
   private final PositionQueryService queryService;
   private final PositionEntryService entryService;
-  private final PositionExitService exitService;
+  private final PositionExitProcessor exitProcessor;
   private final PositionOperationIntegrationService operationIntegrationService;
 
   @Override
@@ -110,20 +112,69 @@ public class PositionServiceImpl implements PositionService {
   }
 
   @Override
+  public Position consumePositionForExit(Position position, Operation exitOperation) {
+    // Calcular quantidade a ser consumida
+    int quantityToConsume = exitOperation.getQuantity();
+    int currentRemaining = position.getRemainingQuantity();
+    
+    if (quantityToConsume > currentRemaining) {
+      throw new IllegalArgumentException(
+        String.format("Quantidade a consumir (%d) maior que quantidade restante (%d)", 
+          quantityToConsume, currentRemaining));
+    }
+    
+    // Atualizar quantidade restante
+    int newRemaining = currentRemaining - quantityToConsume;
+    position.setRemainingQuantity(newRemaining);
+    
+    // Se toda a posição foi consumida, fechar
+    if (newRemaining == 0) {
+      position.setStatus(PositionStatus.CLOSED);
+      position.setCloseDate(exitOperation.getExitDate());
+    } else {
+      position.setStatus(PositionStatus.PARTIAL);
+    }
+    
+    // Calcular e atualizar P&L realizado
+    BigDecimal exitValue = exitOperation.getExitTotalValue();
+    if (exitValue == null) {
+      // Se não veio preenchido, calcular: preço de venda * quantidade
+      exitValue = exitOperation.getEntryUnitPrice().multiply(BigDecimal.valueOf(quantityToConsume));
+    }
+    BigDecimal entryValue = position.getAveragePrice().multiply(BigDecimal.valueOf(quantityToConsume));
+    BigDecimal profitLoss = exitValue.subtract(entryValue);
+    
+    BigDecimal currentRealizedProfit = position.getTotalRealizedProfit() != null ? 
+      position.getTotalRealizedProfit() : BigDecimal.ZERO;
+    position.setTotalRealizedProfit(currentRealizedProfit.add(profitLoss));
+    
+    // Calcular percentual de P&L
+    if (entryValue.compareTo(BigDecimal.ZERO) > 0) {
+      BigDecimal profitLossPercentage = profitLoss.divide(entryValue, 6, java.math.RoundingMode.HALF_UP)
+        .multiply(BigDecimal.valueOf(100));
+      position.setTotalRealizedProfitPercentage(profitLossPercentage);
+    }
+    
+    return positionRepository.save(position);
+  }
+
+  @Override
   public PositionDto processEntry(PositionEntryRequest request) {
     return null;
   }
 
   @Override
   public PositionExitResult processExit(PositionExitRequest request) {
-    return exitService.processExit(request);
+    return exitProcessor.processExit(request);
   }
 
   @Override
   public Optional<Position> findCompatiblePosition(
       OptionSerie optionSeries, TransactionType direction) {
-    return positionRepository.findOpenPositionByUserAndOptionSeriesAndDirection(
-        SecurityUtil.getLoggedUser(), optionSeries, direction);
+    // ✅ CORREÇÃO: Este método não tem acesso à corretora, então não pode ser usado
+    // para busca precisa. Deve ser usado apenas para verificações básicas.
+    // log.warn("⚠️ findCompatiblePosition chamado sem corretora - uso limitado"); // Original code had this line commented out
+    return Optional.empty(); // Não retornar posição sem corretora específica
   }
 
   @Override

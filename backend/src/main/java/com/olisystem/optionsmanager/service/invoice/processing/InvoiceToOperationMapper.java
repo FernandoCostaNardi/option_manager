@@ -79,7 +79,7 @@ public class InvoiceToOperationMapper {
                 // === OPTION SERIES (se for opção) ===
                 .optionSeriesCode(item.getAssetCode())
                 .optionSeriesType(determineOptionType(item.getMarketType()))
-                .optionSeriesStrikePrice(item.getStrikePrice())
+                .optionSeriesStrikePrice(extractStrikePriceFromOptionCode(item.getAssetCode(), item.getStrikePrice()))
                 .optionSeriesExpirationDate(item.getExpirationDate())
                 
                 // === OPERATION DETAILS ===
@@ -124,6 +124,50 @@ public class InvoiceToOperationMapper {
         baseCode = baseCode.replaceAll("([A-Z0-9]+)[A-Z]$", "$1");
         
         return baseCode;
+    }
+    
+    /**
+     * Extrai o strike price do código da opção ou usa o valor fornecido
+     */
+    private BigDecimal extractStrikePriceFromOptionCode(String assetCode, BigDecimal providedStrikePrice) {
+        log.info("🔍 Extraindo strike price para assetCode: '{}', providedStrikePrice: {}", assetCode, providedStrikePrice);
+        
+        // Se o strike price fornecido não é nulo, usa ele
+        if (providedStrikePrice != null) {
+            log.info("✅ Usando strike price fornecido: {}", providedStrikePrice);
+            return providedStrikePrice;
+        }
+        
+        // Se o assetCode é nulo, não consegue extrair
+        if (assetCode == null || assetCode.trim().isEmpty()) {
+            log.warn("⚠️ AssetCode é nulo ou vazio, não é possível extrair strike price");
+            return null;
+        }
+        
+        // Tenta extrair o strike price do código da opção
+        // Exemplo: VALEF541 (VALE + F + 541 = strike 54.10)
+        String upperCode = assetCode.toUpperCase().trim();
+        
+        // Padrão para extrair números do final (strike price)
+        // Exemplo: VALEF541 -> 541
+        String strikePattern = ".*?(\\d+)$";
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(strikePattern);
+        java.util.regex.Matcher matcher = pattern.matcher(upperCode);
+        
+        if (matcher.find()) {
+            String strikeStr = matcher.group(1);
+            try {
+                // Converte para BigDecimal dividindo por 10 (ex: 541 -> 54.10)
+                BigDecimal strikePrice = new BigDecimal(strikeStr).divide(BigDecimal.valueOf(10));
+                log.info("✅ Strike price extraído do código: {} -> {}", strikeStr, strikePrice);
+                return strikePrice;
+            } catch (NumberFormatException e) {
+                log.warn("⚠️ Não foi possível converter '{}' para strike price", strikeStr);
+            }
+        }
+        
+        log.warn("⚠️ Não foi possível extrair strike price do código: {}", assetCode);
+        return null;
     }
     
     /**

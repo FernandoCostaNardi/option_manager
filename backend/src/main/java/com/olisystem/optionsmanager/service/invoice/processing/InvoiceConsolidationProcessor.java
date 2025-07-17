@@ -1,27 +1,42 @@
 package com.olisystem.optionsmanager.service.invoice.processing;
 
 import com.olisystem.optionsmanager.dto.operation.OperationDataRequest;
+import com.olisystem.optionsmanager.dto.operation.OperationFinalizationRequest;
+import com.olisystem.optionsmanager.model.Asset.Asset;
 import com.olisystem.optionsmanager.model.auth.User;
 import com.olisystem.optionsmanager.model.invoice.Invoice;
 import com.olisystem.optionsmanager.model.invoice.InvoiceItem;
 import com.olisystem.optionsmanager.model.operation.Operation;
+import com.olisystem.optionsmanager.model.operation.OperationRoleType;
 import com.olisystem.optionsmanager.model.operation.OperationStatus;
 import com.olisystem.optionsmanager.model.operation.TradeType;
+import com.olisystem.optionsmanager.model.option_serie.OptionSerie;
+import com.olisystem.optionsmanager.model.option_serie.OptionType;
 import com.olisystem.optionsmanager.model.transaction.TransactionType;
 import com.olisystem.optionsmanager.service.operation.consolidate.ConsolidatedOperationService;
 import com.olisystem.optionsmanager.service.operation.OperationService;
 import com.olisystem.optionsmanager.service.operation.creation.OperationCreationService;
+import com.olisystem.optionsmanager.service.option_series.OptionSerieService;
+import com.olisystem.optionsmanager.service.asset.AssetService;
 import com.olisystem.optionsmanager.service.invoice.processing.InvoiceToOperationMapper;
 import com.olisystem.optionsmanager.repository.InvoiceRepository;
+import com.olisystem.optionsmanager.repository.OperationRepository;
+import com.olisystem.optionsmanager.repository.optionSerie.OptionSerieRepository;
 import com.olisystem.optionsmanager.repository.InvoiceItemRepository;
+import com.olisystem.optionsmanager.repository.position.PositionRepository;
+import com.olisystem.optionsmanager.model.position.Position;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import com.olisystem.optionsmanager.model.operation.AverageOperationGroup;
 
 /**
  * Processador de consolidação de invoices que integra com o sistema de consolidação existente
@@ -39,8 +54,14 @@ public class InvoiceConsolidationProcessor {
     private final InvoiceItemRepository invoiceItemRepository;
     private final InvoiceToOperationMapper mapper;
     private final OperationService operationService;
-    private final OperationCreationService operationCreationService;
-    private final ConsolidatedOperationService consolidatedOperationService;
+    private final OperationRepository operationRepository;
+    private final OptionSerieRepository optionSerieRepository;
+    private final OptionSerieService optionSerieService;
+    private final AssetService assetService;
+    private final PositionRepository positionRepository;
+    private final com.olisystem.optionsmanager.service.brokerage.BrokerageService brokerageService;
+    private final com.olisystem.optionsmanager.service.operation.averageOperation.AverageOperationService averageOperationService;
+    private final com.olisystem.optionsmanager.repository.BrokerageRepository brokerageRepository;
 
     /**
      * Processa invoices com sistema de consolidação
@@ -84,9 +105,14 @@ public class InvoiceConsolidationProcessor {
                 }
                 log.info("🔍 === FIM DOS DETALHES ===");
                 
+                // ✅ NOVO: Ordenar itens por sequenceNumber para garantir ordem correta
+                items.sort((a, b) -> Integer.compare(a.getSequenceNumber(), b.getSequenceNumber()));
+                log.info("📋 Itens ordenados por sequenceNumber: {}", 
+                    items.stream().map(item -> item.getSequenceNumber() + "(" + item.getOperationType() + ")").collect(java.util.stream.Collectors.joining(", ")));
+                
                 for (InvoiceItem item : items) {
                     try {
-                        log.info("🔄 Processando item {} da invoice {}", item.getId(), invoiceId);
+                        log.info("🔄 Processando item {} (sequence: {}) da invoice {}", item.getId(), item.getSequenceNumber(), invoiceId);
                         log.info("📋 Mapeando item {} para OperationDataRequest", item.getSequenceNumber());
                         
                         // ✅ NOVO: Validação específica para opções
@@ -111,13 +137,138 @@ public class InvoiceConsolidationProcessor {
                         log.info("Price: {}", operationRequest.getEntryUnitPrice());
                         log.info("BrokerageId: {}", operationRequest.getBrokerageId());
                         log.info("=============================");
-                        
+
+                        // ✅ CORREÇÃO: Usar o TransactionType já mapeado pelo InvoiceToOperationMapper
+                        TransactionType transactionType = operationRequest.getTransactionType();
+
+                        Asset asset = assetService.findOrCreateAsset(operationRequest);
+                        OptionSerie optionSerie = optionSerieService.findOrCreateOptionSerie(operationRequest, asset);
+
+                        if(transactionType == TransactionType.BUY){
+
                         // CHAMADA REAL: criar operação e adicionar ID real ao resultado
-                        Operation operation = operationService.createOperation(operationRequest, currentUser);
-                        log.info("✅ Operação criada: {} - TransactionType: {}", operation.getId(), operation.getTransactionType());
+                            Operation operation = operationService.createOperation(operationRequest, currentUser);
+                            log.info("✅ Operação criada: {} - TransactionType: {}", operation.getId(), operation.getTransactionType());
                         result.incrementConsolidatedOperations();
                         log.info("📈 Contador de operações incrementado: {}", result.getConsolidatedOperationsCount());
-                        
+                        } else {
+
+                                                      // ✅ CORREÇÃO: Buscar posição em vez de operação com status ACTIVE
+                            // Buscar posição aberta para este ativo
+                            Optional<Position> openPosition = positionRepository.findOpenPositionByUserAndOptionSeriesAndBrokerage(
+                                currentUser, optionSerie, invoice.getBrokerage());
+                            
+                            if(openPosition.isEmpty()){
+                                log.warn("⚠️ Posição não encontrada para saída: {} - criando operação de saída direta", item.getAssetCode());
+                                // ✅ CORREÇÃO: Criar operação diretamente sem passar pelo fluxo de estratégia
+                                Operation operation = createDirectOperation(operationRequest, currentUser);
+                                
+                                log.info("✅ Operação de saída criada: {} - TransactionType: {}, Status: {}", 
+                                    operation.getId(), operation.getTransactionType(), operation.getStatus());
+                                result.incrementConsolidatedOperations();
+                                log.info("📈 Contador de operações incrementado: {}", result.getConsolidatedOperationsCount());
+                                continue;
+                            }
+                            
+                            Position position = openPosition.get();
+                            log.info("✅ Posição encontrada: {} (status: {}, remaining: {})", 
+                                position.getId(), position.getStatus(), position.getRemainingQuantity());
+                            
+                            // ✅ CORREÇÃO: Verificar se a posição ainda tem quantidade disponível
+                            if (position.getRemainingQuantity() <= 0) {
+                                log.warn("⚠️ Posição {} já foi totalmente fechada (remaining: {}) - criando operação de saída direta", 
+                                    position.getId(), position.getRemainingQuantity());
+                                
+                                // Criar operação de saída direta quando a posição já foi fechada
+                                Operation operation = createDirectOperation(operationRequest, currentUser);
+                                
+                                log.info("✅ Operação de saída criada (posição fechada): {} - TransactionType: {}, Status: {}", 
+                                    operation.getId(), operation.getTransactionType(), operation.getStatus());
+                                result.incrementConsolidatedOperations();
+                                log.info("📈 Contador de operações incrementado: {}", result.getConsolidatedOperationsCount());
+                                continue;
+                            }
+                            
+                            // ✅ CORREÇÃO: Buscar especificamente a operação CONSOLIDATED_ENTRY com status ACTIVE
+                            // Esta é a operação que deve ser usada para saídas parciais
+                            Operation consolidatedEntryOperation = operationRepository.findByOptionSeriesAndUserAndStatusAndTransactionType(
+                                optionSerie, currentUser, OperationStatus.ACTIVE, TransactionType.BUY);
+                            
+                            if (consolidatedEntryOperation == null) {
+                                log.error("❌ Operação CONSOLIDATED_ENTRY não encontrada: {}", item.getAssetCode());
+                                
+                                // 🔍 DEBUG: Verificar se existe alguma operação CONSOLIDATED_ENTRY com status diferente
+                                List<Operation> allConsolidatedEntries = operationRepository.findByOptionSeriesAndUserAndTransactionType(
+                                    optionSerie, currentUser, TransactionType.BUY);
+                                log.info("🔍 DEBUG: Encontradas {} operações BUY para este ativo", allConsolidatedEntries.size());
+                                for (Operation op : allConsolidatedEntries) {
+                                    log.info("🔍   - ID: {}, Status: {}, Quantity: {}", 
+                                        op.getId(), op.getStatus(), op.getQuantity());
+                                }
+                                
+                                // 🔍 DEBUG: Tentar buscar por qualquer status
+                                List<Operation> allOperations = operationRepository.findByOptionSeriesAndUserAndTransactionType(
+                                    optionSerie, currentUser, TransactionType.BUY);
+                                log.info("🔍 DEBUG: Tentando buscar operação com qualquer status...");
+                                for (Operation op : allOperations) {
+                                    log.info("🔍   - ID: {}, Status: {}, Quantity: {}, TransactionType: {}", 
+                                        op.getId(), op.getStatus(), op.getQuantity(), op.getTransactionType());
+                                    // ✅ CORREÇÃO: Aceitar qualquer status exceto HIDDEN
+                                    if (op.getStatus() != OperationStatus.HIDDEN) {
+                                        log.info("🔍   ✅ Encontrada operação válida: {}", op.getId());
+                                        consolidatedEntryOperation = op;
+                                        break;
+                                    }
+                                }
+                                
+                                // 🔍 DEBUG: Se ainda não encontrou, tentar buscar por qualquer TransactionType
+                                if (consolidatedEntryOperation == null) {
+                                    log.info("🔍 DEBUG: Tentando buscar por qualquer TransactionType...");
+                                    List<Operation> allOperationsAnyType = operationRepository.findByOptionSeriesAndUser(optionSerie, currentUser);
+                                    for (Operation op : allOperationsAnyType) {
+                                        log.info("🔍   - ID: {}, Status: {}, Quantity: {}, TransactionType: {}", 
+                                            op.getId(), op.getStatus(), op.getQuantity(), op.getTransactionType());
+                                        if (op.getStatus() != OperationStatus.HIDDEN) {
+                                            log.info("🔍   ✅ Encontrada operação válida (qualquer tipo): {}", op.getId());
+                                            consolidatedEntryOperation = op;
+                                            break;
+                                        }
+                                    }
+                                }
+                                
+                                if (consolidatedEntryOperation == null) {
+                                    result.addError("Operação CONSOLIDATED_ENTRY não encontrada: " + item.getAssetCode());
+                                    continue;
+                                }
+                            }
+                            
+                            log.info("✅ Operação CONSOLIDATED_ENTRY encontrada: {} (status: {})", 
+                                consolidatedEntryOperation.getId(), consolidatedEntryOperation.getStatus());
+                            
+                            log.info("✅ Operação CONSOLIDATED_ENTRY encontrada: {} (status: {})", 
+                                consolidatedEntryOperation.getId(), consolidatedEntryOperation.getStatus());
+                            
+                            // ✅ NOVO: Log detalhado para debug da segunda operação
+                            log.info("🔍 === DEBUG SEGUNDA OPERAÇÃO ===");
+                            log.info("🔍   - Quantidade solicitada: {}", operationRequest.getQuantity());
+                            log.info("🔍   - Preço de saída: {}", operationRequest.getEntryUnitPrice());
+                            log.info("🔍   - Data de saída: {}", operationRequest.getEntryDate());
+                            log.info("🔍   - TransactionType: {}", operationRequest.getTransactionType());
+                            log.info("🔍 === FIM DEBUG ===");
+                            
+                            // converte operationRequest para OperationFinalizationRequest
+                            OperationFinalizationRequest finalizationRequest = new OperationFinalizationRequest();
+                            finalizationRequest.setOperationId(consolidatedEntryOperation.getId());
+                            finalizationRequest.setQuantity(operationRequest.getQuantity());
+                            finalizationRequest.setExitUnitPrice(operationRequest.getEntryUnitPrice());
+                            finalizationRequest.setExitDate(operationRequest.getEntryDate());
+                            
+
+                            Operation operation = operationService.createExitOperation(finalizationRequest, currentUser);
+                            log.info("✅ Operação criada: {} - TransactionType: {}", operation.getId(), operation.getTransactionType());
+                            result.incrementConsolidatedOperations();
+                            log.info("📈 Contador de operações incrementado: {}", result.getConsolidatedOperationsCount());
+                        }
                     } catch (Exception e) {
                         log.error("❌ Erro ao processar item {} da invoice {}: {}", 
                             item.getId(), invoiceId, e.getMessage(), e);
@@ -176,6 +327,114 @@ public class InvoiceConsolidationProcessor {
         
         log.debug("✅ OperationDataRequest validado: TransactionType={}, Quantity={}", 
             request.getTransactionType(), request.getQuantity());
+    }
+
+    /**
+     * ✅ NOVO MÉTODO: Cria operação diretamente sem passar pelo fluxo de estratégia
+     */
+    private Operation createDirectOperation(OperationDataRequest request, User currentUser) {
+        // Criar operação diretamente
+        Operation operation = new Operation();
+        operation.setId(UUID.randomUUID());
+        operation.setUser(currentUser);
+        operation.setBrokerage(brokerageRepository.findById(request.getBrokerageId()).orElseThrow(() -> new IllegalArgumentException("Brokerage não encontrada")));
+        operation.setOptionSeries(optionSerieService.getOptionSerieByCode(request.getOptionSeriesCode()));
+        operation.setTransactionType(request.getTransactionType());
+        operation.setQuantity(request.getQuantity());
+        operation.setEntryDate(request.getEntryDate());
+        operation.setEntryUnitPrice(request.getEntryUnitPrice());
+        operation.setEntryTotalValue(request.getEntryUnitPrice().multiply(BigDecimal.valueOf(request.getQuantity())));
+        operation.setTradeType(TradeType.DAY); // Default para operações diretas
+        
+        // ✅ CORREÇÃO: Para operações de saída direta, usar preço de saída diferente
+        if (request.getTransactionType() == TransactionType.SELL) {
+            operation.setExitDate(request.getEntryDate());
+            operation.setExitUnitPrice(request.getEntryUnitPrice());
+            operation.setExitTotalValue(request.getEntryUnitPrice().multiply(BigDecimal.valueOf(request.getQuantity())));
+            BigDecimal averageEntryPrice = calculateAverageEntryPrice(request.getOptionSeriesCode(), currentUser);
+            if (averageEntryPrice.compareTo(BigDecimal.ZERO) > 0) {
+                BigDecimal entryTotalValue = averageEntryPrice.multiply(BigDecimal.valueOf(request.getQuantity()));
+                BigDecimal exitTotalValue = operation.getExitTotalValue();
+                BigDecimal profitLoss = exitTotalValue.subtract(entryTotalValue);
+                operation.setProfitLoss(profitLoss);
+                if (entryTotalValue.compareTo(BigDecimal.ZERO) != 0) {
+                    operation.setProfitLossPercentage(profitLoss.divide(entryTotalValue, 4, RoundingMode.HALF_UP).multiply(BigDecimal.valueOf(100)));
+                } else {
+                    operation.setProfitLossPercentage(BigDecimal.ZERO);
+                }
+                if (profitLoss.compareTo(BigDecimal.ZERO) > 0) {
+                    operation.setStatus(OperationStatus.WINNER);
+                } else if (profitLoss.compareTo(BigDecimal.ZERO) < 0) {
+                    operation.setStatus(OperationStatus.LOSER);
+                } else {
+                    operation.setStatus(OperationStatus.ACTIVE);
+                }
+            } else {
+                operation.setProfitLoss(BigDecimal.ZERO);
+                operation.setProfitLossPercentage(BigDecimal.ZERO);
+                operation.setStatus(OperationStatus.ACTIVE);
+            }
+        } else {
+            operation.setExitDate(null);
+            operation.setExitUnitPrice(null);
+            operation.setExitTotalValue(null);
+            operation.setProfitLoss(null);
+            operation.setProfitLossPercentage(null);
+            operation.setStatus(OperationStatus.ACTIVE);
+        }
+        
+        // Salvar operação
+        operation = operationRepository.save(operation);
+        
+        // Buscar grupo de média existente para o usuário e série de opções
+        List<Operation> entryOperations = operationRepository.findByOptionSeriesAndUserAndTransactionType(
+            operation.getOptionSeries(), currentUser, TransactionType.BUY);
+        AverageOperationGroup group = null;
+        if (!entryOperations.isEmpty()) {
+            // Pega a última operação de entrada
+            Operation lastEntry = entryOperations.get(entryOperations.size() - 1);
+            group = averageOperationService.getGroupByOperation(lastEntry);
+        }
+        if (group != null) {
+            averageOperationService.addNewItemGroup(group, operation, OperationRoleType.ORIGINAL);
+        } else {
+            log.warn("⚠️ Não foi encontrado AverageOperationGroup para usuário {} e série {} ao adicionar operação {}.", currentUser.getId(), operation.getOptionSeries().getId(), operation.getId());
+        }
+        return operation;
+    }
+
+    /**
+     * ✅ NOVO MÉTODO: Calcula preço médio das operações de entrada
+     */
+    private BigDecimal calculateAverageEntryPrice(String optionSeriesCode, User currentUser) {
+        try {
+            OptionSerie optionSerie = optionSerieService.getOptionSerieByCode(optionSeriesCode);
+            List<Operation> entryOperations = operationRepository.findByOptionSeriesAndUserAndTransactionType(
+                optionSerie, currentUser, TransactionType.BUY);
+            
+            if (entryOperations.isEmpty()) {
+                return BigDecimal.ZERO;
+            }
+            
+            BigDecimal totalValue = BigDecimal.ZERO;
+            int totalQuantity = 0;
+            
+            for (Operation op : entryOperations) {
+                if (op.getEntryTotalValue() != null && op.getQuantity() != null) {
+                    totalValue = totalValue.add(op.getEntryTotalValue());
+                    totalQuantity += op.getQuantity();
+                }
+            }
+            
+            if (totalQuantity > 0) {
+                return totalValue.divide(BigDecimal.valueOf(totalQuantity), 4, RoundingMode.HALF_UP);
+            }
+            
+            return BigDecimal.ZERO;
+        } catch (Exception e) {
+            log.warn("⚠️ Erro ao calcular preço médio para {}: {}", optionSeriesCode, e.getMessage());
+            return BigDecimal.ZERO;
+        }
     }
 
     /**

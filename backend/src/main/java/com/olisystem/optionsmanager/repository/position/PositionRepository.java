@@ -26,11 +26,20 @@ public interface PositionRepository
 
   @Query(
       "SELECT p FROM Position p WHERE p.user = :user AND p.optionSeries = :optionSeries "
-          + "AND p.direction = :direction AND p.status IN ('OPEN', 'PARTIAL')")
+          + "AND p.brokerage = :brokerage AND p.direction = :direction AND p.status IN ('OPEN', 'PARTIAL')")
   Optional<Position> findOpenPositionByUserAndOptionSeriesAndDirection(
       @Param("user") User user,
       @Param("optionSeries") OptionSerie optionSeries,
+      @Param("brokerage") com.olisystem.optionsmanager.model.brokerage.Brokerage brokerage,
       @Param("direction") TransactionType direction);
+
+  @Query(
+      "SELECT p FROM Position p WHERE p.user = :user AND p.optionSeries = :optionSeries "
+          + "AND p.brokerage = :brokerage AND p.status IN ('OPEN', 'PARTIAL')")
+  Optional<Position> findOpenPositionByUserAndOptionSeriesAndBrokerage(
+      @Param("user") User user,
+      @Param("optionSeries") OptionSerie optionSeries,
+      @Param("brokerage") com.olisystem.optionsmanager.model.brokerage.Brokerage brokerage);
 
   @Query("SELECT p FROM Position p JOIN p.operations po WHERE po.operation.id = :operationId")
   Optional<Position> findByOperationId(@Param("operationId") UUID operationId);

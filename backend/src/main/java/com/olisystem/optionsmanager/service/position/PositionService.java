@@ -30,6 +30,8 @@ public interface PositionService {
 
   Position addEntryToPosition(Position position, Operation operation);
 
+  Position consumePositionForExit(Position position, Operation exitOperation);
+
   PositionDto processEntry(PositionEntryRequest request);
 
   PositionExitResult processExit(PositionExitRequest request);

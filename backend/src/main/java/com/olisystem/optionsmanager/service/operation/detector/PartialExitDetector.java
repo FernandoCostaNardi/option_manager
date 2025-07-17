@@ -5,6 +5,8 @@ import com.olisystem.optionsmanager.model.position.Position;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
+
 @Component
 @Slf4j
 public class PartialExitDetector {
@@ -21,11 +23,15 @@ public class PartialExitDetector {
             return false;
         }
 
+        // ✅ CORREÇÃO: Converter para BigDecimal para comparação correta
+        BigDecimal remainingQuantity = BigDecimal.valueOf(position.getRemainingQuantity());
+        BigDecimal totalQuantity = BigDecimal.valueOf(position.getTotalQuantity());
+        
         // É primeira saída parcial se:
         // 1. Posição está OPEN (nunca teve saída)
         // 2. Quantidade total ainda é igual à original (sem saídas anteriores)
         boolean isFirst = position.getStatus() == com.olisystem.optionsmanager.model.position.PositionStatus.OPEN
-                && position.getRemainingQuantity().equals(position.getTotalQuantity());
+                && remainingQuantity.compareTo(totalQuantity) == 0;
 
         log.debug("Verificando primeira saída parcial - Position ID: {}, Status: {}, " +
                         "Quantidade restante: {}, Quantidade total: {}, É primeira: {}",
@@ -47,11 +53,14 @@ public class PartialExitDetector {
             return false;
         }
 
+        // ✅ CORREÇÃO: Converter para BigDecimal para comparação correta
+        BigDecimal remainingQuantity = BigDecimal.valueOf(position.getRemainingQuantity());
+        
         // É saída subsequente se:
         // 1. Posição está PARTIAL (já teve saídas anteriores)
         // 2. Ainda tem quantidade restante
         boolean isSubsequent = position.getStatus() == com.olisystem.optionsmanager.model.position.PositionStatus.PARTIAL
-                && position.getRemainingQuantity() > 0;
+                && remainingQuantity.compareTo(BigDecimal.ZERO) > 0;
 
         log.debug("Verificando saída parcial subsequente - Position ID: {}, Status: {}, " +
                         "Quantidade restante: {}, É subsequente: {}",
@@ -73,12 +82,28 @@ public class PartialExitDetector {
             return false;
         }
 
+        // ✅ CORREÇÃO: Converter para BigDecimal para comparação correta
+        BigDecimal remainingQuantity = BigDecimal.valueOf(position.getRemainingQuantity());
+        BigDecimal requestedQuantityBD = BigDecimal.valueOf(requestedQuantity);
+        
         // É saída final se a quantidade solicitada é igual à quantidade restante
-        boolean isFinal = position.getRemainingQuantity().equals(requestedQuantity);
+        boolean isFinal = remainingQuantity.compareTo(requestedQuantityBD) == 0;
 
-        log.debug("Verificando saída final - Position ID: {}, Quantidade restante: {}, " +
+        log.info("🔍 Verificando saída final - Position ID: {}, Quantidade restante: {}, " +
                         "Quantidade solicitada: {}, É final: {}",
                 position.getId(), position.getRemainingQuantity(), requestedQuantity, isFinal);
+
+        // ✅ NOVO: Log detalhado para debug da segunda operação
+        log.info("🔍 === DEBUG SAÍDA FINAL ===");
+        log.info("🔍   - RemainingQuantity: {} (tipo: {})", position.getRemainingQuantity(), position.getRemainingQuantity().getClass().getSimpleName());
+        log.info("🔍   - RequestedQuantity: {} (tipo: {})", requestedQuantity, requestedQuantity.getClass().getSimpleName());
+        log.info("🔍   - RemainingQuantityBD: {}", remainingQuantity);
+        log.info("🔍   - RequestedQuantityBD: {}", requestedQuantityBD);
+        log.info("🔍   - Remaining equals Requested: {}", position.getRemainingQuantity().equals(requestedQuantity));
+        log.info("🔍   - Remaining == Requested: {}", position.getRemainingQuantity() == requestedQuantity);
+        log.info("🔍   - Remaining.compareTo(Requested): {}", remainingQuantity.compareTo(requestedQuantityBD));
+        log.info("🔍   - Is Final (corrigido): {}", isFinal);
+        log.info("🔍 === FIM DEBUG SAÍDA FINAL ===");
 
         return isFinal;
     }
@@ -96,8 +121,12 @@ public class PartialExitDetector {
             return false;
         }
 
+        // ✅ CORREÇÃO: Converter para BigDecimal para comparação correta
+        BigDecimal remainingQuantity = BigDecimal.valueOf(position.getRemainingQuantity());
+        BigDecimal requestedQuantityBD = BigDecimal.valueOf(requestedQuantity);
+        
         // É saída parcial se a quantidade solicitada é menor que a restante
-        boolean isPartial = requestedQuantity < position.getRemainingQuantity();
+        boolean isPartial = requestedQuantityBD.compareTo(remainingQuantity) < 0;
 
         log.debug("Verificando saída parcial - Position ID: {}, Quantidade restante: {}, " +
                         "Quantidade solicitada: {}, É parcial: {}",
@@ -148,7 +177,11 @@ public class PartialExitDetector {
         log.info("Quantidade solicitada: {}", requestedQuantity);
 
         // ✅ VALIDAÇÃO ADICIONAL: Verificar consistência básica
-        if (requestedQuantity > position.getRemainingQuantity()) {
+        BigDecimal remainingQuantity = BigDecimal.valueOf(position.getRemainingQuantity());
+        BigDecimal requestedQuantityBD = BigDecimal.valueOf(requestedQuantity);
+        BigDecimal totalQuantity = BigDecimal.valueOf(position.getTotalQuantity());
+        
+        if (requestedQuantityBD.compareTo(remainingQuantity) > 0) {
             log.error("❌ ERRO: Quantidade solicitada ({}) maior que disponível ({})", 
                     requestedQuantity, position.getRemainingQuantity());
             return ExitType.UNKNOWN;
@@ -158,10 +191,21 @@ public class PartialExitDetector {
         boolean isFirst = isFirstPartialExit(position);
         boolean isSubsequent = isSubsequentPartialExit(position);
 
-        log.info("Análise de tipos:");
-        log.info("  - É saída final? {}", isFinal);
-        log.info("  - É primeira parcial? {}", isFirst);
-        log.info("  - É saída subsequente? {}", isSubsequent);
+        log.info("🔍 Análise detalhada de tipos:");
+        log.info("🔍   - É saída final? {} (remaining={}, requested={})", isFinal, position.getRemainingQuantity(), requestedQuantity);
+        log.info("🔍   - É primeira parcial? {} (status={}, remaining={}, total={})", isFirst, position.getStatus(), position.getRemainingQuantity(), position.getTotalQuantity());
+        log.info("🔍   - É saída subsequente? {} (status={}, remaining={})", isSubsequent, position.getStatus(), position.getRemainingQuantity());
+
+        // ✅ NOVO: Log detalhado para debug da segunda operação
+        log.info("🔍 === DEBUG DETALHADO ===");
+        log.info("🔍   - PositionStatus.OPEN: {}", com.olisystem.optionsmanager.model.position.PositionStatus.OPEN);
+        log.info("🔍   - PositionStatus.PARTIAL: {}", com.olisystem.optionsmanager.model.position.PositionStatus.PARTIAL);
+        log.info("🔍   - Status atual equals OPEN: {}", position.getStatus().equals(com.olisystem.optionsmanager.model.position.PositionStatus.OPEN));
+        log.info("🔍   - Status atual equals PARTIAL: {}", position.getStatus().equals(com.olisystem.optionsmanager.model.position.PositionStatus.PARTIAL));
+        log.info("🔍   - Remaining equals Total: {}", remainingQuantity.compareTo(totalQuantity) == 0);
+        log.info("🔍   - Remaining > 0: {}", remainingQuantity.compareTo(BigDecimal.ZERO) > 0);
+        log.info("🔍   - Requested equals Remaining: {}", requestedQuantityBD.compareTo(remainingQuantity) == 0);
+        log.info("🔍 === FIM DEBUG ===");
 
         ExitType result;
         if (isFinal) {
@@ -220,7 +264,11 @@ public class PartialExitDetector {
             return false;
         }
 
-        if (requestedQuantity > position.getRemainingQuantity()) {
+        // ✅ CORREÇÃO: Converter para BigDecimal para comparação correta
+        BigDecimal remainingQuantity = BigDecimal.valueOf(position.getRemainingQuantity());
+        BigDecimal requestedQuantityBD = BigDecimal.valueOf(requestedQuantity);
+        
+        if (requestedQuantityBD.compareTo(remainingQuantity) > 0) {
             log.error("Quantidade solicitada ({}) excede quantidade disponível ({})",
                     requestedQuantity, position.getRemainingQuantity());
             return false;

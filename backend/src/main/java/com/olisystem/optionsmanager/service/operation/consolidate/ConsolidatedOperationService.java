@@ -38,7 +38,7 @@ public class ConsolidatedOperationService {
                 .optionSeries(originalEntry.getOptionSeries())
                 .brokerage(originalEntry.getBrokerage())
                 .analysisHouse(originalEntry.getAnalysisHouse())
-                .transactionType(originalEntry.getTransactionType())
+                .transactionType(com.olisystem.optionsmanager.model.transaction.TransactionType.BUY) // ✅ CORREÇÃO: CONSOLIDATED_ENTRY sempre representa entrada (BUY)
                 .tradeType(originalEntry.getTradeType())
                 .entryDate(originalEntry.getEntryDate())
                 .exitDate(null)
@@ -71,13 +71,20 @@ public class ConsolidatedOperationService {
         LocalDate exitDate = firstExitOperation.getExitDate();
         log.info("🔧 Usando exitDate da operação: {}", exitDate);
 
+        // ✅ CORREÇÃO: Usar entryDate da operação como fallback se não encontrar no grupo
+        LocalDate entryDate = findFirstEntryDateInGroup(group);
+        if (entryDate == null) {
+            entryDate = firstExitOperation.getEntryDate();
+            log.warn("⚠️ EntryDate não encontrada no grupo, usando da operação: {}", entryDate);
+        }
+        
         Operation consolidatedExit = Operation.builder()
                 .optionSeries(firstExitOperation.getOptionSeries())
                 .brokerage(firstExitOperation.getBrokerage())
                 .analysisHouse(firstExitOperation.getAnalysisHouse())
                 .transactionType(firstExitOperation.getTransactionType())
                 .tradeType(firstExitOperation.getTradeType())
-                .entryDate(findFirstEntryDateInGroup(group))
+                .entryDate(entryDate)
                 .exitDate(exitDate)  // ✅ Usar exitDate da operação atual
                 .quantity(firstExitOperation.getQuantity())
                 .entryUnitPrice(firstExitOperation.getEntryUnitPrice())
@@ -103,14 +110,7 @@ public class ConsolidatedOperationService {
      * Busca operação consolidadora de entrada no grupo
      */
     public Operation findConsolidatedEntry(AverageOperationGroup group) {
-        if (group == null || group.getItems() == null) {
-            return null;
-        }
-        return group.getItems().stream()
-                .filter(item -> item.getRoleType() == OperationRoleType.CONSOLIDATED_ENTRY)
-                .map(AverageOperationItem::getOperation)
-                .findFirst()
-                .orElse(null);
+        return findExistingConsolidatedEntry(group).orElse(null);
     }
     /**
      * Busca operação consolidadora de saída no grupo
@@ -161,6 +161,16 @@ public class ConsolidatedOperationService {
     }
 
     /**
+     * Busca operação CONSOLIDATED_ENTRY existente no grupo
+     */
+    public Optional<Operation> findExistingConsolidatedEntry(AverageOperationGroup group) {
+        return groupItemRepository.findByGroupAndRoleType(group, OperationRoleType.CONSOLIDATED_ENTRY)
+                .stream()
+                .findFirst()
+                .map(AverageOperationItem::getOperation);
+    }
+
+    /**
      * Atualiza operação CONSOLIDATED_RESULT existente com novos dados de saída
      */
     @Transactional
@@ -193,6 +203,13 @@ public class ConsolidatedOperationService {
         
         log.info("🔧 PERCENTUAL CALCULADO: newProfitLossPercentage={}", newProfitLossPercentage);
         
+        // ✅ CORREÇÃO: Usar exitDate da nova operação como fallback se não encontrar no grupo
+        LocalDate latestExitDate = findLatestExitDateInGroup(group);
+        if (latestExitDate == null) {
+            latestExitDate = newExitOperation.getExitDate();
+            log.warn("⚠️ LatestExitDate não encontrada no grupo, usando da nova operação: {}", latestExitDate);
+        }
+        
         consolidatedResult.setProfitLoss(newTotalProfitLoss);
         consolidatedResult.setProfitLossPercentage(newProfitLossPercentage);
         consolidatedResult.setQuantity(newTotalQuantity);
@@ -200,7 +217,7 @@ public class ConsolidatedOperationService {
         // 🔧 CORREÇÃO: Atualizar entryTotalValue consolidado
         consolidatedResult.setEntryTotalValue(newTotalEntryValue);
         consolidatedResult.setExitUnitPrice(newAverageExitPrice);
-        consolidatedResult.setExitDate(findLatestExitDateInGroup(group));
+        consolidatedResult.setExitDate(latestExitDate);
         
         log.info("🔧 FINAL - ANTES DO SAVE: entryTotal={}, profitLoss={}, percentage={}, quantity={}", 
                 consolidatedResult.getEntryTotalValue(), consolidatedResult.getProfitLoss(), 
@@ -273,7 +290,7 @@ public class ConsolidatedOperationService {
         consolidatedExit.setEntryTotalValue(newTotalEntryValue);
         consolidatedExit.setExitUnitPrice(newAverageExitPrice);
         consolidatedExit.setExitDate(newExitDate);
-        consolidatedExit.setStatus(newTotalProfitLoss.compareTo(BigDecimal.ZERO) >= 0 ?
+        consolidatedExit.setStatus(newTotalProfitLoss.compareTo(BigDecimal.ZERO) > 0 ?
                 OperationStatus.WINNER : OperationStatus.LOSER);
 
         log.info("🔧 FINAL - ANTES DO SAVE: entryTotal={}, profitLoss={}, percentage={}, quantity={}", 
@@ -331,7 +348,11 @@ public class ConsolidatedOperationService {
      * Adiciona operação ao grupo com role type específico
      */
     private void addOperationToGroup(Operation operation, AverageOperationGroup group, OperationRoleType roleType) {
-        int nextSequence = group.getItems().size() + 1;
+        // ✅ CORREÇÃO: Verificar se items não é null antes de usar size()
+        int nextSequence = 1;
+        if (group.getItems() != null) {
+            nextSequence = group.getItems().size() + 1;
+        }
 
         AverageOperationItem item = AverageOperationItem.builder()
                 .group(group)
@@ -351,6 +372,12 @@ public class ConsolidatedOperationService {
     private LocalDate findFirstEntryDateInGroup(AverageOperationGroup group) {
         log.info("=== BUSCANDO PRIMEIRA DATA DE ENTRADA NO GRUPO {} ===", group.getId());
         
+        // ✅ CORREÇÃO: Verificar se items não é null antes de usar stream()
+        if (group.getItems() == null) {
+            log.warn("⚠️ Items é null para o grupo: {}", group.getId());
+            return null;
+        }
+        
         LocalDate firstEntryDate = group.getItems().stream()
             .map(AverageOperationItem::getOperation)
             .filter(op -> op.getEntryDate() != null)
@@ -368,6 +395,12 @@ public class ConsolidatedOperationService {
      */
     private LocalDate findLatestExitDateInGroup(AverageOperationGroup group) {
         log.info("=== BUSCANDO ÚLTIMA DATA DE SAÍDA NO GRUPO {} ===", group.getId());
+        
+        // ✅ CORREÇÃO: Verificar se items não é null antes de usar stream()
+        if (group.getItems() == null) {
+            log.warn("⚠️ Items é null para o grupo: {}", group.getId());
+            return null;
+        }
         
         LocalDate latestExitDate = group.getItems().stream()
             .map(AverageOperationItem::getOperation)

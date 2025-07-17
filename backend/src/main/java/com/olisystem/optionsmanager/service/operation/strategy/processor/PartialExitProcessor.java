@@ -13,6 +13,7 @@ import com.olisystem.optionsmanager.model.position.PositionOperationType;
 import com.olisystem.optionsmanager.model.position.Position;
 import com.olisystem.optionsmanager.record.operation.OperationExitPositionContext;
 import com.olisystem.optionsmanager.repository.AverageOperationGroupRepository;
+import com.olisystem.optionsmanager.repository.OperationRepository;
 import com.olisystem.optionsmanager.repository.position.PositionRepository;
 import com.olisystem.optionsmanager.resolver.tradeType.TradeTypeResolver;
 import com.olisystem.optionsmanager.service.operation.average.AveragePriceCalculator;
@@ -25,13 +26,17 @@ import com.olisystem.optionsmanager.service.operation.averageOperation.AverageOp
 import com.olisystem.optionsmanager.service.position.entrylots.EntryLotUpdateService;
 import com.olisystem.optionsmanager.service.position.positionOperation.PositionOperationService;
 import com.olisystem.optionsmanager.service.position.update.PositionUpdateService;
+import com.olisystem.optionsmanager.record.consumption.LotConsumption;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -51,6 +56,7 @@ public class PartialExitProcessor {
     private final AverageOperationGroupRepository groupRepository;
     private final AverageOperationService averageOperationService;
     private final PositionRepository positionRepository;
+    private final OperationRepository operationRepository;
 
     /**
      * Processa saída parcial com lote único - Implementa os 20 passos do Cenário 3.1
@@ -128,6 +134,21 @@ public class PartialExitProcessor {
                     exitResult.profitLoss, exitResult.profitLossPercentage);
         }
 
+        // ✅ CORREÇÃO CRÍTICA: Verificar se já existe CONSOLIDATED_ENTRY antes de criar
+        // PASSO 4: Criar ou buscar operação consolidadora de entrada
+        log.info("🔧 Verificando se CONSOLIDATED_ENTRY já existe");
+        Optional<Operation> existingConsolidatedEntry = consolidatedOperationService.findExistingConsolidatedEntry(context.group());
+        
+        Operation consolidatedEntry;
+        if (existingConsolidatedEntry.isPresent()) {
+            log.info("🔧 CONSOLIDATED_ENTRY já existe, usando: {}", existingConsolidatedEntry.get().getId());
+            consolidatedEntry = existingConsolidatedEntry.get();
+        } else {
+            log.info("🔧 Criando nova CONSOLIDATED_ENTRY");
+            consolidatedEntry = consolidatedOperationService.createConsolidatedEntry(
+                    context.context().activeOperation(), context.group());
+        }
+
         // PASSO 3: Gerenciar operação consolidadora de saída
         Operation consolidatedExit;
         Optional<Operation> existingConsolidatedResult = consolidatedOperationService.findExistingConsolidatedResult(context.group());
@@ -149,16 +170,21 @@ public class PartialExitProcessor {
                 com.olisystem.optionsmanager.model.operation.OperationRoleType.PARTIAL_EXIT);
         log.info("Operação de saída adicionada ao grupo como PARTIAL_EXIT: {}", exitResult.exitOperation.getId());
 
-        // PASSO 4: Criar operação consolidadora de entrada
-        Operation consolidatedEntry = consolidatedOperationService.createConsolidatedEntry(
-                context.context().activeOperation(), context.group());
-
         // PASSO 5 & 6: Calcular e atualizar novo preço médio
         updateConsolidatedEntryAfterExit(consolidatedEntry, exitResult, context);
 
-        // PASSO 7: Marcar operações originais como HIDDEN
+        // PASSO 7: Marcar operações originais como HIDDEN (mas NÃO a CONSOLIDATED_ENTRY)
         consolidatedOperationService.markOperationAsHidden(context.context().activeOperation());
         consolidatedOperationService.markOperationAsHidden(exitResult.exitOperation);
+        
+        // ✅ CORREÇÃO: CONSOLIDATED_ENTRY deve permanecer ACTIVE até a saída final
+        log.info("✅ CONSOLIDATED_ENTRY mantida como ACTIVE para futuras saídas: {}", consolidatedEntry.getId());
+        
+        // 🔧 DEBUG: Verificar se a operação realmente está ACTIVE
+        Operation refreshedEntry = operationRepository.findById(consolidatedEntry.getId()).orElse(null);
+        if (refreshedEntry != null) {
+            log.info("🔧 DEBUG: Status atual da CONSOLIDATED_ENTRY: {}", refreshedEntry.getStatus());
+        }
 
         // PASSO 8: Atualizar entidades relacionadas
         updateEntitiesAfterFirstExit(context, exitResult);
@@ -194,13 +220,34 @@ public class PartialExitProcessor {
                     exitResult.profitLoss, exitResult.profitLossPercentage);
         }
 
-        // Buscar operações consolidadoras existentes
-        Operation consolidatedEntry = consolidatedOperationService.findConsolidatedEntry(context.group());
-        Operation consolidatedExit = consolidatedOperationService.findConsolidatedExit(context.group());
+        // ✅ CORREÇÃO: Buscar operações consolidadoras usando métodos corretos
+        Optional<Operation> consolidatedEntryOpt = consolidatedOperationService.findExistingConsolidatedEntry(context.group());
+        Optional<Operation> consolidatedResultOpt = consolidatedOperationService.findExistingConsolidatedResult(context.group());
 
-        if (consolidatedEntry == null || consolidatedExit == null) {
-            throw new BusinessException("Operações consolidadoras não encontradas para saída subsequente");
+        // ✅ CORREÇÃO: CONSOLIDATED_ENTRY é obrigatória, CONSOLIDATED_RESULT pode ser criada se não existir
+        if (consolidatedEntryOpt.isEmpty()) {
+            log.error("❌ CONSOLIDATED_ENTRY não encontrada para saída subsequente");
+            throw new BusinessException("Operação consolidadora de entrada não encontrada para saída subsequente");
         }
+
+        Operation consolidatedEntry = consolidatedEntryOpt.get();
+        Operation consolidatedExit;
+        
+        if (consolidatedResultOpt.isPresent()) {
+            // ✅ CONSOLIDATED_RESULT existe - usar ela
+            consolidatedExit = consolidatedResultOpt.get();
+            log.info("✅ CONSOLIDATED_RESULT encontrada: {}", consolidatedExit.getId());
+        } else {
+            // ✅ CONSOLIDATED_RESULT não existe - criar nova
+            log.info("🔧 CONSOLIDATED_RESULT não encontrada - criando nova");
+            consolidatedExit = consolidatedOperationService.createConsolidatedExit(
+                    exitResult.exitOperation, context.group());
+            log.info("✅ Nova CONSOLIDATED_RESULT criada: {}", consolidatedExit.getId());
+        }
+        
+        log.info("✅ Operações consolidadoras configuradas:");
+        log.info("✅ CONSOLIDATED_ENTRY: {}", consolidatedEntry.getId());
+        log.info("✅ CONSOLIDATED_RESULT: {}", consolidatedExit.getId());
 
         // ✅ CORREÇÃO CRÍTICA: Adicionar operação de saída como PARTIAL_EXIT no grupo
         averageOperationService.addNewItemGroup(context.group(), exitResult.exitOperation, 
@@ -277,11 +324,49 @@ public class PartialExitProcessor {
                 com.olisystem.optionsmanager.model.operation.OperationRoleType.TOTAL_EXIT);
         log.info("✅ Operação de saída FINAL adicionada ao grupo como TOTAL_EXIT: {}", exitResult.exitOperation.getId());
 
-        // Buscar operação consolidadora de entrada
-        Operation consolidatedEntry = consolidatedOperationService.findConsolidatedEntry(context.group());
+        // ✅ CORREÇÃO: Buscar operação consolidadora de entrada com logs detalhados
+        log.info("🔍 Buscando CONSOLIDATED_ENTRY no grupo: {}", context.group().getId());
+        
+        // ✅ NOVA CORREÇÃO: Usar método específico do repositório
+        Optional<Operation> consolidatedEntryOpt = consolidatedOperationService.findExistingConsolidatedEntry(context.group());
+        
+        Operation consolidatedEntry;
+        if (consolidatedEntryOpt.isPresent()) {
+            consolidatedEntry = consolidatedEntryOpt.get();
+            log.info("✅ CONSOLIDATED_ENTRY encontrada via repositório: {}", consolidatedEntry.getId());
+        } else {
+            log.error("❌ CONSOLIDATED_ENTRY não encontrada no grupo: {}", context.group().getId());
+            log.error("❌ Items do grupo: {}", context.group().getItems());
+            
+            // ✅ CORREÇÃO: Tentar buscar diretamente no repositório
+            List<AverageOperationItem> allItems = groupRepository.findById(context.group().getId())
+                    .map(group -> group.getItems())
+                    .orElse(new ArrayList<>());
+            
+            log.info("🔍 Items encontrados diretamente: {}", allItems.size());
+            
+            // ✅ NOVA CORREÇÃO: Log detalhado de todos os items
+            for (AverageOperationItem item : allItems) {
+                log.info("🔍 Item: RoleType={}, OperationId={}, Status={}", 
+                    item.getRoleType(), item.getOperation().getId(), item.getOperation().getStatus());
+            }
+            
+            Optional<AverageOperationItem> entryItem = allItems.stream()
+                    .filter(item -> item.getRoleType() == OperationRoleType.CONSOLIDATED_ENTRY)
+                    .findFirst();
+            
+            if (entryItem.isPresent()) {
+                consolidatedEntry = entryItem.get().getOperation();
+                log.info("✅ CONSOLIDATED_ENTRY encontrada via busca direta: {}", consolidatedEntry.getId());
+            } else {
+                log.error("❌ CONSOLIDATED_ENTRY não encontrada mesmo via busca direta");
+                throw new BusinessException("Operação consolidadora de entrada não encontrada para saída final");
+            }
+        }
 
-        if (consolidatedEntry == null || consolidatedExit == null) {
-            throw new BusinessException("Operações consolidadoras não encontradas para saída final");
+        if (consolidatedExit == null) {
+            log.error("❌ CONSOLIDATED_EXIT é null");
+            throw new BusinessException("Operação consolidadora de saída não encontrada para saída final");
         }
 
         // PASSO 18: Finalizar operação consolidadora de entrada (quantidade = 0)
@@ -291,8 +376,23 @@ public class PartialExitProcessor {
                 0, // Quantidade final = 0
                 BigDecimal.ZERO); // Valor total final = 0
 
-        // Marcar operação de saída como HIDDEN
+        // ✅ CORREÇÃO: Para saída final, a operação TOTAL_EXIT deve ficar HIDDEN
+        // mas a CONSOLIDATED_RESULT deve ficar WINNER/LOSER
         consolidatedOperationService.markOperationAsHidden(exitResult.exitOperation);
+        
+        // ✅ CORREÇÃO: Marcar CONSOLIDATED_RESULT com status apropriado baseado no profitLoss consolidado
+        log.info("🔧 DEBUG: ProfitLoss consolidado: {}, ProfitLoss da saída: {}", 
+                consolidatedExit.getProfitLoss(), exitResult.profitLoss);
+        
+        if (consolidatedExit.getProfitLoss().compareTo(BigDecimal.ZERO) > 0) {
+            consolidatedExit.setStatus(com.olisystem.optionsmanager.model.operation.OperationStatus.WINNER);
+        } else if (consolidatedExit.getProfitLoss().compareTo(BigDecimal.ZERO) < 0) {
+            consolidatedExit.setStatus(com.olisystem.optionsmanager.model.operation.OperationStatus.LOSER);
+        } else {
+            consolidatedExit.setStatus(com.olisystem.optionsmanager.model.operation.OperationStatus.NEUTRAl);
+        }
+        log.info("✅ CONSOLIDATED_RESULT marcada como {} (P&L consolidado: {})", 
+                consolidatedExit.getStatus(), consolidatedExit.getProfitLoss());
 
         // Marcar CONSOLIDATED_ENTRY como HIDDEN (passo 11)
         Optional<AverageOperationItem> consolidatedEntryItem = context.group().getItems().stream()
@@ -322,31 +422,58 @@ public class PartialExitProcessor {
      */
     private ExitOperationResult processNormalExit(OperationExitPositionContext context) {
 
-        EntryLot lot = context.availableLots().get(0);
+        List<EntryLot> availableLots = context.availableLots();
         OperationFinalizationRequest request = context.context().request();
         Operation activeOperation = context.context().activeOperation();
 
-        // Determinar tipo de operação
+        log.info("🔄 Processando saída com {} lotes disponíveis, quantidade solicitada: {}", 
+                availableLots.size(), request.getQuantity());
+
+        // ✅ NOVO: Distribuir quantidade entre múltiplos lotes
+        List<LotConsumption> consumptions = distributeQuantityAcrossLots(availableLots, request.getQuantity());
+        
+        BigDecimal totalProfitLoss = BigDecimal.ZERO;
+        BigDecimal totalEntryValue = BigDecimal.ZERO;
+        int totalQuantityConsumed = 0;
+
+        // Processar cada lote individualmente
+        for (LotConsumption consumption : consumptions) {
+            EntryLot lot = consumption.lot();
+            int quantityFromLot = consumption.quantityToConsume();
+            
+            log.info("📦 Processando lote {}: {} unidades", lot.getSequenceNumber(), quantityFromLot);
+
+            // Calcular resultados financeiros para este lote
+            BigDecimal lotProfitLoss = profitCalculationService.calculateProfitLoss(
+                    lot.getUnitPrice(),
+                    request.getExitUnitPrice(),
+                    quantityFromLot);
+
+            BigDecimal lotEntryValue = lot.getUnitPrice().multiply(BigDecimal.valueOf(quantityFromLot));
+
+            totalProfitLoss = totalProfitLoss.add(lotProfitLoss);
+            totalEntryValue = totalEntryValue.add(lotEntryValue);
+            totalQuantityConsumed += quantityFromLot;
+
+            log.info("💰 Lote {}: P&L={}, EntryValue={}", lot.getSequenceNumber(), lotProfitLoss, lotEntryValue);
+        }
+
+        // Calcular percentual consolidado
+        BigDecimal profitLossPercentage = profitCalculationService.calculateProfitLossPercentage(
+                totalProfitLoss, totalEntryValue);
+
+        // Determinar tipo de operação (usar o primeiro lote como referência)
         TradeType tradeType = tradeTypeResolver.determineTradeType(
-                lot.getEntryDate(), request.getExitDate());
+                availableLots.get(0).getEntryDate(), request.getExitDate());
 
-        // Calcular resultados financeiros baseados no CUSTO ORIGINAL
-        BigDecimal profitLoss = profitCalculationService.calculateProfitLoss(
-                lot.getUnitPrice(), // ✅ SEMPRE usar preço original do lote
-                request.getExitUnitPrice(),
-                request.getQuantity());
-
-        BigDecimal profitLossPercentage = profitCalculationService.calculateProfitLossPercentageFromPrices(
-                lot.getUnitPrice(), request.getExitUnitPrice());
-
-        // Criar operação de saída com os valores calculados
+        // Criar operação de saída consolidada
         Operation exitOperation = operationCreationService.createExitOperation(
-                context, tradeType, profitLoss, context.transactionType(), request.getQuantity());
+                context, tradeType, totalProfitLoss, context.transactionType(), totalQuantityConsumed);
 
         // CORREÇÃO: Garantir que os valores foram definidos corretamente
         if (exitOperation.getProfitLoss() == null || exitOperation.getProfitLoss().compareTo(BigDecimal.ZERO) == 0) {
             log.warn("Operação de saída criada com profitLoss zerado! Corrigindo...");
-            exitOperation.setProfitLoss(profitLoss);
+            exitOperation.setProfitLoss(totalProfitLoss);
             exitOperation.setProfitLossPercentage(profitLossPercentage);
         }
 
@@ -356,15 +483,59 @@ public class PartialExitProcessor {
                 partialExitDetector.isFinalExit(context.position(), request.getQuantity()) ?
                         PositionOperationType.FULL_EXIT : PositionOperationType.PARTIAL_EXIT);
 
-        exitRecordService.createExitRecord(lot, exitOperation, context.context(), request.getQuantity());
+        // ✅ NOVO: Criar ExitRecord para cada lote consumido
+        for (LotConsumption consumption : consumptions) {
+            exitRecordService.createExitRecord(
+                    consumption.lot(), 
+                    exitOperation, 
+                    context.context(), 
+                    consumption.quantityToConsume()
+            );
+        }
 
-        // Atualizar lote APÓS criar ExitRecord
-        entryLotUpdateService.updateEntryLot(lot, request.getQuantity());
+        // ✅ NOVO: Atualizar todos os lotes consumidos
+        for (LotConsumption consumption : consumptions) {
+            entryLotUpdateService.updateEntryLot(consumption.lot(), consumption.quantityToConsume());
+        }
 
-        log.info("Saída normal processada: P&L={}, Percentual={}%, Tipo={}",
-                profitLoss, profitLossPercentage, tradeType);
+        log.info("✅ Saída processada com múltiplos lotes: {} lotes, {} unidades, P&L={}, Percentual={}%",
+                consumptions.size(), totalQuantityConsumed, totalProfitLoss, profitLossPercentage);
 
-        return new ExitOperationResult(exitOperation, profitLoss, profitLossPercentage, request.getQuantity());
+        return new ExitOperationResult(exitOperation, totalProfitLoss, profitLossPercentage, totalQuantityConsumed);
+    }
+
+    /**
+     * ✅ NOVO MÉTODO: Distribui quantidade entre múltiplos lotes
+     */
+    private List<LotConsumption> distributeQuantityAcrossLots(List<EntryLot> lots, int totalQuantityNeeded) {
+        List<LotConsumption> consumptions = new ArrayList<>();
+        int remainingToConsume = totalQuantityNeeded;
+
+        // Ordenar lotes por data de entrada (FIFO)
+        List<EntryLot> sortedLots = lots.stream()
+                .sorted((a, b) -> a.getEntryDate().compareTo(b.getEntryDate()))
+                .collect(Collectors.toList());
+
+        for (EntryLot lot : sortedLots) {
+            if (remainingToConsume <= 0) break;
+
+            int quantityFromThisLot = Math.min(lot.getRemainingQuantity(), remainingToConsume);
+            
+            if (quantityFromThisLot > 0) {
+                consumptions.add(new LotConsumption(lot, quantityFromThisLot, TradeType.SWING));
+                remainingToConsume -= quantityFromThisLot;
+                
+                log.info("📋 Planejado: Lote {} - {} unidades", lot.getSequenceNumber(), quantityFromThisLot);
+            }
+        }
+
+        if (remainingToConsume > 0) {
+            throw new BusinessException(String.format(
+                "Quantidade insuficiente nos lotes. Necessário: %d, Disponível: %d", 
+                totalQuantityNeeded, totalQuantityNeeded - remainingToConsume));
+        }
+
+        return consumptions;
     }
 
     /**
@@ -534,10 +705,12 @@ public class PartialExitProcessor {
      */
     private void validatePartialExitContext(OperationExitPositionContext context) {
 
-        if (context.availableLots() == null || context.availableLots().size() != 1) {
-            throw new BusinessException("PartialExitProcessor requer exatamente 1 lote. Recebido: " +
+        if (context.availableLots() == null || context.availableLots().isEmpty()) {
+            throw new BusinessException("PartialExitProcessor requer pelo menos 1 lote. Recebido: " +
                     (context.availableLots() == null ? 0 : context.availableLots().size()));
         }
+
+        log.info("✅ Validação de lotes: {} lotes disponíveis para saída parcial", context.availableLots().size());
 
         if (!partialExitDetector.validateExitQuantity(context.position(), context.context().request().getQuantity())) {
             throw new BusinessException("Quantidade de saída inválida");

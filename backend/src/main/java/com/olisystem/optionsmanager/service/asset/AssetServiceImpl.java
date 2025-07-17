@@ -17,6 +17,7 @@ public class AssetServiceImpl implements AssetService {
     @Override
     @Transactional
     public Asset findOrCreateAsset(OperationDataRequest request) {
+        
         String assetCode = request.getBaseAssetCode();
 
         // Verifica se o ativo já existe

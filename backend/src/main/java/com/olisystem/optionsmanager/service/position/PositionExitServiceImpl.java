@@ -39,11 +39,52 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
-/**
- * Serviço especializado no processamento de saídas de posições. Implementa a lógica de saídas
- * parciais e totais com regras FIFO/LIFO.
- */
-public interface PositionExitService {
+@Service
+@Transactional
+@RequiredArgsConstructor
+@Slf4j
+public class PositionExitServiceImpl implements PositionExitService {
 
-  PositionExitResult processExit(PositionExitRequest request);
-}
+  private final PositionRepository positionRepository;
+  private final EntryLotRepository entryLotRepository;
+  private final ExitRecordRepository exitRecordRepository;
+  private final PositionOperationRepository positionOperationRepository;
+  private final OperationRepository operationRepository;
+  private final PositionCalculator calculator;
+  private final PositionMapper mapper;
+  private final PartialExitDetector partialExitDetector;
+  private final AverageOperationService averageOperationService;
+  private final @Lazy OperationService operationService;
+
+  private static final int PRECISION = 6;
+
+  /** Processa uma solicitação de saída (parcial ou total). */
+  @Override
+  public PositionExitResult processExit(PositionExitRequest request) {
+    log.info("[PositionExitService] Delegando saída para OperationService: {}", request);
+
+    // Montar OperationFinalizationRequest a partir do PositionExitRequest
+    OperationFinalizationRequest opRequest = OperationFinalizationRequest.builder()
+        .quantity(request.getQuantity())
+        .exitUnitPrice(request.getExitUnitPrice())
+        .exitDate(request.getExitDate())
+        .build();
+
+    // Processar saída via OperationService
+    try {
+      operationService.createExitOperation(opRequest);
+      return PositionExitResult.builder()
+          .positionId(request.getPositionId())
+          .exitQuantity(request.getQuantity())
+          .message("Saída processada via OperationService com sucesso.")
+          .build();
+    } catch (Exception e) {
+      log.error("Erro ao processar saída via OperationService", e);
+      return PositionExitResult.builder()
+          .positionId(request.getPositionId())
+          .exitQuantity(request.getQuantity())
+          .message("Erro ao processar saída: " + e.getMessage())
+          .build();
+    }
+  }
+} 

@@ -4,6 +4,7 @@ import com.olisystem.optionsmanager.model.auth.User;
 import com.olisystem.optionsmanager.model.operation.Operation;
 import com.olisystem.optionsmanager.model.operation.OperationStatus;
 import com.olisystem.optionsmanager.model.option_serie.OptionSerie;
+import com.olisystem.optionsmanager.model.transaction.TransactionType;
 
 import java.util.List;
 import java.util.UUID;
@@ -31,6 +32,17 @@ public interface OperationRepository
 
   // Método para buscar uma operação por optionSeries, user e status
   Operation findByOptionSeriesAndUserAndStatus(OptionSerie optionSerie, User currentUser, OperationStatus active);
+  
+  // ✅ NOVO MÉTODO: Busca operação por optionSeries, user, status E transactionType
+  Operation findByOptionSeriesAndUserAndStatusAndTransactionType(
+      OptionSerie optionSerie, User currentUser, OperationStatus status, TransactionType transactionType);
+  
+  // ✅ NOVO MÉTODO: Busca operações por optionSeries, user E transactionType (sem filtro de status)
+  List<Operation> findByOptionSeriesAndUserAndTransactionType(
+      OptionSerie optionSerie, User currentUser, TransactionType transactionType);
+  
+  // ✅ NOVO MÉTODO: Busca operações por optionSeries e user (sem filtros)
+  List<Operation> findByOptionSeriesAndUser(OptionSerie optionSerie, User currentUser);
   
   // === MÉTODOS PARA VALIDAÇÃO DE DUPLICATAS (FASE 2) ===
   

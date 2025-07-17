@@ -104,8 +104,9 @@ public class OperationServiceImpl implements OperationService {
         OperationContext context = new OperationContext(request, optionSerie, user);
 
         // 4. Determinar estratégia de operação
-        Operation activeOperation = operationRepository.findByOptionSeriesAndUserAndStatus(
-                optionSerie, user, OperationStatus.ACTIVE);
+        // ✅ CORREÇÃO: Buscar operação ativa considerando o TransactionType
+        Operation activeOperation = operationRepository.findByOptionSeriesAndUserAndStatusAndTransactionType(
+                optionSerie, user, OperationStatus.ACTIVE, request.getTransactionType());
 
         // 5. Delegar à estratégia adequada
         if (activeOperation == null) {

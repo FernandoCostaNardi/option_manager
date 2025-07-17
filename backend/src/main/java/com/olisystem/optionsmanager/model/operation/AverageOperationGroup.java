@@ -45,6 +45,7 @@ public class AverageOperationGroup {
   @Column private UUID positionId;
 
   @OneToMany(mappedBy = "group")
+  @Builder.Default
   private List<AverageOperationItem> items = new ArrayList<>();
 
   public List<Operation> getOperations() {
