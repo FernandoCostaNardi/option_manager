@@ -13,7 +13,7 @@ import com.olisystem.optionsmanager.record.operation.OperationExitPositionContex
 import com.olisystem.optionsmanager.repository.OperationRepository;
 import com.olisystem.optionsmanager.service.analysis_house.AnalysisHouseService;
 import com.olisystem.optionsmanager.service.brokerage.BrokerageService;
-import com.olisystem.optionsmanager.service.operation.consolidate.ConsolidatedOperationService;
+
 import com.olisystem.optionsmanager.service.operation.averageOperation.finder.OperationGroupFinder;
 import com.olisystem.optionsmanager.service.operation.target.OperationTargetService;
 import lombok.extern.slf4j.Slf4j;
@@ -30,7 +30,6 @@ public class OperationCreationServiceImpl implements OperationCreationService {
     private final BrokerageService brokerageService;
     private final AnalysisHouseService analysisHouseService;
     private final OperationRepository operationRepository;
-    private final ConsolidatedOperationService consolidatedOperationService;
     private final OperationGroupFinder operationGroupFinder;
     private final OperationTargetService targetService;
 
@@ -40,13 +39,11 @@ public class OperationCreationServiceImpl implements OperationCreationService {
             AnalysisHouseService analysisHouseService,
             OperationRepository operationRepository,
             OperationTargetService targetService,
-            ConsolidatedOperationService consolidatedOperationService,
             OperationGroupFinder operationGroupFinder) {
         this.brokerageService = brokerageService;
         this.analysisHouseService = analysisHouseService;
         this.operationRepository = operationRepository;
         this.targetService = targetService;
-        this.consolidatedOperationService = consolidatedOperationService;
         this.operationGroupFinder = operationGroupFinder;
     }
 

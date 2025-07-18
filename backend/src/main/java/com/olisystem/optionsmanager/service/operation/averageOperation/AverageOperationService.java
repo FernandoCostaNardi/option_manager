@@ -343,14 +343,26 @@ public class AverageOperationService {
   /** Adiciona um novo item ao grupo. */
   @Transactional
   public AverageOperationItem addNewItemGroup(AverageOperationGroup group, Operation operation, OperationRoleType roleType) {
-    // 1. Criar um novo itemGroup
+    // ✅ CORREÇÃO: Verificar se já existe um item com o mesmo roleType no grupo
+    List<AverageOperationItem> existingItems = itemRepository.findByGroupAndRoleType(group, roleType);
+    
+    if (!existingItems.isEmpty()) {
+      log.warn("⚠️ Já existe um item com roleType {} no grupo {} - não criando duplicata", roleType, group.getId());
+      return existingItems.get(0); // Retornar o item existente
+    }
+    
+    // 1. Criar um novo itemGroup apenas se não existir
     AverageOperationItem itemGroup = new AverageOperationItem();
     itemGroup.setGroup(group);
     itemGroup.setOperation(operation);
     itemGroup.setInclusionDate(LocalDate.now());
     itemGroup.setRoleType(roleType);
     itemGroup.setSequenceNumber(group.getOperations().size() + 1);
-    return itemRepository.save(itemGroup);
+    
+    AverageOperationItem savedItem = itemRepository.save(itemGroup);
+    log.info("✅ Novo item adicionado ao grupo: roleType={}, operationId={}", roleType, operation.getId());
+    
+    return savedItem;
   }
 
   /**

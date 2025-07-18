@@ -69,6 +69,14 @@ public class ConsolidatedOperationService {
     @Transactional
     public Operation createConsolidatedExit(AverageOperationGroup group, Operation exitOperation, BigDecimal exitUnitPrice, LocalDate exitDate) {
         log.info("🔧 Criando operação consolidadora de saída baseada na operação: {}", exitOperation.getId());
+        
+        // ✅ CORREÇÃO: Verificar se já existe uma CONSOLIDATED_RESULT no grupo
+        Optional<Operation> existingConsolidatedResult = findExistingConsolidatedResult(group);
+        if (existingConsolidatedResult.isPresent()) {
+            log.warn("⚠️ Já existe uma CONSOLIDATED_RESULT no grupo {} - não criando duplicata", group.getId());
+            return existingConsolidatedResult.get(); // Retornar a existente
+        }
+        
         log.info("🔧 PRIMEIRA OPERAÇÃO - entryTotal={}, profitLoss={}, quantity={}, percentage={}", 
             exitOperation.getEntryTotalValue(), exitOperation.getProfitLoss(), 
             exitOperation.getQuantity(), exitOperation.getProfitLossPercentage());
@@ -222,6 +230,65 @@ public class ConsolidatedOperationService {
         log.info("🔧 Operação consolidadora criada com ID: {} e exitDate: {}", consolidatedExit.getId(), exitDate);
         
         return consolidatedExit;
+    }
+
+    /**
+     * ✅ NOVO MÉTODO: Cria CONSOLIDATED_RESULT específica para saída única (SingleLotExitProcessor)
+     */
+    @Transactional
+    public Operation createConsolidatedResultFromSingleExit(AverageOperationGroup group, Operation exitOperation) {
+        log.info("🔧 Criando CONSOLIDATED_RESULT para saída única baseada na operação: {}", exitOperation.getId());
+        
+        // ✅ CORREÇÃO: Verificar se já existe uma CONSOLIDATED_RESULT no grupo
+        Optional<Operation> existingConsolidatedResult = findExistingConsolidatedResult(group);
+        if (existingConsolidatedResult.isPresent()) {
+            log.warn("⚠️ Já existe uma CONSOLIDATED_RESULT no grupo {} - não criando duplicata", group.getId());
+            return existingConsolidatedResult.get(); // Retornar a existente
+        }
+        
+        // ✅ CORREÇÃO: Para saída única, usar exatamente os valores da operação de saída
+        Integer totalQuantity = exitOperation.getQuantity();
+        BigDecimal totalExitValue = exitOperation.getExitTotalValue();
+        BigDecimal totalEntryValue = exitOperation.getEntryTotalValue();
+        BigDecimal totalProfitLoss = exitOperation.getProfitLoss();
+        BigDecimal profitLossPercentage = exitOperation.getProfitLossPercentage();
+        
+        log.info("🔧 Usando valores da operação única: quantity={}, exitValue={}, entryValue={}, profitLoss={}, percentage={}",
+                totalQuantity, totalExitValue, totalEntryValue, totalProfitLoss, profitLossPercentage);
+        
+        // Determinar status baseado no P&L
+        OperationStatus status = totalProfitLoss.compareTo(BigDecimal.ZERO) >= 0 ? 
+            OperationStatus.WINNER : OperationStatus.LOSER;
+        
+        // Criar operação consolidada idêntica à operação de saída
+        Operation consolidatedResult = Operation.builder()
+            .optionSeries(exitOperation.getOptionSeries())
+            .brokerage(exitOperation.getBrokerage())
+            .analysisHouse(exitOperation.getAnalysisHouse())
+            .user(exitOperation.getUser())
+            .quantity(totalQuantity)
+            .entryUnitPrice(exitOperation.getEntryUnitPrice())
+            .exitUnitPrice(exitOperation.getExitUnitPrice())
+            .entryDate(exitOperation.getEntryDate())
+            .exitDate(exitOperation.getExitDate())
+            .transactionType(TransactionType.SELL)
+            .tradeType(exitOperation.getTradeType())
+            .status(status)
+            .entryTotalValue(totalEntryValue)
+            .exitTotalValue(totalExitValue)
+            .profitLoss(totalProfitLoss)
+            .profitLossPercentage(profitLossPercentage)
+            .build();
+        
+        operationRepository.save(consolidatedResult);
+        
+        // Adicionar ao grupo como CONSOLIDATED_RESULT
+        addOperationToGroup(consolidatedResult, group, OperationRoleType.CONSOLIDATED_RESULT);
+        
+        log.info("🔧 CONSOLIDATED_RESULT para saída única criada com ID: {} e quantidade: {}", 
+                consolidatedResult.getId(), consolidatedResult.getQuantity());
+        
+        return consolidatedResult;
     }
 
     /**
@@ -423,6 +490,13 @@ public class ConsolidatedOperationService {
     public Operation transformToTotalExit(Operation consolidatedResult, AverageOperationGroup group) {
         log.info("Transformando CONSOLIDATED_RESULT em TOTAL_EXIT: {}", consolidatedResult.getId());
         
+        // ✅ CORREÇÃO: Verificar se já existe um item TOTAL_EXIT no grupo
+        List<AverageOperationItem> existingTotalExits = itemRepository.findByGroupAndRoleType(group, OperationRoleType.TOTAL_EXIT);
+        if (!existingTotalExits.isEmpty()) {
+            log.warn("⚠️ Já existe um item TOTAL_EXIT no grupo {} - não transformando CONSOLIDATED_RESULT", group.getId());
+            return consolidatedResult; // Retornar a operação original sem transformar
+        }
+        
         // ✅ CORREÇÃO: Recalcular quantidade total correta baseada em TODAS as operações de saída do grupo
         int totalQuantityFromAllExits = calculateTotalExitQuantityFromGroup(group);
         log.info("Quantidade total de TODAS as saídas calculada para TOTAL_EXIT: {}", totalQuantityFromAllExits);
@@ -478,7 +552,7 @@ public class ConsolidatedOperationService {
     }
     
     /**
-     * ✅ NOVO MÉTODO: Marcar CONSOLIDATED_ENTRY como HIDDEN quando há saída total
+     * ✅ CORREÇÃO: Marcar CONSOLIDATED_ENTRY como HIDDEN e ZERAR valores quando há saída total
      */
     @Transactional
     public void markConsolidatedEntryAsHidden(AverageOperationGroup group) {
@@ -487,26 +561,33 @@ public class ConsolidatedOperationService {
         Optional<Operation> consolidatedEntryOpt = findExistingConsolidatedEntry(group);
         if (consolidatedEntryOpt.isPresent()) {
             Operation consolidatedEntry = consolidatedEntryOpt.get();
-            log.info("🔧 ANTES de marcar como HIDDEN: ID={}, Status={}", 
-                consolidatedEntry.getId(), consolidatedEntry.getStatus());
+            log.info("🔧 ANTES de zerar e marcar como HIDDEN: ID={}, Status={}, Quantity={}, EntryTotalValue={}", 
+                consolidatedEntry.getId(), consolidatedEntry.getStatus(), consolidatedEntry.getQuantity(), consolidatedEntry.getEntryTotalValue());
             
+            // ✅ CORREÇÃO: ZERAR todos os valores da CONSOLIDATED_ENTRY
+            consolidatedEntry.setQuantity(0);
+            consolidatedEntry.setEntryTotalValue(BigDecimal.ZERO);
+            consolidatedEntry.setEntryUnitPrice(BigDecimal.ZERO);
+            consolidatedEntry.setProfitLoss(BigDecimal.ZERO);
+            consolidatedEntry.setProfitLossPercentage(BigDecimal.ZERO);
             consolidatedEntry.setStatus(OperationStatus.HIDDEN);
+            
             Operation saved = operationRepository.save(consolidatedEntry);
             
-            log.info("🔧 APÓS save: ID={}, Status={}", 
-                saved.getId(), saved.getStatus());
+            log.info("🔧 APÓS zerar e marcar como HIDDEN: ID={}, Status={}, Quantity={}, EntryTotalValue={}", 
+                saved.getId(), saved.getStatus(), saved.getQuantity(), saved.getEntryTotalValue());
             
             // ✅ VERIFICAÇÃO ADICIONAL: Forçar flush e refresh para garantir persistência
             operationRepository.flush();
             Operation refreshed = operationRepository.findById(saved.getId()).orElse(null);
             if (refreshed != null) {
-                log.info("🔧 VERIFICAÇÃO FINAL: ID={}, Status={}", 
-                    refreshed.getId(), refreshed.getStatus());
+                log.info("🔧 VERIFICAÇÃO FINAL: ID={}, Status={}, Quantity={}, EntryTotalValue={}", 
+                    refreshed.getId(), refreshed.getStatus(), refreshed.getQuantity(), refreshed.getEntryTotalValue());
             } else {
                 log.error("🔧 ERRO: Operação não encontrada após save e refresh!");
             }
             
-            log.info("✅ CONSOLIDATED_ENTRY marcada como HIDDEN com sucesso: {}", consolidatedEntry.getId());
+            log.info("✅ CONSOLIDATED_ENTRY zerada e marcada como HIDDEN com sucesso: {}", consolidatedEntry.getId());
         } else {
             log.warn("❌ CONSOLIDATED_ENTRY não encontrada para marcar como HIDDEN no grupo: {}", group.getId());
         }
@@ -553,6 +634,14 @@ public class ConsolidatedOperationService {
      * Adiciona operação ao grupo com role type específico
      */
     private void addOperationToGroup(Operation operation, AverageOperationGroup group, OperationRoleType roleType) {
+        // ✅ CORREÇÃO: Verificar se já existe um item com o mesmo roleType no grupo
+        List<AverageOperationItem> existingItems = itemRepository.findByGroupAndRoleType(group, roleType);
+        
+        if (!existingItems.isEmpty()) {
+            log.warn("⚠️ Já existe um item com roleType {} no grupo {} - não criando duplicata", roleType, group.getId());
+            return; // Não criar duplicata
+        }
+        
         // ✅ CORREÇÃO: Verificar se items não é null antes de usar size()
         int nextSequence = 1;
         if (group.getItems() != null) {
@@ -568,6 +657,7 @@ public class ConsolidatedOperationService {
                 .build();
 
         itemRepository.save(item);
+        log.info("✅ Novo item adicionado ao grupo: roleType={}, operationId={}", roleType, operation.getId());
     }
 
     /**

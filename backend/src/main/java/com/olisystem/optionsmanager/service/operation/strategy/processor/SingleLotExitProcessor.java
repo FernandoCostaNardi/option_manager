@@ -12,6 +12,7 @@ import com.olisystem.optionsmanager.model.transaction.TransactionType;
 import com.olisystem.optionsmanager.record.operation.OperationExitPositionContext;
 import com.olisystem.optionsmanager.resolver.tradeType.TradeTypeResolver;
 import com.olisystem.optionsmanager.service.operation.averageOperation.AverageOperationGroupService;
+import com.olisystem.optionsmanager.service.operation.averageOperation.AverageOperationService;
 import com.olisystem.optionsmanager.service.operation.consolidate.ConsolidatedOperationService;
 import com.olisystem.optionsmanager.service.operation.creation.OperationCreationService;
 import com.olisystem.optionsmanager.service.operation.exitRecord.ExitRecordService;
@@ -20,12 +21,14 @@ import com.olisystem.optionsmanager.service.operation.status.OperationStatusServ
 import com.olisystem.optionsmanager.service.position.entrylots.EntryLotUpdateService;
 import com.olisystem.optionsmanager.service.position.positionOperation.PositionOperationService;
 import com.olisystem.optionsmanager.service.position.update.PositionUpdateService;
+import com.olisystem.optionsmanager.repository.OperationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -40,8 +43,10 @@ public class SingleLotExitProcessor {
     private final ExitRecordService exitRecordService;
     private final PositionOperationService positionOperationService;
     private final AverageOperationGroupService averageOperationGroupService;
+    private final AverageOperationService averageOperationService;
     private final OperationCreationService operationCreationService;
     private final ConsolidatedOperationService consolidatedOperationService;
+    private final OperationRepository operationRepository;
 
     /**
      * Processa a saída de operação com lote único
@@ -159,11 +164,17 @@ public class SingleLotExitProcessor {
 
             // 13. ✅ CONSOLIDAÇÃO FINAL (se posição foi totalmente fechada)
             Operation finalOperation = exitOperation;
-            if (isTotalExit) {
+            // ✅ CORREÇÃO: Verificar se é saída total APÓS a atualização da posição
+            boolean isActuallyTotalExit = context.position().getStatus() == com.olisystem.optionsmanager.model.position.PositionStatus.CLOSED 
+                                      || context.position().getRemainingQuantity() == 0;
+            
+            if (isActuallyTotalExit) {
                 log.info("🔄 Posição totalmente fechada - iniciando consolidação final...");
                 finalOperation = createFinalConsolidatedOperation(context, exitOperation, profitLoss, profitLossPercentage);
                 log.info("✅ Operação consolidada final criada: ID={}, P&L={}", 
                     finalOperation.getId(), finalOperation.getProfitLoss());
+            } else {
+                log.info("ℹ️ Saída parcial detectada - não criando consolidação final");
             }
 
             log.info("=== PROCESSAMENTO DE SAÍDA COM LOTE ÚNICO CONCLUÍDO COM SUCESSO ===");
@@ -268,6 +279,19 @@ public class SingleLotExitProcessor {
         log.info("🔄 Criando operação consolidada final...");
         
         try {
+            // ✅ CORREÇÃO: Verificar se já existem operações TOTAL_EXIT ou CONSOLIDATED_RESULT no grupo
+            // Se já existem, não criar nova CONSOLIDATED_RESULT
+            boolean hasExistingTotalExits = context.group().getItems().stream()
+                .anyMatch(item -> item.getRoleType() == com.olisystem.optionsmanager.model.operation.OperationRoleType.TOTAL_EXIT);
+            
+            boolean hasExistingConsolidatedResult = context.group().getItems().stream()
+                .anyMatch(item -> item.getRoleType() == com.olisystem.optionsmanager.model.operation.OperationRoleType.CONSOLIDATED_RESULT);
+            
+            if (hasExistingTotalExits || hasExistingConsolidatedResult) {
+                log.info("⚠️ Já existem operações TOTAL_EXIT ou CONSOLIDATED_RESULT no grupo - não criando nova consolidação");
+                return lastExitOperation; // Retornar operação original sem consolidação
+            }
+            
             // ✅ CORREÇÃO: Calcular resultado absoluto correto (Total Investido vs Total Recebido)
             BigDecimal absoluteFinalProfitLoss = calculateAbsoluteFinalResult(context);
             BigDecimal absoluteFinalPercentage = calculateAbsoluteFinalPercentage(context, absoluteFinalProfitLoss);
@@ -279,14 +303,68 @@ public class SingleLotExitProcessor {
             lastExitOperation.setProfitLoss(absoluteFinalProfitLoss);
             lastExitOperation.setProfitLossPercentage(absoluteFinalPercentage);
             
-            // 1. Usar o serviço de consolidação para transformar em TOTAL_EXIT
-            Operation consolidatedFinal = consolidatedOperationService.transformToTotalExit(
-                lastExitOperation, context.group());
+            // ✅ CORREÇÃO: Para saídas únicas, verificar se já existe CONSOLIDATED_RESULT antes de criar
+            log.info("🔧 Verificando se já existe CONSOLIDATED_RESULT para saída única");
             
-            // 2. Marcar todas as operações como HIDDEN (exceto a consolidada)
-            markAllOperationsAsHidden(context);
+            Optional<Operation> existingConsolidatedResult = consolidatedOperationService.findExistingConsolidatedResult(context.group());
+            Operation consolidatedFinal;
             
-            // 3. A operação consolidada deve ficar ATIVA para representar o resultado final
+            if (existingConsolidatedResult.isPresent()) {
+                log.info("✅ CONSOLIDATED_RESULT já existe: ID={}, atualizando com dados da nova saída", 
+                    existingConsolidatedResult.get().getId());
+                
+                // Atualizar CONSOLIDATED_RESULT existente com dados da nova saída
+                consolidatedFinal = consolidatedOperationService.updateConsolidatedResult(
+                    existingConsolidatedResult.get(), lastExitOperation, context.group());
+                
+                log.info("✅ CONSOLIDATED_RESULT atualizada: ID={}, quantidade={}", 
+                    consolidatedFinal.getId(), consolidatedFinal.getQuantity());
+            } else {
+                log.info("🔧 Criando nova CONSOLIDATED_RESULT para saída única");
+                
+                // 1. Criar CONSOLIDATED_RESULT baseada na operação de saída
+                Operation consolidatedResult = consolidatedOperationService.createConsolidatedResultFromSingleExit(
+                    context.group(), lastExitOperation);
+                
+                log.info("✅ CONSOLIDATED_RESULT criada: ID={}, quantidade={}", 
+                    consolidatedResult.getId(), consolidatedResult.getQuantity());
+                
+                // 2. Transformar CONSOLIDATED_RESULT em TOTAL_EXIT
+                consolidatedFinal = consolidatedOperationService.transformToTotalExit(
+                    consolidatedResult, context.group());
+                    
+                log.info("✅ CONSOLIDATED_RESULT transformada em TOTAL_EXIT: ID={}", consolidatedFinal.getId());
+            }
+            
+            // ✅ CORREÇÃO: Implementar fluxo correto para saída única
+            log.info("🔧 Implementando fluxo correto para saída única...");
+            
+            // 1. Marcar operação de saída original como HIDDEN
+            consolidatedOperationService.markOperationAsHidden(lastExitOperation);
+            
+            // 2. Adicionar operação de saída ao grupo como TOTAL_EXIT (HIDDEN)
+            averageOperationService.addNewItemGroup(context.group(), lastExitOperation, 
+                com.olisystem.optionsmanager.model.operation.OperationRoleType.TOTAL_EXIT);
+            log.info("✅ Operação de saída adicionada ao grupo como TOTAL_EXIT (HIDDEN): {}", lastExitOperation.getId());
+            
+            // 3. Criar CONSOLIDATED_RESULT com status WINNER/LOSER
+            Operation consolidatedResult;
+            if (existingConsolidatedResult.isPresent()) {
+                log.info("✅ CONSOLIDATED_RESULT já existe: ID={}, atualizando com dados da nova saída", 
+                    existingConsolidatedResult.get().getId());
+                
+                // Atualizar CONSOLIDATED_RESULT existente com dados da nova saída
+                consolidatedResult = consolidatedOperationService.updateConsolidatedResult(
+                    existingConsolidatedResult.get(), lastExitOperation, context.group());
+            } else {
+                log.info("🔧 Criando nova CONSOLIDATED_RESULT para saída única");
+                
+                // Criar CONSOLIDATED_RESULT baseada na operação de saída
+                consolidatedResult = consolidatedOperationService.createConsolidatedResultFromSingleExit(
+                    context.group(), lastExitOperation);
+            }
+            
+            // 4. Definir status da CONSOLIDATED_RESULT baseado no P&L
             OperationStatus finalStatus;
             if (absoluteFinalProfitLoss.compareTo(BigDecimal.ZERO) > 0) {
                 finalStatus = OperationStatus.WINNER;
@@ -296,19 +374,22 @@ public class SingleLotExitProcessor {
                 finalStatus = OperationStatus.NEUTRAl; // Break-even 
             }
             
-            consolidatedFinal.setStatus(finalStatus);
+            consolidatedResult.setStatus(finalStatus);
+            consolidatedResult.setProfitLoss(absoluteFinalProfitLoss);
+            consolidatedResult.setProfitLossPercentage(absoluteFinalPercentage);
             
-            // ✅ CORREÇÃO: Garantir que os valores absolutos estão na operação final
-            consolidatedFinal.setProfitLoss(absoluteFinalProfitLoss);
-            consolidatedFinal.setProfitLossPercentage(absoluteFinalPercentage);
+            // 5. Salvar CONSOLIDATED_RESULT com valores corretos
+            Operation savedConsolidatedResult = operationRepository.save(consolidatedResult);
             
-            // ✅ IMPORTANTE: Salvar a operação com os valores corrigidos
-            // (O transformToTotalExit já salva, mas vamos garantir que os valores estão corretos)
+            // 6. Marcar CONSOLIDATED_ENTRY como HIDDEN
+            consolidatedOperationService.markConsolidatedEntryAsHidden(context.group());
             
-            log.info("✅ Consolidação final concluída: status={}, P&L absoluto={}, Percentual={}%", 
-                finalStatus, absoluteFinalProfitLoss, absoluteFinalPercentage);
+            log.info("✅ Fluxo correto implementado:");
+            log.info("✅ TOTAL_EXIT (HIDDEN): {}", lastExitOperation.getId());
+            log.info("✅ CONSOLIDATED_RESULT ({}): {}", finalStatus, savedConsolidatedResult.getId());
+            log.info("✅ P&L absoluto: {}, Percentual: {}%", absoluteFinalProfitLoss, absoluteFinalPercentage);
             
-            return consolidatedFinal;
+            return savedConsolidatedResult;
             
         } catch (Exception e) {
             log.error("❌ Erro na consolidação final: {}", e.getMessage(), e);
