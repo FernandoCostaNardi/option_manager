@@ -2,29 +2,27 @@ package com.olisystem.optionsmanager.service.invoice.processing;
 
 import com.olisystem.optionsmanager.dto.operation.OperationDataRequest;
 import com.olisystem.optionsmanager.dto.operation.OperationFinalizationRequest;
+import com.olisystem.optionsmanager.dto.option.OptionDataResponseDto;
 import com.olisystem.optionsmanager.model.Asset.Asset;
 import com.olisystem.optionsmanager.model.auth.User;
 import com.olisystem.optionsmanager.model.invoice.Invoice;
 import com.olisystem.optionsmanager.model.invoice.InvoiceItem;
+import com.olisystem.optionsmanager.model.operation.AverageOperationGroup;
 import com.olisystem.optionsmanager.model.operation.Operation;
 import com.olisystem.optionsmanager.model.operation.OperationRoleType;
 import com.olisystem.optionsmanager.model.operation.OperationStatus;
 import com.olisystem.optionsmanager.model.operation.TradeType;
 import com.olisystem.optionsmanager.model.option_serie.OptionSerie;
-import com.olisystem.optionsmanager.model.option_serie.OptionType;
+import com.olisystem.optionsmanager.model.position.Position;
 import com.olisystem.optionsmanager.model.transaction.TransactionType;
-import com.olisystem.optionsmanager.service.operation.consolidate.ConsolidatedOperationService;
-import com.olisystem.optionsmanager.service.operation.OperationService;
-import com.olisystem.optionsmanager.service.operation.creation.OperationCreationService;
-import com.olisystem.optionsmanager.service.option_series.OptionSerieService;
-import com.olisystem.optionsmanager.service.asset.AssetService;
-import com.olisystem.optionsmanager.service.invoice.processing.InvoiceToOperationMapper;
+import com.olisystem.optionsmanager.repository.InvoiceItemRepository;
 import com.olisystem.optionsmanager.repository.InvoiceRepository;
 import com.olisystem.optionsmanager.repository.OperationRepository;
 import com.olisystem.optionsmanager.repository.optionSerie.OptionSerieRepository;
-import com.olisystem.optionsmanager.repository.InvoiceItemRepository;
 import com.olisystem.optionsmanager.repository.position.PositionRepository;
-import com.olisystem.optionsmanager.model.position.Position;
+import com.olisystem.optionsmanager.service.asset.AssetService;
+import com.olisystem.optionsmanager.service.operation.OperationService;
+import com.olisystem.optionsmanager.service.option_series.OptionSerieService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -35,8 +33,6 @@ import java.math.RoundingMode;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import com.olisystem.optionsmanager.model.operation.AverageOperationGroup;
 
 /**
  * Processador de consolidação de invoices que integra com o sistema de consolidação existente
@@ -141,6 +137,11 @@ public class InvoiceConsolidationProcessor {
                         // ✅ CORREÇÃO: Usar o TransactionType já mapeado pelo InvoiceToOperationMapper
                         TransactionType transactionType = operationRequest.getTransactionType();
 
+                        OptionDataResponseDto optionDataResponseDto = optionSerieService.buscarOpcaoInfo(operationRequest.getOptionSeriesCode());
+                        operationRequest.setBaseAssetCode(optionDataResponseDto.getBaseAsset());
+                        operationRequest.setBaseAssetName(optionDataResponseDto.getBaseAssetName());
+                        operationRequest.setBaseAssetLogoUrl(optionDataResponseDto.getBaseAssetUrlLogo());
+                        operationRequest.setBaseAssetType(optionDataResponseDto.getBaseAssetType());
                         Asset asset = assetService.findOrCreateAsset(operationRequest);
                         OptionSerie optionSerie = optionSerieService.findOrCreateOptionSerie(operationRequest, asset);
 
