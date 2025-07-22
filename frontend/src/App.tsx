@@ -6,7 +6,7 @@ import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { Layout } from './components/Layout';
 import { NotasCorretagem } from './pages/importacoes/NotasCorretagem';
-import { DashboardInvoiceProcessing } from './pages/importacoes/DashboardInvoiceProcessing';
+import { DashboardInvoiceProcessing } from './pages/importacoes/DashboardFixed';
 import { CadastroCorretoras } from './pages/CadastroCorretoras';
 import { CadastroAnalysisHouses } from './pages/CadastroAnalysisHouses';
 import { Operacoes } from './pages/operacoes/Operacoes';

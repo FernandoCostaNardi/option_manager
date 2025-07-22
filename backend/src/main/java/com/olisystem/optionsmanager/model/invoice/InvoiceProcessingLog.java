@@ -71,6 +71,10 @@ public class InvoiceProcessingLog {
     @Column(name = "processing_duration_ms")
     private Long processingDurationMs;
 
+    @Column(name = "reprocessed_count", nullable = false)
+    @Builder.Default
+    private Integer reprocessedCount = 0;
+
     @Column(name = "created_at", nullable = false)
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();

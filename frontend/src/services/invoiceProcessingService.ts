@@ -32,6 +32,7 @@ export interface InvoiceProcessingResponse {
   errorCount: number;
   errors: string[];
   summary: string;
+  sessionId?: string; // ID da sessão para processamento assíncrono
 }
 
 /**
@@ -99,12 +100,24 @@ export class InvoiceProcessingService {
   /**
    * Lista invoices simples (funcionando)
    */
-  static async getSimpleInvoices(page: number = 0, size: number = 20): Promise<{
+  static async getSimpleInvoices(page: number = 0, size: number = 20, processingStatus?: string): Promise<{
     content: SimpleInvoiceData[];
     totalPages: number;
     totalElements: number;
   }> {
-    return ApiService.get(`/invoices-v2?page=${page}&size=${size}`);
+    let url = `/invoices-v2?page=${page}&size=${size}`;
+    
+    if (processingStatus) {
+      url += `&processingStatus=${processingStatus}`;
+    }
+    
+    try {
+      const response = await ApiService.get(url);
+      return response;
+    } catch (error) {
+      console.error('Erro na API:', error);
+      throw error;
+    }
   }
 
   /**
@@ -114,13 +127,71 @@ export class InvoiceProcessingService {
     return ApiService.get(`/invoices-v2/${invoiceId}`);
   }
 
+  /**
+   * Obtém contador de invoices não processadas
+   */
+  static async getUnprocessedCount(): Promise<number> {
+    return ApiService.get('/invoices-v2/count');
+  }
+
+  /**
+   * Obtém contador de invoices pendentes
+   */
+  static async getPendingCount(): Promise<number> {
+    try {
+      // Tentar o endpoint específico primeiro
+      return await ApiService.get('/invoices-v2/count/pending');
+    } catch (error) {
+      console.log('⚠️ Endpoint /count/pending não disponível, usando fallback');
+      // Fallback: buscar todas as invoices e contar as não processadas
+      const response = await ApiService.get('/invoices-v2?page=0&size=1000');
+      return response.totalElements || 0;
+    }
+  }
+
+  /**
+   * Obtém contador de invoices processadas com sucesso
+   */
+  static async getProcessedCount(): Promise<number> {
+    try {
+      // Tentar o endpoint específico primeiro
+      return await ApiService.get('/invoices-v2/count/success');
+    } catch (error) {
+      console.log('⚠️ Endpoint /count/success não disponível, usando fallback');
+      // Fallback: buscar todas as invoices e contar as processadas
+      const response = await ApiService.get('/invoices-v2?page=0&size=1000');
+      // Por enquanto, retornar 0 até o backend implementar o endpoint
+      return 0;
+    }
+  }
+
   // ===== MÉTODOS DE PROCESSAMENTO (FASE 2 - IMPLEMENTADOS) =====
   
   /**
    * Estima o processamento de invoices
    */
   static async estimateProcessing(invoiceIds: string[]): Promise<any> {
-    return ApiService.post('/processing/estimate', { invoiceIds });
+    // ✅ VERIFICAR SE AS INVOICES EXISTEM ANTES DE ESTIMAR
+    console.log('🔍 Verificando se as invoices existem:', invoiceIds);
+    
+    try {
+      // Verificar cada invoice individualmente
+      for (const invoiceId of invoiceIds) {
+        try {
+          await this.getInvoiceDetails(invoiceId);
+          console.log(`✅ Invoice ${invoiceId} encontrada`);
+        } catch (error) {
+          console.error(`❌ Invoice ${invoiceId} não encontrada:`, error);
+          throw new Error(`Invoice ${invoiceId} não encontrada no sistema`);
+        }
+      }
+      
+      console.log('✅ Todas as invoices verificadas, prosseguindo com estimativa...');
+      return ApiService.post('/processing/estimate', { invoiceIds });
+    } catch (error) {
+      console.error('❌ Erro na verificação de invoices:', error);
+      throw error;
+    }
   }
 
   /**
@@ -131,10 +202,30 @@ export class InvoiceProcessingService {
     maxOperations?: number;
     skipDuplicates?: boolean;
   } = {}): Promise<InvoiceProcessingResponse> {
-    return ApiService.post('/processing/process', {
-      invoiceIds,
-      ...options
-    });
+    // ✅ VERIFICAR SE AS INVOICES EXISTEM ANTES DE PROCESSAR
+    console.log('🔍 Verificando invoices antes do processamento:', invoiceIds);
+    
+    try {
+      // Verificar cada invoice individualmente
+      for (const invoiceId of invoiceIds) {
+        try {
+          await this.getInvoiceDetails(invoiceId);
+          console.log(`✅ Invoice ${invoiceId} encontrada para processamento`);
+        } catch (error) {
+          console.error(`❌ Invoice ${invoiceId} não encontrada:`, error);
+          throw new Error(`Invoice ${invoiceId} não encontrada no sistema`);
+        }
+      }
+      
+      console.log('✅ Todas as invoices verificadas, iniciando processamento...');
+      return ApiService.post('/invoice/processing/real/process', {
+        invoiceIds,
+        ...options
+      });
+    } catch (error) {
+      console.error('❌ Erro na verificação de invoices para processamento:', error);
+      throw error;
+    }
   }
 
   /**
@@ -144,33 +235,49 @@ export class InvoiceProcessingService {
     dryRun?: boolean;
     maxOperations?: number;
   } = {}): Promise<InvoiceProcessingResponse> {
-    return ApiService.post(`/processing/process/${invoiceId}`, options);
+    return ApiService.post(`/invoice/processing/real/process/${invoiceId}`, options);
   }
 
   /**
-   * Obtém status de processamento em tempo real via SSE
+   * Obtém status de uma sessão específica
+   */
+  static async getProcessingStatus(sessionId: string): Promise<any> {
+    return ApiService.get(`/api/invoice/processing/real/status/${sessionId}`);
+  }
+
+  /**
+   * Obtém status de processamento de uma invoice específica
+   */
+  static async getInvoiceProcessingStatus(invoiceId: string): Promise<any> {
+    return ApiService.get(`/invoice/processing/status/${invoiceId}`);
+  }
+
+  /**
+   * Cancela uma sessão de processamento
+   */
+  static async cancelProcessing(sessionId: string): Promise<void> {
+    return ApiService.post(`/api/invoice/processing/real/status/${sessionId}/cancel`, {});
+  }
+
+  /**
+   * Obtém status de processamento via SSE
    */
   static createProcessingEventSource(sessionId: string): EventSource {
     const token = localStorage.getItem('token');
     
-    // ✅ VALIDAR TOKEN
     if (!token) {
-      console.error('❌ Token não encontrado para SSE');
       throw new Error('Token de autenticação não encontrado');
     }
 
-    // ✅ CONSTRUIR URL COM ENCODING CORRETO
-    const baseUrl = ApiService.getBaseUrl().replace(/\/$/, ''); // Remove barra final se existir
+    const baseUrl = ApiService.getBaseUrl().replace(/\/$/, '');
     const encodedToken = encodeURIComponent(token);
-    const url = `${baseUrl}/processing/status/${sessionId}/stream?token=${encodedToken}`;
+    const url = `${baseUrl}/api/processing/progress/${sessionId}?token=${encodedToken}`;
     
     console.log('🔗 Criando EventSource para sessão:', sessionId);
     console.log('   URL (sem token):', url.substring(0, url.indexOf('?token=')) + '?token=***');
     
-    // ✅ CRIAR EVENTSOURCE
     const eventSource = new EventSource(url);
     
-    // ✅ LOG DE DEBUG
     eventSource.addEventListener('open', () => {
       console.log('✅ EventSource aberto com sucesso para sessão:', sessionId);
     });
@@ -182,20 +289,6 @@ export class InvoiceProcessingService {
     });
     
     return eventSource;
-  }
-
-  /**
-   * Obtém status de uma sessão específica
-   */
-  static async getProcessingStatus(sessionId: string): Promise<any> {
-    return ApiService.get(`/processing/status/${sessionId}`);
-  }
-
-  /**
-   * Cancela uma sessão de processamento
-   */
-  static async cancelProcessing(sessionId: string): Promise<void> {
-    return ApiService.post(`/processing/status/${sessionId}/cancel`);
   }
 
   // ===== DASHBOARD E ESTATÍSTICAS (FUTURO) =====
@@ -235,6 +328,14 @@ export class InvoiceProcessingService {
       processingErrors: [],
       lastProcessingDate: undefined
     }));
+  }
+
+  /**
+   * Obtém lista de invoices disponíveis para processamento
+   */
+  static async getAvailableInvoices(): Promise<SimpleInvoiceData[]> {
+    const result = await this.getSimpleInvoices(0, 1000);
+    return result.content;
   }
 
   // ===== UTILITÁRIOS TEMPORÁRIOS =====

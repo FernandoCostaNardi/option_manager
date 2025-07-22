@@ -1,12 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
-  FileText, Upload, Settings, TrendingUp, AlertCircle, CheckCircle, 
+  FileText, Upload, Settings, TrendingUp, CheckCircle, 
   Clock, BarChart3, RefreshCw, Download, Eye, Play, Pause,
-  Target, Shield, Activity, DollarSign
+  Target, Shield, Activity, DollarSign, Zap
 } from 'lucide-react';
 import { InvoiceProcessingService, SimpleInvoiceData } from '../../services/invoiceProcessingService';
+import { ApiService } from '../../services/api';
 import { ImportarNotaModal } from '../../components/ImportarNotaModal';
 import { InvoicesTab } from '../../components/InvoicesTab';
+import { ProcessingModal } from '../../components/ProcessingModal';
+import toast from 'react-hot-toast';
 // import { AnalyticsTab } from '../../components/AnalyticsTab';
 // import { ReconciliationTab } from '../../components/ReconciliationTab';
 
@@ -17,56 +20,244 @@ export function DashboardInvoiceProcessing() {
   // ===== ESTADOS DE UI =====
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
+  const [tabLoading, setTabLoading] = useState(false);
   const [selectedTab, setSelectedTab] = useState<'overview' | 'invoices'>('overview');
   const [modalOpen, setModalOpen] = useState(false);
+  const [processingModalOpen, setProcessingModalOpen] = useState(false);
+  const [processingEstimate, setProcessingEstimate] = useState<any>(null);
+  const [activeInvoiceTab, setActiveInvoiceTab] = useState<'pendentes' | 'processadas'>('pendentes');
+  const [overviewDataLoaded, setOverviewDataLoaded] = useState(false);
+  const loadingRef = useRef(false);
+
+  // Função wrapper para setActiveInvoiceTab
+  const handleTabChange = async (tab: 'pendentes' | 'processadas') => {
+    // Não fazer nada se já estiver na aba selecionada
+    if (tab === activeInvoiceTab) return;
+    
+    // Verificar autenticação antes de fazer a requisição
+    if (!ApiService.isAuthenticated()) {
+      console.log('❌ Usuário não autenticado. Redirecionando para login...');
+      window.location.href = '/login';
+      return;
+    }
+    
+    console.log('🔄 Mudando para aba:', tab);
+    
+    // Carregar dados ANTES de mudar a aba
+    try {
+      setTabLoading(true);
+      let processingStatus: string | undefined;
+      if (tab === 'pendentes') {
+        processingStatus = 'PENDING';
+      } else if (tab === 'processadas') {
+        processingStatus = 'SUCCESS';
+      }
+      
+      console.log('🔍 Carregando dados para aba:', tab, 'com status:', processingStatus);
+      const response = await InvoiceProcessingService.getSimpleInvoices(0, 1000, processingStatus);
+      
+      console.log('✅ Dados carregados com sucesso:', response.content.length, 'invoices');
+      
+      // Só mudar a aba após os dados estarem carregados
+      setSimpleInvoices(response.content);
+      setTotalPages(response.totalPages);
+      setTotalItems(response.totalElements);
+      setActiveInvoiceTab(tab);
+      
+    } catch (error) {
+      console.error('❌ Erro ao carregar dados para aba:', tab, error);
+      
+      // Verificar se é erro de autenticação
+      if (error instanceof Error && error.message.includes('Acesso negado')) {
+        console.log('❌ Erro de autenticação detectado. Redirecionando para login...');
+        window.location.href = '/login';
+        return;
+      }
+      
+      toast.error('Erro ao carregar dados. Tente novamente.');
+      // Em caso de erro, limpar os dados
+      setSimpleInvoices([]);
+      setTotalPages(0);
+      setTotalItems(0);
+    } finally {
+      setTabLoading(false);
+    }
+  };
   
   // ===== PAGINAÇÃO =====
   const [currentPage, setCurrentPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [totalItems, setTotalItems] = useState(0);
+  const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<string[]>([]);
 
   // ===== CARREGAMENTO INICIAL =====
   useEffect(() => {
-    loadDashboardData();
+    // Verificar se o usuário está autenticado antes de carregar dados
+    if (!ApiService.isAuthenticated()) {
+      console.log('❌ Usuário não autenticado. Redirecionando para login...');
+      window.location.href = '/login';
+      return;
+    }
+    
+    console.log('✅ Usuário autenticado. Verificação de autenticação concluída.');
+    // Removido: carregamento inicial de dados - agora só carrega quando aba for selecionada
   }, []);
 
+  // Carregar dados quando a aba "Visão Geral" for selecionada
   useEffect(() => {
-    if (selectedTab === 'invoices') {
-      loadSimpleInvoices();
+    console.log('🔄 useEffect selectedTab mudou para:', selectedTab);
+    if (selectedTab === 'overview') {
+      console.log('🔄 Aba Visão Geral selecionada, carregando dados...');
+      loadDashboardData();
+    } else {
+      // Resetar flag quando mudar para outra aba
+      console.log('🔄 Mudando para outra aba, resetando flag...');
+      setOverviewDataLoaded(false);
+      loadingRef.current = false; // Resetar também o loading ref
     }
-  }, [selectedTab, currentPage]);
+  }, [selectedTab]);
 
   // ===== FUNÇÕES DE CARREGAMENTO =====
   const loadDashboardData = async () => {
+    // Evitar chamadas simultâneas
+    if (loadingRef.current) {
+      console.log('🔄 Carregamento já em andamento, pulando...');
+      return;
+    }
+
+    // Evitar carregar se já foi carregado recentemente
+    if (overviewDataLoaded && selectedTab === 'overview') {
+      console.log('🔄 Dados da Visão Geral já carregados, pulando...');
+      return;
+    }
+
+    loadingRef.current = true;
     setLoading(true);
+    
     try {
-      const response = await InvoiceProcessingService.getSimpleInvoices(0, 1000); // Carrega todas para stats
+      console.log('🔍 Carregando dados da Visão Geral com filtro ALL...');
+      const response = await InvoiceProcessingService.getSimpleInvoices(0, 1000, 'ALL'); // Carrega todas com filtro ALL
+      console.log('✅ Dados da Visão Geral carregados:', response.content.length, 'invoices');
       setSimpleInvoices(response.content);
+      setOverviewDataLoaded(true);
     } catch (error) {
-      console.error('Erro ao carregar dados do dashboard:', error);
+      console.error('❌ Erro ao carregar dados do dashboard:', error);
     } finally {
       setLoading(false);
+      loadingRef.current = false;
     }
   };
 
   const loadSimpleInvoices = async () => {
     try {
-      const response = await InvoiceProcessingService.getSimpleInvoices(currentPage, 20);
+      let processingStatus: string | undefined;
+      if (activeInvoiceTab === 'pendentes') {
+        processingStatus = 'PENDING';
+      } else if (activeInvoiceTab === 'processadas') {
+        processingStatus = 'SUCCESS';
+      }
+      
+      const response = await InvoiceProcessingService.getSimpleInvoices(0, 1000, processingStatus);
+      
       setSimpleInvoices(response.content);
       setTotalPages(response.totalPages);
       setTotalItems(response.totalElements);
     } catch (error) {
       console.error('Erro ao carregar invoices:', error);
+      // Em caso de erro, limpar os dados para evitar mostrar dados antigos
+      setSimpleInvoices([]);
+      setTotalPages(0);
+      setTotalItems(0);
     }
   };
 
-  // ===== AÇÕES DE PROCESSAMENTO (FASE 2) =====
+  // ===== AÇÕES DE PROCESSAMENTO (FASE 2 - IMPLEMENTADO) =====
   const handleProcessAll = async () => {
-    alert('Funcionalidade de processamento será implementada na Fase 2 do sistema');
+    if (simpleInvoices.length === 0) {
+      toast.error('Nenhuma nota disponível para processamento');
+      return;
+    }
+    
+    const allInvoiceIds = simpleInvoices.map(inv => inv.id);
+    setSelectedInvoiceIds(allInvoiceIds);
+    
+    // Carregar estimativa ANTES de abrir o modal
+    try {
+      setProcessing(true);
+      console.log('🔍 Carregando estimativa para processamento de todas:', allInvoiceIds);
+      const estimate = await InvoiceProcessingService.estimateProcessing(allInvoiceIds);
+      console.log('✅ Estimativa carregada com sucesso:', estimate);
+      
+      // Armazenar estimativa e abrir modal
+      setProcessingEstimate(estimate);
+      setProcessingModalOpen(true);
+    } catch (error) {
+      console.error('❌ Erro ao carregar estimativa:', error);
+      toast.error('Erro ao preparar processamento. Tente novamente.');
+    } finally {
+      setProcessing(false);
+    }
   };
 
   const handleProcessSingle = async (invoiceId: string) => {
-    alert('Funcionalidade de processamento será implementada na Fase 2 do sistema');
+    setSelectedInvoiceIds([invoiceId]);
+    
+    // Carregar estimativa ANTES de abrir o modal
+    try {
+      setProcessing(true);
+      console.log('🔍 Carregando estimativa para processamento individual:', invoiceId);
+      const estimate = await InvoiceProcessingService.estimateProcessing([invoiceId]);
+      console.log('✅ Estimativa carregada com sucesso:', estimate);
+      
+      // Armazenar estimativa e abrir modal
+      setProcessingEstimate(estimate);
+      setProcessingModalOpen(true);
+    } catch (error) {
+      console.error('❌ Erro ao carregar estimativa:', error);
+      toast.error('Erro ao preparar processamento. Tente novamente.');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleProcessSelected = async () => {
+    if (selectedInvoiceIds.length === 0) {
+      toast.error('Selecione pelo menos uma nota para processar');
+      return;
+    }
+    
+    if (selectedInvoiceIds.length > 5) {
+      toast.error('Máximo 5 notas por vez. Selecione menos notas.');
+      return;
+    }
+    
+    // Carregar estimativa ANTES de abrir o modal
+    try {
+      setProcessing(true);
+      console.log('🔍 Carregando estimativa para processamento selecionado:', selectedInvoiceIds);
+      const estimate = await InvoiceProcessingService.estimateProcessing(selectedInvoiceIds);
+      console.log('✅ Estimativa carregada com sucesso:', estimate);
+      
+      // Armazenar estimativa e abrir modal
+      setProcessingEstimate(estimate);
+      setProcessingModalOpen(true);
+    } catch (error) {
+      console.error('❌ Erro ao carregar estimativa:', error);
+      toast.error('Erro ao preparar processamento. Tente novamente.');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleProcessingSuccess = () => {
+    // Recarregar dados após sucesso
+    loadDashboardData();
+    if (selectedTab === 'invoices') {
+      loadSimpleInvoices();
+    }
+    setSelectedInvoiceIds([]);
+    setProcessingModalOpen(false);
+    setProcessingEstimate(null);
   };
 
   // ===== UTILITÁRIOS =====
@@ -82,6 +273,14 @@ export function DashboardInvoiceProcessing() {
   const totalValue = simpleInvoices.reduce((sum, inv) => sum + inv.grossOperationsValue, 0);
   const totalCosts = simpleInvoices.reduce((sum, inv) => sum + inv.totalCosts, 0);
   const averageValue = totalInvoices > 0 ? totalValue / totalInvoices : 0;
+
+  // Log das estatísticas calculadas
+  console.log('📊 Estatísticas da Visão Geral:', {
+    totalInvoices,
+    totalValue: formatCurrency(totalValue),
+    averageValue: formatCurrency(averageValue),
+    selectedTab
+  });
 
   // ===== RENDERIZAÇÃO =====
   if (loading) {
@@ -112,6 +311,21 @@ export function DashboardInvoiceProcessing() {
               <Upload className="h-4 w-4" />
               Importar Notas
             </button>
+            
+            {selectedInvoiceIds.length > 0 && (
+              <button
+                onClick={handleProcessSelected}
+                disabled={processing}
+                className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {processing ? (
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Zap className="h-4 w-4" />
+                )}
+                Processar Selecionadas ({selectedInvoiceIds.length})
+              </button>
+            )}
             
             <button
               onClick={handleProcessAll}
@@ -231,24 +445,7 @@ export function DashboardInvoiceProcessing() {
           </div>
 
           {/* AVISO SOBRE FASE 2 */}
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <AlertCircle className="h-5 w-5 text-yellow-400" />
-              </div>
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-yellow-800">
-                  Sistema em Fase 1 - Importação
-                </h3>
-                <div className="mt-2 text-sm text-yellow-700">
-                  <p>
-                    Atualmente, o sistema está importando e exibindo as notas de corretagem. 
-                    O processamento automático para criar operações será implementado na Fase 2.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
+
 
           {/* ÚLTIMAS NOTAS IMPORTADAS */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100">
@@ -285,14 +482,23 @@ export function DashboardInvoiceProcessing() {
       )}
 
       {selectedTab === 'invoices' && (
-        <InvoicesTab
-          invoices={simpleInvoices}
-          currentPage={currentPage}
-          totalPages={totalPages}
-          totalItems={totalItems}
-          onPageChange={setCurrentPage}
-          onProcessSingle={handleProcessSingle}
-        />
+        <>
+          {console.log('🔄 Renderizando InvoicesTab com selectedTab:', selectedTab)}
+          <InvoicesTab
+            key={`invoices-tab-${selectedTab}`} // Forçar re-montagem apenas quando selectedTab muda
+            invoices={simpleInvoices}
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            selectedInvoiceIds={selectedInvoiceIds}
+            onPageChange={setCurrentPage}
+            onProcessSingle={handleProcessSingle}
+            onSelectionChange={setSelectedInvoiceIds}
+            activeTab={activeInvoiceTab}
+            onTabChange={handleTabChange}
+            tabLoading={tabLoading}
+          />
+        </>
       )}
 
       {/* MODAL DE IMPORTAÇÃO */}
@@ -303,6 +509,19 @@ export function DashboardInvoiceProcessing() {
           setModalOpen(false);
           loadDashboardData();
         }}
+      />
+
+      {/* MODAL DE PROCESSAMENTO */}
+      <ProcessingModal
+        isOpen={processingModalOpen}
+        onClose={() => {
+          setProcessingModalOpen(false);
+          setProcessingEstimate(null);
+        }}
+        invoiceIds={selectedInvoiceIds}
+        selectedInvoices={simpleInvoices.filter(inv => selectedInvoiceIds.includes(inv.id))}
+        onSuccess={handleProcessingSuccess}
+        initialEstimate={processingEstimate}
       />
     </div>
   );

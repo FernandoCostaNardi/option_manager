@@ -7,6 +7,7 @@ import com.olisystem.optionsmanager.model.Asset.Asset;
 import com.olisystem.optionsmanager.model.auth.User;
 import com.olisystem.optionsmanager.model.invoice.Invoice;
 import com.olisystem.optionsmanager.model.invoice.InvoiceItem;
+import com.olisystem.optionsmanager.model.invoice.InvoiceProcessingLog;
 import com.olisystem.optionsmanager.model.operation.AverageOperationGroup;
 import com.olisystem.optionsmanager.model.operation.Operation;
 import com.olisystem.optionsmanager.model.operation.OperationRoleType;
@@ -21,6 +22,7 @@ import com.olisystem.optionsmanager.repository.OperationRepository;
 import com.olisystem.optionsmanager.repository.optionSerie.OptionSerieRepository;
 import com.olisystem.optionsmanager.repository.position.PositionRepository;
 import com.olisystem.optionsmanager.service.asset.AssetService;
+import com.olisystem.optionsmanager.service.invoice.processing.log.InvoiceProcessingLogService;
 import com.olisystem.optionsmanager.service.operation.OperationService;
 import com.olisystem.optionsmanager.service.option_series.OptionSerieService;
 import lombok.RequiredArgsConstructor;
@@ -37,6 +39,7 @@ import java.util.UUID;
 /**
  * Processador de consolidação de invoices que integra com o sistema de consolidação existente
  * ✅ CORREÇÃO: Adicionado @Transactional para resolver problema de lazy loading
+ * ✅ NOVO: Integração com InvoiceProcessingLogService para contadores
  * 
  * @author Sistema de Gestão de Opções
  * @since 2025-07-15
@@ -58,14 +61,19 @@ public class InvoiceConsolidationProcessor {
     private final com.olisystem.optionsmanager.service.brokerage.BrokerageService brokerageService;
     private final com.olisystem.optionsmanager.service.operation.averageOperation.AverageOperationService averageOperationService;
     private final com.olisystem.optionsmanager.repository.BrokerageRepository brokerageRepository;
+    
+    // ✅ NOVO: Serviço de logs de processamento
+    private final InvoiceProcessingLogService processingLogService;
 
     /**
      * Processa invoices com sistema de consolidação
      * ✅ CORREÇÃO: Adicionado @Transactional para resolver problema de lazy loading
      * ✅ NOVO: Tratamento específico para operações de opções
+     * ✅ NOVO: Integração com InvoiceProcessingLogService para contadores
      */
     @Transactional(readOnly = false)
-    public ConsolidationResult processInvoicesWithConsolidation(List<UUID> invoiceIds, User currentUser) {
+    public ConsolidationResult processInvoicesWithConsolidation(List<UUID> invoiceIds, User currentUser, 
+                                                             String sessionId, ProcessingProgressService progressService) {
         log.info("🔄 Processando {} invoices com sistema de consolidação", invoiceIds.size());
         log.info("👤 Usuário: {}", currentUser.getEmail());
         
@@ -83,6 +91,9 @@ public class InvoiceConsolidationProcessor {
                     .orElseThrow(() -> new RuntimeException("Invoice não encontrada: " + invoiceId));
                 
                 log.info("📄 Invoice encontrada: {} - {}", invoice.getInvoiceNumber(), invoice.getTradingDate());
+                
+                // ✅ NOVO: Buscar ou criar log de processamento para esta invoice
+                InvoiceProcessingLog processingLog = processingLogService.createProcessingLog(invoice, currentUser);
                 
                 List<InvoiceItem> items = invoiceItemRepository.findByInvoiceIdWithAllRelations(invoiceId);
                 log.info("📦 Invoice {} tem {} items", invoiceId, items.size());
@@ -106,9 +117,24 @@ public class InvoiceConsolidationProcessor {
                 log.info("📋 Itens ordenados por sequenceNumber: {}", 
                     items.stream().map(item -> item.getSequenceNumber() + "(" + item.getOperationType() + ")").collect(java.util.stream.Collectors.joining(", ")));
                 
+                // ✅ NOVO: Contadores para esta invoice
+                int operationsCreatedForInvoice = 0;
+                int operationsSkippedForInvoice = 0;
+                
+                int operationCounter = 0;
                 for (InvoiceItem item : items) {
+                    operationCounter++;
                     try {
-                        log.info("🔄 Processando item {} (sequence: {}) da invoice {}", item.getId(), item.getSequenceNumber(), invoiceId);
+                        log.info("🔄 Processando item {}/{} (sequence: {}) da invoice {}", 
+                            operationCounter, items.size(), item.getSequenceNumber(), invoiceId);
+                        
+                        // ✅ NOVO: Emitir evento de processamento
+                        if (sessionId != null && progressService != null) {
+                            String invoiceIdStr = invoice.getId().toString();
+                            String invoiceNumber = invoice.getInvoiceNumber();
+                            progressService.emitProcessing(sessionId, invoiceIdStr, invoiceNumber, operationCounter, items.size());
+                            log.debug("📡 Evento de processamento emitido: operação {}/{}", operationCounter, items.size());
+                        }
                         log.info("📋 Mapeando item {} para OperationDataRequest", item.getSequenceNumber());
                         
                         // ✅ NOVO: Validação específica para opções
@@ -151,7 +177,16 @@ public class InvoiceConsolidationProcessor {
                             Operation operation = operationService.createOperation(operationRequest, currentUser);
                             log.info("✅ Operação criada: {} - TransactionType: {}", operation.getId(), operation.getTransactionType());
                         result.incrementConsolidatedOperations();
-                        log.info("📈 Contador de operações incrementado: {}", result.getConsolidatedOperationsCount());
+                        operationsCreatedForInvoice++;
+                        log.info("📈 Contador de operações incrementado: {} (invoice: {})", result.getConsolidatedOperationsCount(), operationsCreatedForInvoice);
+                        
+                        // ✅ NOVO: Emitir evento de conclusão
+                        if (sessionId != null && progressService != null) {
+                            String invoiceIdStr = invoice.getId().toString();
+                            String invoiceNumber = invoice.getInvoiceNumber();
+                            progressService.emitCompleted(sessionId, invoiceIdStr, invoiceNumber, operationCounter, items.size());
+                            log.debug("📡 Evento de conclusão emitido: operação {}/{}", operationCounter, items.size());
+                        }
                         } else {
 
                                                       // ✅ CORREÇÃO: Buscar posição em vez de operação com status ACTIVE
@@ -167,7 +202,16 @@ public class InvoiceConsolidationProcessor {
                                 log.info("✅ Operação de saída criada: {} - TransactionType: {}, Status: {}", 
                                     operation.getId(), operation.getTransactionType(), operation.getStatus());
                                 result.incrementConsolidatedOperations();
-                                log.info("📈 Contador de operações incrementado: {}", result.getConsolidatedOperationsCount());
+                                operationsCreatedForInvoice++;
+                                log.info("📈 Contador de operações incrementado: {} (invoice: {})", result.getConsolidatedOperationsCount(), operationsCreatedForInvoice);
+                                
+                                // ✅ NOVO: Emitir evento de conclusão
+                                if (sessionId != null && progressService != null) {
+                                    String invoiceIdStr = invoice.getId().toString();
+                                    String invoiceNumber = invoice.getInvoiceNumber();
+                                    progressService.emitCompleted(sessionId, invoiceIdStr, invoiceNumber, operationCounter, items.size());
+                                    log.debug("📡 Evento de conclusão emitido: operação {}/{}", operationCounter, items.size());
+                                }
                                 continue;
                             }
                             
@@ -186,7 +230,8 @@ public class InvoiceConsolidationProcessor {
                                 log.info("✅ Operação de saída criada (posição fechada): {} - TransactionType: {}, Status: {}", 
                                     operation.getId(), operation.getTransactionType(), operation.getStatus());
                                 result.incrementConsolidatedOperations();
-                                log.info("📈 Contador de operações incrementado: {}", result.getConsolidatedOperationsCount());
+                                operationsCreatedForInvoice++;
+                                log.info("📈 Contador de operações incrementado: {} (invoice: {})", result.getConsolidatedOperationsCount(), operationsCreatedForInvoice);
                                 continue;
                             }
                             
@@ -256,72 +301,48 @@ public class InvoiceConsolidationProcessor {
                                 }
                                 
                                 if (consolidatedEntryOperation == null) {
-                                    result.addError("Operação CONSOLIDATED_ENTRY não encontrada: " + item.getAssetCode());
+                                    log.error("❌ Nenhuma operação válida encontrada para saída: {}", item.getAssetCode());
+                                    operationsSkippedForInvoice++;
                                     continue;
                                 }
                             }
                             
-                            log.info("✅ Operação CONSOLIDATED_ENTRY encontrada: {} (status: {})", 
-                                consolidatedEntryOperation.getId(), consolidatedEntryOperation.getStatus());
+                            log.info("✅ Operação CONSOLIDATED_ENTRY encontrada: {} (status: {}, quantity: {})", 
+                                consolidatedEntryOperation.getId(), consolidatedEntryOperation.getStatus(), consolidatedEntryOperation.getQuantity());
                             
-                            log.info("✅ Operação CONSOLIDATED_ENTRY encontrada: {} (status: {})", 
-                                consolidatedEntryOperation.getId(), consolidatedEntryOperation.getStatus());
+                            // ✅ CORREÇÃO: Criar operação de saída usando a estratégia correta
+                            Operation exitOperation = createExitOperation(operationRequest, currentUser, consolidatedEntryOperation, quantityToUse, isTotalExit);
                             
-                            // ✅ NOVO: Log detalhado para debug da segunda operação
-                            log.info("🔍 === DEBUG SEGUNDA OPERAÇÃO ===");
-                            log.info("🔍   - Quantidade solicitada: {}", operationRequest.getQuantity());
-                            log.info("🔍   - Quantidade disponível: {}", availableQuantity);
-                            log.info("🔍   - Quantidade a usar: {}", quantityToUse);
-                            log.info("🔍   - É saída total: {}", isTotalExit);
-                            log.info("🔍   - Preço de saída: {}", operationRequest.getEntryUnitPrice());
-                            log.info("🔍   - Data de saída: {}", operationRequest.getEntryDate());
-                            log.info("🔍   - TransactionType: {}", operationRequest.getTransactionType());
-                            log.info("🔍 === FIM DEBUG ===");
-                            
-                            // converte operationRequest para OperationFinalizationRequest
-                            OperationFinalizationRequest finalizationRequest = new OperationFinalizationRequest();
-                            finalizationRequest.setOperationId(consolidatedEntryOperation.getId());
-                            finalizationRequest.setQuantity(quantityToUse);
-                            finalizationRequest.setExitUnitPrice(operationRequest.getEntryUnitPrice());
-                            finalizationRequest.setExitDate(operationRequest.getEntryDate());
-                            
-
-                            Operation operation = operationService.createExitOperation(finalizationRequest, currentUser);
-                            log.info("✅ Operação criada: {} - TransactionType: {}", operation.getId(), operation.getTransactionType());
+                            log.info("✅ Operação de saída criada: {} - TransactionType: {}, Status: {}", 
+                                exitOperation.getId(), exitOperation.getTransactionType(), exitOperation.getStatus());
                             result.incrementConsolidatedOperations();
-                            log.info("📈 Contador de operações incrementado: {}", result.getConsolidatedOperationsCount());
+                            operationsCreatedForInvoice++;
+                            log.info("📈 Contador de operações incrementado: {} (invoice: {})", result.getConsolidatedOperationsCount(), operationsCreatedForInvoice);
                         }
-                    } catch (Exception e) {
-                        log.error("❌ Erro ao processar item {} da invoice {}: {}", 
-                            item.getId(), invoiceId, e.getMessage(), e);
-                        result.addError("Erro ao processar item " + item.getId() + ": " + e.getMessage());
                         
-                        // ✅ NOVO: Log detalhado do erro para debug
-                        log.error("🔍 === DETALHES DO ERRO ===");
-                        log.error("Item ID: {}", item.getId());
-                        log.error("Sequence: {}", item.getSequenceNumber());
-                        log.error("Asset: {}", item.getAssetCode());
-                        log.error("OperationType: {}", item.getOperationType());
-                        log.error("MarketType: {}", item.getMarketType());
-                        log.error("Quantity: {}", item.getQuantity());
-                        log.error("Price: {}", item.getUnitPrice());
-                        log.error("Exception: {}", e.getClass().getSimpleName());
-                        log.error("Message: {}", e.getMessage());
-                        if (e.getCause() != null) {
-                            log.error("Cause: {}", e.getCause().getMessage());
-                        }
-                        log.error("=============================");
+                    } catch (Exception e) {
+                        log.error("❌ Erro ao processar item {} da invoice {}: {}", item.getSequenceNumber(), invoiceId, e.getMessage(), e);
+                        operationsSkippedForInvoice++;
+                        result.addError("Erro ao processar item " + item.getSequenceNumber() + ": " + e.getMessage());
                     }
                 }
+                
+                // ✅ NOVO: Atualizar contadores no log de processamento
+                processingLogService.updateCounters(processingLog, 
+                    operationsCreatedForInvoice, 
+                    0, // operationsUpdated - não implementado ainda
+                    operationsSkippedForInvoice);
+                
+                log.info("📊 Invoice {} processada: {} operações criadas, {} ignoradas", 
+                    invoice.getInvoiceNumber(), operationsCreatedForInvoice, operationsSkippedForInvoice);
             }
             
-            log.info("✅ Processamento de consolidação concluído: {} operações consolidadas", 
-                result.getConsolidatedOperationsCount());
+            log.info("✅ Processamento de consolidação concluído: {} operações criadas", result.getConsolidatedOperationsCount());
             
         } catch (Exception e) {
-            log.error("❌ Erro no processamento de consolidação: {}", e.getMessage(), e);
+            log.error("❌ Erro durante processamento de consolidação: {}", e.getMessage(), e);
             result.setSuccess(false);
-            result.setErrorMessage("Erro no processamento: " + e.getMessage());
+            result.setErrorMessage("Erro interno: " + e.getMessage());
         }
         
         return result;
@@ -465,6 +486,29 @@ public class InvoiceConsolidationProcessor {
         
         String marketType = item.getMarketType().toUpperCase();
         return marketType.contains("OPCAO") || marketType.contains("OPTION");
+    }
+
+    /**
+     * ✅ NOVO: Cria operação de saída usando a estratégia correta
+     */
+    private Operation createExitOperation(OperationDataRequest operationRequest, User currentUser, 
+                                       Operation consolidatedEntryOperation, int quantityToUse, boolean isTotalExit) {
+        log.info("🔄 Criando operação de saída: quantidade={}, total={}", quantityToUse, isTotalExit);
+        
+        // Converter operationRequest para OperationFinalizationRequest
+        OperationFinalizationRequest finalizationRequest = new OperationFinalizationRequest();
+        finalizationRequest.setOperationId(consolidatedEntryOperation.getId());
+        finalizationRequest.setQuantity(quantityToUse);
+        finalizationRequest.setExitUnitPrice(operationRequest.getEntryUnitPrice());
+        finalizationRequest.setExitDate(operationRequest.getEntryDate());
+        
+        // Criar operação de saída usando o serviço
+        Operation exitOperation = operationService.createExitOperation(finalizationRequest, currentUser);
+        
+        log.info("✅ Operação de saída criada: {} - TransactionType: {}, Status: {}", 
+            exitOperation.getId(), exitOperation.getTransactionType(), exitOperation.getStatus());
+        
+        return exitOperation;
     }
 
     /**

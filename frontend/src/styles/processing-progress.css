@@ -1,0 +1,84 @@
+.progress-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: white;
+  padding: 2rem;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+  z-index: 1000;
+  min-width: 400px;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: #f0f0f0;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 1rem;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4CAF50, #45a049);
+  transition: width 0.3s ease;
+}
+
+.progress-message {
+  font-size: 1.1rem;
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+  text-align: center;
+}
+
+.progress-counter {
+  font-size: 0.9rem;
+  color: #666;
+  text-align: center;
+}
+
+/* Animações */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* Estados de status */
+.status-pending {
+  color: #6b7280;
+}
+
+.status-started {
+  color: #3b82f6;
+}
+
+.status-completed {
+  color: #10b981;
+}
+
+.status-finished {
+  color: #059669;
+}
+
+.status-error {
+  color: #ef4444;
+}
+
+/* Responsividade */
+@media (max-width: 640px) {
+  .progress-modal {
+    min-width: 90vw;
+    margin: 1rem;
+    padding: 1.5rem;
+  }
+} 
