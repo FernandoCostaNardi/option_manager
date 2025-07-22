@@ -136,7 +136,7 @@ public class InvoiceProcessingIntegrationTest {
         
         // Act
         InvoiceConsolidationProcessor.ConsolidationResult result = 
-            consolidationProcessor.processInvoicesWithConsolidation(invoiceIds, testUser);
+            consolidationProcessor.processInvoicesWithConsolidation(invoiceIds, testUser, null, null);
 
         // Assert
         assertTrue(result.isSuccess(), "Processamento deve ser bem-sucedido");

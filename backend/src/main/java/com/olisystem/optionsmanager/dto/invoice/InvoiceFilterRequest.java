@@ -14,6 +14,7 @@ public record InvoiceFilterRequest(
     String clientName,
     LocalDate importStartDate,
     LocalDate importEndDate,
+    String processingStatus, // ✅ NOVO: Status de processamento
     int page,
     int size,
     String sortBy,
@@ -37,7 +38,7 @@ public record InvoiceFilterRequest(
      */
     public static InvoiceFilterRequest withPagination(int page, int size) {
         return new InvoiceFilterRequest(
-            null, null, null, null, null, null, null,
+            null, null, null, null, null, null, null, null,
             page, size, null, null
         );
     }
@@ -47,7 +48,7 @@ public record InvoiceFilterRequest(
      */
     public static InvoiceFilterRequest withDateRange(LocalDate startDate, LocalDate endDate) {
         return new InvoiceFilterRequest(
-            null, startDate, endDate, null, null, null, null,
+            null, startDate, endDate, null, null, null, null, null,
             0, 20, null, null
         );
     }
@@ -57,7 +58,17 @@ public record InvoiceFilterRequest(
      */
     public static InvoiceFilterRequest withBrokerage(UUID brokerageId) {
         return new InvoiceFilterRequest(
-            brokerageId, null, null, null, null, null, null,
+            brokerageId, null, null, null, null, null, null, null,
+            0, 20, null, null
+        );
+    }
+    
+    /**
+     * ✅ NOVO: Construtor simplificado com status de processamento
+     */
+    public static InvoiceFilterRequest withProcessingStatus(String processingStatus) {
+        return new InvoiceFilterRequest(
+            null, null, null, null, null, null, null, processingStatus,
             0, 20, null, null
         );
     }
@@ -77,12 +88,20 @@ public record InvoiceFilterRequest(
     }
     
     /**
+     * ✅ NOVO: Verifica se tem filtro de status de processamento
+     */
+    public boolean hasProcessingStatusFilter() {
+        return processingStatus != null;
+    }
+    
+    /**
      * Verifica se tem filtros aplicados
      */
     public boolean hasFilters() {
         return brokerageId != null || 
                hasDateRange() || 
                hasImportDateRange() ||
+               hasProcessingStatusFilter() ||
                (invoiceNumber != null && !invoiceNumber.trim().isEmpty()) ||
                (clientName != null && !clientName.trim().isEmpty());
     }

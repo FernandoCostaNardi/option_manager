@@ -2,6 +2,7 @@ package com.olisystem.optionsmanager.controller.invoice;
 
 import com.olisystem.optionsmanager.dto.invoice.*;
 import com.olisystem.optionsmanager.model.auth.User;
+import com.olisystem.optionsmanager.model.enums.InvoiceProcessingStatus;
 import com.olisystem.optionsmanager.service.invoice.InvoiceImportService;
 import com.olisystem.optionsmanager.service.invoice.InvoiceQueryService;
 import com.olisystem.optionsmanager.service.auth.UserService;
@@ -13,6 +14,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.format.annotation.DateTimeFormat;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -21,6 +23,7 @@ import java.util.UUID;
 /**
  * Controller para importação e consulta de notas de corretagem
  * Novo sistema de importação (Fase 1)
+ * ✅ ATUALIZADO: Suporte a filtro por status de processamento
  */
 @RestController
 @RequestMapping("/api/invoices-v2")
@@ -77,48 +80,51 @@ public class InvoiceV2Controller {
 
     /**
      * Lista notas com filtros e paginação
-     * GET /api/invoices
+     * GET /api/invoices-v2?page=0&size=1000&processingStatus=PENDING
+     * ✅ ATUALIZADO: Suporte a filtro por status de processamento
      */
     @GetMapping
-    public ResponseEntity<Page<InvoiceData>> listInvoices(
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size,
-            @RequestParam(defaultValue = "tradingDate") String sortBy,
-            @RequestParam(defaultValue = "DESC") String sortDirection,
+    public ResponseEntity<Page<InvoiceData>> getInvoices(
             @RequestParam(required = false) UUID brokerageId,
-            @RequestParam(required = false) LocalDate startDate,
-            @RequestParam(required = false) LocalDate endDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
             @RequestParam(required = false) String invoiceNumber,
             @RequestParam(required = false) String clientName,
-            @RequestParam(required = false) LocalDate importStartDate,
-            @RequestParam(required = false) LocalDate importEndDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate importStartDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate importEndDate,
+            @RequestParam(required = false) String processingStatus, // ✅ NOVO: Status de processamento
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "createdAt") String sortBy,
+            @RequestParam(defaultValue = "desc") String sortDirection,
             Authentication authentication) {
         
-        log.debug("Listando notas - Usuário: {}, Página: {}, Filtros aplicados: {}", 
-                  authentication.getName(), page, brokerageId != null || startDate != null);
-
-        try {
-            // Obter usuário autenticado
-            User user = userService.findByUsername(authentication.getName())
+        log.info("📋 Buscando invoices com filtros - Status: {}, Page: {}, Size: {}", 
+            processingStatus, page, size);
+        
+        User user = userService.findByUsername(authentication.getName())
                 .orElseThrow(() -> new RuntimeException("Usuário não encontrado"));
-            
-            // Criar filtros
-            InvoiceFilterRequest filters = new InvoiceFilterRequest(
-                brokerageId, startDate, endDate, invoiceNumber, clientName,
-                importStartDate, importEndDate, page, size, sortBy, sortDirection
-            );
-            
-            // Buscar notas
-            Page<InvoiceData> invoices = invoiceQueryService.findInvoicesWithFilters(filters, user);
-            
-            log.debug("✅ Encontradas {} notas na página {}", invoices.getNumberOfElements(), page);
-            
-            return ResponseEntity.ok(invoices);
-            
-        } catch (Exception e) {
-            log.error("❌ Erro ao listar notas: {}", e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
+        
+        InvoiceFilterRequest filterRequest = new InvoiceFilterRequest(
+            brokerageId,
+            startDate,
+            endDate,
+            invoiceNumber,
+            clientName,
+            importStartDate,
+            importEndDate,
+            processingStatus, // ✅ NOVO: Status de processamento
+            page,
+            size,
+            sortBy,
+            sortDirection
+        );
+        
+        // ✅ NOVO: Usar método com suporte ao filtro ALL
+        Page<InvoiceData> invoices = invoiceQueryService.findInvoicesWithProcessingStatusFilter(filterRequest, user);
+        
+        log.info("✅ Encontradas {} invoices", invoices.getTotalElements());
+        return ResponseEntity.ok(invoices);
     }
 
     /**
@@ -217,6 +223,7 @@ public class InvoiceV2Controller {
     /**
      * Conta total de notas do usuário
      * GET /api/invoices/count
+     * ✅ ATUALIZADO: Conta apenas notas não processadas por padrão
      */
     @GetMapping("/count")
     public ResponseEntity<Long> countInvoices(Authentication authentication) {
@@ -226,15 +233,40 @@ public class InvoiceV2Controller {
             User user = userService.findByUsername(authentication.getName())
                 .orElseThrow(() -> new RuntimeException("Usuário não encontrado"));
             
-            // Contar notas
+            // Contar notas não processadas
             Long count = invoiceQueryService.countInvoicesByUser(user);
             
-            log.debug("✅ Usuário {} possui {} notas", authentication.getName(), count);
+            log.debug("✅ Usuário {} possui {} notas não processadas", authentication.getName(), count);
             
             return ResponseEntity.ok(count);
             
         } catch (Exception e) {
             log.error("❌ Erro ao contar notas: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+    
+    /**
+     * ✅ NOVO: Conta notas pendentes do usuário
+     * GET /api/invoices-v2/count/pending
+     */
+    @GetMapping("/count/pending")
+    public ResponseEntity<Long> countPendingInvoices(Authentication authentication) {
+        
+        try {
+            // Obter usuário autenticado
+            User user = userService.findByUsername(authentication.getName())
+                .orElseThrow(() -> new RuntimeException("Usuário não encontrado"));
+            
+            // Contar notas pendentes
+            Long count = invoiceQueryService.countPendingInvoicesByUser(user);
+            
+            log.debug("✅ Usuário {} possui {} notas pendentes", authentication.getName(), count);
+            
+            return ResponseEntity.ok(count);
+            
+        } catch (Exception e) {
+            log.error("❌ Erro ao contar notas pendentes: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }

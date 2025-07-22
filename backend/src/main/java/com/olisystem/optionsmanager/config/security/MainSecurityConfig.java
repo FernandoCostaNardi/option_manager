@@ -55,6 +55,7 @@ public class MainSecurityConfig {
             .requestMatchers("/api/invoice-processing/dashboard/**").permitAll() // Dashboard sem auth
             .requestMatchers("/api/ocr/**").permitAll() // OCR sem auth (quando implementado)
             .requestMatchers("/api/processing/**").permitAll() // Todo processing sem auth para teste
+            .requestMatchers("/api/invoice/processing/**").permitAll() // Todo invoice processing sem auth para teste
             .requestMatchers("/api/v1/test/invoices/**").permitAll() // <-- LIBERAR TESTE PARA ACESSO PÚBLICO
             .anyRequest().authenticated());
     // Adicione o filtro JWT antes do UsernamePasswordAuthenticationFilter

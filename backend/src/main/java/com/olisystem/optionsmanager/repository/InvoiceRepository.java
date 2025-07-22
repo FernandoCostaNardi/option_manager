@@ -1,6 +1,7 @@
 package com.olisystem.optionsmanager.repository;
 
 import com.olisystem.optionsmanager.model.invoice.Invoice;
+import com.olisystem.optionsmanager.model.enums.InvoiceProcessingStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -116,4 +117,86 @@ public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
         @Param("brokerageId") UUID brokerageId,
         @Param("userId") UUID userId
     );
+    
+    // === ✅ NOVOS MÉTODOS PARA FILTRO POR STATUS DE PROCESSAMENTO ===
+    
+    /**
+     * ✅ NOVO: Busca notas por usuário e status de processamento
+     * Retorna apenas invoices que NÃO foram processadas (não têm log ou têm status PENDING/ERROR)
+     */
+    @Query("SELECT i FROM Invoice i WHERE i.user.id = :userId " +
+           "AND (NOT EXISTS (SELECT 1 FROM InvoiceProcessingLog ipl WHERE ipl.invoice = i) " +
+           "OR EXISTS (SELECT 1 FROM InvoiceProcessingLog ipl WHERE ipl.invoice = i AND ipl.status IN ('PENDING', 'ERROR'))) " +
+           "ORDER BY i.tradingDate DESC")
+    Page<Invoice> findByUserAndNotProcessed(
+        @Param("userId") UUID userId,
+        Pageable pageable
+    );
+    
+    /**
+     * ✅ NOVO: Busca notas por usuário e status específico de processamento
+     */
+    @Query("SELECT i FROM Invoice i WHERE i.user.id = :userId " +
+           "AND (CASE " +
+           "  WHEN :status = 'PENDING' THEN " +
+           "    (NOT EXISTS (SELECT 1 FROM InvoiceProcessingLog ipl WHERE ipl.invoice = i) " +
+           "     OR EXISTS (SELECT 1 FROM InvoiceProcessingLog ipl WHERE ipl.invoice = i AND ipl.status = 'PENDING')) " +
+           "  WHEN :status = 'SUCCESS' THEN " +
+           "    EXISTS (SELECT 1 FROM InvoiceProcessingLog ipl WHERE ipl.invoice = i AND ipl.status = 'SUCCESS') " +
+           "  WHEN :status = 'PARTIAL_SUCCESS' THEN " +
+           "    EXISTS (SELECT 1 FROM InvoiceProcessingLog ipl WHERE ipl.invoice = i AND ipl.status = 'PARTIAL_SUCCESS') " +
+           "  WHEN :status = 'ERROR' THEN " +
+           "    EXISTS (SELECT 1 FROM InvoiceProcessingLog ipl WHERE ipl.invoice = i AND ipl.status = 'ERROR') " +
+           "  WHEN :status = 'PROCESSING' THEN " +
+           "    EXISTS (SELECT 1 FROM InvoiceProcessingLog ipl WHERE ipl.invoice = i AND ipl.status = 'PROCESSING') " +
+           "  WHEN :status = 'CANCELLED' THEN " +
+           "    EXISTS (SELECT 1 FROM InvoiceProcessingLog ipl WHERE ipl.invoice = i AND ipl.status = 'CANCELLED') " +
+           "  ELSE FALSE " +
+           "END) " +
+           "ORDER BY i.tradingDate DESC")
+    Page<Invoice> findByUserAndProcessingStatus(
+        @Param("userId") UUID userId,
+        @Param("status") String status,
+        Pageable pageable
+    );
+    
+    /**
+     * ✅ NOVO: Busca notas por usuário que NÃO foram processadas (para aba "Todas")
+     */
+    @Query("SELECT i FROM Invoice i WHERE i.user.id = :userId " +
+           "AND (NOT EXISTS (SELECT 1 FROM InvoiceProcessingLog ipl WHERE ipl.invoice = i) " +
+           "OR EXISTS (SELECT 1 FROM InvoiceProcessingLog ipl WHERE ipl.invoice = i AND ipl.status IN ('PENDING', 'ERROR'))) " +
+           "ORDER BY i.tradingDate DESC")
+    Page<Invoice> findByUserAndNotSuccessfullyProcessed(
+        @Param("userId") UUID userId,
+        Pageable pageable
+    );
+    
+    /**
+     * ✅ NOVO: Busca notas por usuário que estão pendentes (para aba "Pendentes")
+     */
+    @Query("SELECT i FROM Invoice i WHERE i.user.id = :userId " +
+           "AND (NOT EXISTS (SELECT 1 FROM InvoiceProcessingLog ipl WHERE ipl.invoice = i) " +
+           "OR EXISTS (SELECT 1 FROM InvoiceProcessingLog ipl WHERE ipl.invoice = i AND ipl.status = 'PENDING')) " +
+           "ORDER BY i.tradingDate DESC")
+    Page<Invoice> findByUserAndPending(
+        @Param("userId") UUID userId,
+        Pageable pageable
+    );
+    
+    /**
+     * ✅ NOVO: Conta notas não processadas por usuário
+     */
+    @Query("SELECT COUNT(i) FROM Invoice i WHERE i.user.id = :userId " +
+           "AND (NOT EXISTS (SELECT 1 FROM InvoiceProcessingLog ipl WHERE ipl.invoice = i) " +
+           "OR EXISTS (SELECT 1 FROM InvoiceProcessingLog ipl WHERE ipl.invoice = i AND ipl.status IN ('PENDING', 'ERROR')))")
+    Long countByUserAndNotProcessed(@Param("userId") UUID userId);
+    
+    /**
+     * ✅ NOVO: Conta notas pendentes por usuário
+     */
+    @Query("SELECT COUNT(i) FROM Invoice i WHERE i.user.id = :userId " +
+           "AND (NOT EXISTS (SELECT 1 FROM InvoiceProcessingLog ipl WHERE ipl.invoice = i) " +
+           "OR EXISTS (SELECT 1 FROM InvoiceProcessingLog ipl WHERE ipl.invoice = i AND ipl.status = 'PENDING'))")
+    Long countByUserAndPending(@Param("userId") UUID userId);
 }
