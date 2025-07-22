@@ -251,10 +251,10 @@ export function InvoicesTab({
                       Itens / Valor
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Processamento
+                      Status
                     </th>
                     <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Ações
+                      {activeTab === 'processadas' ? 'Visualizar' : 'Processar'}
                     </th>
                   </tr>
                 </thead>
@@ -310,21 +310,27 @@ export function InvoicesTab({
                       
                       <td className="px-6 py-4 whitespace-nowrap text-center">
                         <div className="flex items-center justify-center space-x-2">
-                          <button
-                            onClick={() => handleViewDetails(invoice)}
-                            className="text-indigo-600 hover:text-indigo-900 p-1"
-                            title="Ver detalhes"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </button>
+                          {/* Aba "Processadas": Mostrar apenas botão de visualizar */}
+                          {activeTab === 'processadas' && (
+                            <button
+                              onClick={() => handleViewDetails(invoice)}
+                              className="text-indigo-600 hover:text-indigo-900 p-1"
+                              title="Ver detalhes"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </button>
+                          )}
                           
-                          <button
-                            onClick={() => onProcessSingle(invoice.id)}
-                            className="text-purple-600 hover:text-purple-900 p-1"
-                            title="Processar esta nota"
-                          >
-                            <Play className="h-4 w-4" />
-                          </button>
+                          {/* Aba "Pendentes": Mostrar apenas botão de processar */}
+                          {activeTab === 'pendentes' && (
+                            <button
+                              onClick={() => onProcessSingle(invoice.id)}
+                              className="text-purple-600 hover:text-purple-900 p-1"
+                              title="Processar esta nota"
+                            >
+                              <Play className="h-4 w-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
