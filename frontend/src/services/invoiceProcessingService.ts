@@ -185,9 +185,10 @@ export class InvoiceProcessingService {
       return await ApiService.get('/invoices-v2/count/pending');
     } catch (error) {
       console.log('⚠️ Endpoint /count/pending não disponível, usando fallback');
-      // Fallback: buscar todas as invoices e contar as não processadas
-      const response = await ApiService.get('/invoices-v2?page=0&size=1000');
-      return response.totalElements || 0;
+      // Fallback: buscar invoices pendentes e contar
+      const response = await InvoiceProcessingService.getSimpleInvoices(0, 1000, 'PENDING');
+      console.log('✅ Fallback getPendingCount - Total de invoices pendentes:', response.totalElements);
+      return response.totalElements;
     }
   }
 
@@ -200,10 +201,10 @@ export class InvoiceProcessingService {
       return await ApiService.get('/invoices-v2/count/success');
     } catch (error) {
       console.log('⚠️ Endpoint /count/success não disponível, usando fallback');
-      // Fallback: buscar todas as invoices e contar as processadas
-      const response = await ApiService.get('/invoices-v2?page=0&size=1000');
-      // Por enquanto, retornar 0 até o backend implementar o endpoint
-      return 0;
+      // Fallback: buscar invoices processadas e contar
+      const response = await InvoiceProcessingService.getSimpleInvoices(0, 1000, 'SUCCESS');
+      console.log('✅ Fallback getProcessedCount - Total de invoices processadas:', response.totalElements);
+      return response.totalElements;
     }
   }
 

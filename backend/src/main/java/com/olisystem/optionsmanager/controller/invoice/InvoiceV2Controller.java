@@ -105,8 +105,8 @@ public class InvoiceV2Controller {
             @RequestParam(required = false) String processingStatus, // ✅ NOVO: Status de processamento
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
-            @RequestParam(defaultValue = "createdAt") String sortBy,
-            @RequestParam(defaultValue = "desc") String sortDirection,
+            @RequestParam(defaultValue = "tradingDate") String sortBy, // ✅ ALTERADO: Padrão agora é tradingDate
+            @RequestParam(defaultValue = "asc") String sortDirection, // ✅ ALTERADO: Padrão agora é asc (menor para maior)
             Authentication authentication) {
         
         log.info("📋 Buscando invoices com filtros - Status: {}, Page: {}, Size: {}", 
@@ -115,6 +115,7 @@ public class InvoiceV2Controller {
         User user = userService.findByUsername(authentication.getName())
                 .orElseThrow(() -> new RuntimeException("Usuário não encontrado"));
         
+        // ✅ FORÇAR: Sempre ordenar por tradingDate em ordem crescente
         InvoiceFilterRequest filterRequest = new InvoiceFilterRequest(
             brokerageId,
             startDate,
@@ -126,8 +127,8 @@ public class InvoiceV2Controller {
             processingStatus, // ✅ NOVO: Status de processamento
             page,
             size,
-            sortBy,
-            sortDirection
+            "tradingDate", // ✅ FORÇADO: Sempre ordenar por tradingDate
+            "asc" // ✅ FORÇADO: Sempre ordem crescente (menor para maior)
         );
         
         // ✅ NOVO: Usar método com suporte ao filtro ALL
@@ -297,6 +298,7 @@ public class InvoiceV2Controller {
             User testUser = userService.findByUsername("fc-nardi@hotmail.com")
                 .orElseThrow(() -> new RuntimeException("Usuário de teste não encontrado"));
             
+            // ✅ FORÇAR: Sempre ordenar por tradingDate em ordem crescente
             InvoiceFilterRequest filterRequest = new InvoiceFilterRequest(
                 null, // brokerageId
                 null, // startDate
@@ -308,18 +310,17 @@ public class InvoiceV2Controller {
                 "PENDING", // processingStatus
                 page,
                 size,
-                "createdAt",
-                "desc"
+                "tradingDate", // ✅ FORÇADO: Sempre ordenar por tradingDate
+                "asc" // ✅ FORÇADO: Sempre ordem crescente (menor para maior)
             );
             
-            // ✅ NOVO: Usar método com suporte ao filtro PENDING
             Page<InvoiceData> invoices = invoiceQueryService.findInvoicesWithProcessingStatusFilter(filterRequest, testUser);
             
-            log.info("✅ TESTE: Encontradas {} invoices pendentes", invoices.getTotalElements());
+            log.info("🧪 TESTE: Encontradas {} invoices pendentes", invoices.getTotalElements());
             return ResponseEntity.ok(invoices);
             
         } catch (Exception e) {
-            log.error("❌ TESTE: Erro ao buscar invoices pendentes: {}", e.getMessage(), e);
+            log.error("❌ Erro no teste: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }

@@ -36,15 +36,15 @@ public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
                                                        @Param("brokerageId") UUID brokerageId);
     
     // Buscar por usuário
-    List<Invoice> findByUserIdOrderByTradingDateDesc(UUID userId);
+    List<Invoice> findByUserIdOrderByTradingDateAsc(UUID userId);
     
     // Buscar por período
-    @Query("SELECT i FROM Invoice i WHERE i.tradingDate BETWEEN :startDate AND :endDate ORDER BY i.tradingDate DESC")
+    @Query("SELECT i FROM Invoice i WHERE i.tradingDate BETWEEN :startDate AND :endDate ORDER BY i.tradingDate ASC")
     List<Invoice> findByTradingDateBetween(@Param("startDate") LocalDate startDate, 
                                           @Param("endDate") LocalDate endDate);
     
     // Buscar por corretora
-    List<Invoice> findByBrokerageIdOrderByTradingDateDesc(UUID brokerageId);
+    List<Invoice> findByBrokerageIdOrderByTradingDateAsc(UUID brokerageId);
     
     // Verificar se existe por hash (para validação rápida)
     boolean existsByFileHash(String fileHash);
@@ -54,7 +54,7 @@ public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
     // List<Invoice> findUnprocessedInvoices();
     
     // Implementação temporária - retorna todas as invoices
-    @Query("SELECT i FROM Invoice i ORDER BY i.tradingDate DESC")
+    @Query("SELECT i FROM Invoice i ORDER BY i.tradingDate ASC")
     List<Invoice> findUnprocessedInvoices();
     
     // === MÉTODOS ADICIONADOS PARA SISTEMA DE IMPORTAÇÃO V2 ===
@@ -66,7 +66,7 @@ public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
            "LEFT JOIN FETCH i.items " +
            "LEFT JOIN FETCH i.brokerage " +
            "WHERE i.user.id = :userId " +
-           "ORDER BY i.tradingDate DESC")
+           "ORDER BY i.tradingDate ASC")
     Page<Invoice> findByUser(@Param("userId") UUID userId, Pageable pageable);
 
     /**
@@ -75,7 +75,8 @@ public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
     @Query("SELECT DISTINCT i FROM Invoice i " +
            "LEFT JOIN FETCH i.items " +
            "LEFT JOIN FETCH i.brokerage " +
-           "WHERE i.brokerage.id = :brokerageId AND i.user.id = :userId")
+           "WHERE i.brokerage.id = :brokerageId AND i.user.id = :userId " +
+           "ORDER BY i.tradingDate ASC")
     Page<Invoice> findByBrokerageAndUser(
         @Param("brokerageId") UUID brokerageId,
         @Param("userId") UUID userId,
@@ -90,7 +91,7 @@ public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
            "LEFT JOIN FETCH i.brokerage " +
            "WHERE i.user.id = :userId " +
            "AND i.tradingDate BETWEEN :startDate AND :endDate " +
-           "ORDER BY i.tradingDate DESC")
+           "ORDER BY i.tradingDate ASC")
     Page<Invoice> findByUserAndDateRange(
         @Param("userId") UUID userId,
         @Param("startDate") LocalDate startDate,
@@ -106,7 +107,7 @@ public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
            "LEFT JOIN FETCH i.brokerage " +
            "WHERE i.user.id = :userId " +
            "AND DATE(i.importedAt) = :importDate " +
-           "ORDER BY i.importedAt DESC")
+           "ORDER BY i.importedAt ASC")
     List<Invoice> findByUserAndImportDate(
         @Param("userId") UUID userId,
         @Param("importDate") LocalDate importDate
@@ -119,7 +120,7 @@ public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
            "LEFT JOIN FETCH i.items " +
            "LEFT JOIN FETCH i.brokerage " +
            "WHERE i.user.id = :userId " +
-           "ORDER BY i.importedAt DESC")
+           "ORDER BY i.importedAt ASC")
     List<Invoice> findLatestImportedByUser(@Param("userId") UUID userId, Pageable pageable);
 
     /**
@@ -149,7 +150,7 @@ public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
            "WHERE i.user.id = :userId " +
            "AND (NOT EXISTS (SELECT 1 FROM InvoiceProcessingLog ipl WHERE ipl.invoice = i) " +
            "OR EXISTS (SELECT 1 FROM InvoiceProcessingLog ipl WHERE ipl.invoice = i AND ipl.status IN ('PENDING', 'ERROR'))) " +
-           "ORDER BY i.tradingDate DESC")
+           "ORDER BY i.tradingDate ASC")
     Page<Invoice> findByUserAndNotProcessed(
         @Param("userId") UUID userId,
         Pageable pageable
@@ -178,7 +179,7 @@ public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
            "    EXISTS (SELECT 1 FROM InvoiceProcessingLog ipl WHERE ipl.invoice = i AND ipl.status = 'CANCELLED') " +
            "  ELSE FALSE " +
            "END) " +
-           "ORDER BY i.tradingDate DESC")
+           "ORDER BY i.tradingDate ASC")
     Page<Invoice> findByUserAndProcessingStatus(
         @Param("userId") UUID userId,
         @Param("status") String status,
@@ -194,7 +195,7 @@ public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
            "WHERE i.user.id = :userId " +
            "AND (NOT EXISTS (SELECT 1 FROM InvoiceProcessingLog ipl WHERE ipl.invoice = i) " +
            "OR EXISTS (SELECT 1 FROM InvoiceProcessingLog ipl WHERE ipl.invoice = i AND ipl.status IN ('PENDING', 'ERROR'))) " +
-           "ORDER BY i.tradingDate DESC")
+           "ORDER BY i.tradingDate ASC")
     Page<Invoice> findByUserAndNotSuccessfullyProcessed(
         @Param("userId") UUID userId,
         Pageable pageable
@@ -209,7 +210,7 @@ public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
            "WHERE i.user.id = :userId " +
            "AND (NOT EXISTS (SELECT 1 FROM InvoiceProcessingLog ipl WHERE ipl.invoice = i) " +
            "OR EXISTS (SELECT 1 FROM InvoiceProcessingLog ipl WHERE ipl.invoice = i AND ipl.status = 'PENDING')) " +
-           "ORDER BY i.tradingDate DESC")
+           "ORDER BY i.tradingDate ASC")
     Page<Invoice> findByUserAndPending(
         @Param("userId") UUID userId,
         Pageable pageable

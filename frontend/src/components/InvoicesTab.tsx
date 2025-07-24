@@ -179,22 +179,22 @@ export function InvoicesTab({
     const loadCounts = async () => {
       try {
         console.log('🔍 Carregando contadores das abas...', forceRefreshCounts ? '(forçado)' : '');
-        const [pendingResponse, processedResponse] = await Promise.all([
-          InvoiceProcessingService.getSimpleInvoices(0, 1000, 'PENDING'),
-          InvoiceProcessingService.getSimpleInvoices(0, 1000, 'SUCCESS')
+        
+        // Usar os métodos específicos de contagem
+        const [pendingCount, processedCount] = await Promise.all([
+          InvoiceProcessingService.getPendingCount(),
+          InvoiceProcessingService.getProcessedCount()
         ]);
         
-        console.log('✅ Contadores carregados:', {
-          pendentes: pendingResponse.totalElements,
-          processadas: processedResponse.totalElements,
-          'dados-pendentes-reais': pendingResponse.content.length,
-          'dados-processadas-reais': processedResponse.content.length,
+        console.log('✅ Contadores carregados via métodos específicos:', {
+          pendentes: pendingCount,
+          processadas: processedCount,
           'forcado': forceRefreshCounts
         });
         
         setCounts({
-          pendentes: pendingResponse.totalElements,
-          processadas: processedResponse.totalElements
+          pendentes: pendingCount,
+          processadas: processedCount
         });
         
         // Marcar como carregado para evitar chamadas duplicadas

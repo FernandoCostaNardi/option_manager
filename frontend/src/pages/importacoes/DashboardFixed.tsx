@@ -69,18 +69,6 @@ export function DashboardInvoiceProcessing() {
       console.log('📊 Status solicitado:', processingStatus, 'Total de elementos:', response.totalElements);
       console.log('📊 Primeiras 3 invoices:', response.content.slice(0, 3).map(inv => ({ id: inv.id, number: inv.invoiceNumber })));
       
-      // ✅ CORREÇÃO: Temporariamente remover filtro frontend para debug
-      console.log('🔍 DEBUG - Dados recebidos da API no handleTabChange:', {
-        'status-solicitado': processingStatus,
-        'total-recebido': response.content.length,
-        'primeiras-3-invoices': response.content.slice(0, 3).map(inv => ({
-          id: inv.id,
-          number: inv.invoiceNumber,
-          itemsCount: inv.itemsCount
-        }))
-      });
-      
-      // ✅ CORREÇÃO: Usar dados sem filtro frontend por enquanto
       setSimpleInvoices(response.content);
       setTotalPages(response.totalPages);
       setTotalItems(response.totalElements);
@@ -132,9 +120,6 @@ export function DashboardInvoiceProcessing() {
     if (selectedTab === 'overview') {
       console.log('🔄 Aba Visão Geral selecionada, carregando dados...');
       loadDashboardData();
-    } else if (selectedTab === 'invoices') {
-      console.log('🔄 Aba Invoices selecionada, carregando dados das invoices...');
-      loadSimpleInvoices();
     } else {
       // Resetar flag quando mudar para outra aba
       console.log('🔄 Mudando para outra aba, resetando flag...');
@@ -200,8 +185,7 @@ export function DashboardInvoiceProcessing() {
     setTotalPages(0);
     setTotalItems(0);
     
-    // ✅ CORREÇÃO: Ativar loading da aba
-    setTabLoading(true);
+
     
     try {
       let processingStatus: string | undefined;
@@ -215,19 +199,7 @@ export function DashboardInvoiceProcessing() {
       const response = await InvoiceProcessingService.getSimpleInvoices(0, 1000, processingStatus);
       console.log('✅ Invoices carregadas:', response.content.length, 'com status:', processingStatus);
       
-              // ✅ CORREÇÃO: Temporariamente remover filtro frontend para debug
-      console.log('🔍 DEBUG - Dados recebidos da API:', {
-        'status-solicitado': processingStatus,
-        'total-recebido': response.content.length,
-        'primeiras-3-invoices': response.content.slice(0, 3).map(inv => ({
-          id: inv.id,
-          number: inv.invoiceNumber,
-          itemsCount: inv.itemsCount
-        }))
-      });
-      
-      // ✅ CORREÇÃO: Usar dados sem filtro frontend por enquanto
-      setSimpleInvoices(response.content);
+              setSimpleInvoices(response.content);
       setTotalPages(response.totalPages);
       setTotalItems(response.totalElements);
     } catch (error) {
@@ -236,9 +208,6 @@ export function DashboardInvoiceProcessing() {
       setSimpleInvoices([]);
       setTotalPages(0);
       setTotalItems(0);
-    } finally {
-      // ✅ CORREÇÃO: Desativar loading da aba
-      setTabLoading(false);
     }
   };
 
@@ -356,15 +325,6 @@ export function DashboardInvoiceProcessing() {
   const handleProcessingSuccess = () => {
     console.log('✅ Processamento concluído com sucesso - Recarregando dados...');
     
-    // ✅ CORREÇÃO: Limpar lista antes de recarregar dados
-    console.log('🧹 Limpando lista após processamento...');
-    setSimpleInvoices([]);
-    setTotalPages(0);
-    setTotalItems(0);
-    
-    // ✅ CORREÇÃO: Forçar refresh dos contadores
-    setForceRefreshCounts(true);
-    
     // Recarregar dados após sucesso
     loadDashboardData();
     if (selectedTab === 'invoices') {
@@ -374,11 +334,6 @@ export function DashboardInvoiceProcessing() {
     setSelectedInvoiceIds([]);
     setProcessingModalOpen(false);
     setProcessingEstimate(null);
-    
-    // Resetar o flag após um delay para permitir que o InvoicesTab processe
-    setTimeout(() => {
-      setForceRefreshCounts(false);
-    }, 1000);
   };
 
   // ===== UTILITÁRIOS =====
@@ -433,32 +388,17 @@ export function DashboardInvoiceProcessing() {
               Importar Notas
             </button>
             
-            {selectedInvoiceIds.length > 0 && (
-              <button
-                onClick={handleProcessSelected}
-                disabled={processing}
-                className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                {processing ? (
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Zap className="h-4 w-4" />
-                )}
-                Processar Selecionadas ({selectedInvoiceIds.length})
-              </button>
-            )}
-            
             <button
-              onClick={handleProcessAll}
-              disabled={processing || pendingInvoicesCount === 0}
-              className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
+              onClick={handleProcessSelected}
+              disabled={processing || selectedInvoiceIds.length === 0}
+              className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {processing ? (
                 <RefreshCw className="h-4 w-4 animate-spin" />
               ) : (
-                <Play className="h-4 w-4" />
+                <Zap className="h-4 w-4" />
               )}
-              Processar Todas ({pendingInvoicesCount})
+              Processar Selecionadas ({selectedInvoiceIds.length})
             </button>
           </div>
         </div>
@@ -473,16 +413,7 @@ export function DashboardInvoiceProcessing() {
           ].map(({ key, label, icon: Icon }) => (
             <button
               key={key}
-              onClick={() => {
-                console.log('🔄 Clicou na aba:', key);
-                setSelectedTab(key as any);
-                
-                // ✅ CORREÇÃO: Se clicou em "invoices", carregar dados das invoices
-                if (key === 'invoices') {
-                  console.log('🔄 Carregando dados das invoices ao clicar na aba...');
-                  loadSimpleInvoices();
-                }
-              }}
+              onClick={() => setSelectedTab(key as any)}
               className={`py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap flex items-center gap-2 ${
                 selectedTab === key
                   ? 'border-purple-500 text-purple-600'
