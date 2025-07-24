@@ -57,6 +57,7 @@ public class MainSecurityConfig {
             .requestMatchers("/api/processing/**").permitAll() // Todo processing sem auth para teste
             .requestMatchers("/api/invoice/processing/**").permitAll() // Todo invoice processing sem auth para teste
             .requestMatchers("/api/v1/test/invoices/**").permitAll() // <-- LIBERAR TESTE PARA ACESSO PÚBLICO
+            .requestMatchers("/api/invoices-v2/test/**").permitAll() // <-- LIBERAR TESTE DE INVOICES PARA ACESSO PÚBLICO
             .anyRequest().authenticated());
     // Adicione o filtro JWT antes do UsernamePasswordAuthenticationFilter
     http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

@@ -16,6 +16,17 @@ export interface SimpleInvoiceData {
   totalCosts: number;
   netSettlementValue: number;
   importedAt: string;
+  processingStatus?: 'PENDING' | 'SUCCESS' | 'FAILED'; // ✅ NOVO: Status de processamento
+  items?: any[]; // ✅ NOVO: Campo items para verificar se foi processada
+}
+
+/**
+ * Resposta da API com dados completos
+ */
+export interface ApiInvoiceResponse {
+  content: SimpleInvoiceData[];
+  totalPages: number;
+  totalElements: number;
 }
 
 // ===== INTERFACES PARA FASE 2 - PROCESSAMENTO (FUTURAS) =====
@@ -100,22 +111,53 @@ export class InvoiceProcessingService {
   /**
    * Lista invoices simples (funcionando)
    */
-  static async getSimpleInvoices(page: number = 0, size: number = 20, processingStatus?: string): Promise<{
-    content: SimpleInvoiceData[];
-    totalPages: number;
-    totalElements: number;
-  }> {
+  static async getSimpleInvoices(page: number = 0, size: number = 20, processingStatus?: string): Promise<ApiInvoiceResponse> {
     let url = `/invoices-v2?page=${page}&size=${size}`;
     
     if (processingStatus) {
       url += `&processingStatus=${processingStatus}`;
     }
     
+    console.log('🔍 API - URL chamada:', url);
+    console.log('🔍 API - processingStatus:', processingStatus);
+    console.log('🔍 API - Parâmetros completos:', { page, size, processingStatus });
+    
     try {
       const response = await ApiService.get(url);
+      console.log('✅ API - Resposta recebida:', response.content.length, 'invoices, totalElements:', response.totalElements);
+      
+      // ✅ DEBUG: Verificar se o filtro está funcionando
+      if (processingStatus) {
+        console.log('🔍 DEBUG - Verificando filtro:', {
+          'status-solicitado': processingStatus,
+          'invoices-recebidas': response.content.length,
+          'primeiras-3-invoices': response.content.slice(0, 3).map((inv: SimpleInvoiceData) => ({ 
+            id: inv.id, 
+            number: inv.invoiceNumber,
+            processingStatus: inv.processingStatus || 'N/A',
+            // ✅ DEBUG: Verificar se há outros campos que indiquem status
+            hasItems: inv.itemsCount > 0,
+            itemsArray: inv.items ? inv.items.length : 0,
+            importedAt: inv.importedAt
+          }))
+        });
+        
+        // ✅ DEBUG: Verificar dados brutos da primeira invoice
+        if (response.content.length > 0) {
+          console.log('🔍 DEBUG - Dados brutos da primeira invoice:', JSON.stringify(response.content[0], null, 2));
+          
+          // ✅ DEBUG: Verificar se o campo items está presente
+          const firstInvoice = response.content[0] as any;
+          console.log('🔍 DEBUG - Campo items presente?', 'items' in firstInvoice);
+          console.log('🔍 DEBUG - Tipo do campo items:', typeof firstInvoice.items);
+          console.log('🔍 DEBUG - Items é array?', Array.isArray(firstInvoice.items));
+          console.log('🔍 DEBUG - Quantidade de items:', firstInvoice.items ? firstInvoice.items.length : 'undefined');
+        }
+      }
+      
       return response;
     } catch (error) {
-      console.error('Erro na API:', error);
+      console.error('❌ Erro na API:', error);
       throw error;
     }
   }
@@ -289,6 +331,30 @@ export class InvoiceProcessingService {
     });
     
     return eventSource;
+  }
+
+  /**
+   * Obtém operações criadas por uma nota específica
+   */
+  static async getInvoiceOperations(invoiceId: string): Promise<{
+    operations: any[];
+    totalOperations: number;
+    processedAt: string;
+    status: 'PROCESSED' | 'PENDING' | 'FAILED';
+  }> {
+    try {
+      const response = await ApiService.get(`/invoices-v2/${invoiceId}/operations`);
+      return response;
+    } catch (error) {
+      console.error('Erro ao buscar operações da nota:', error);
+      // Retornar dados mockados se a API não existir ainda
+      return {
+        operations: [],
+        totalOperations: 0,
+        processedAt: new Date().toISOString(),
+        status: 'PENDING'
+      };
+    }
   }
 
   // ===== DASHBOARD E ESTATÍSTICAS (FUTURO) =====

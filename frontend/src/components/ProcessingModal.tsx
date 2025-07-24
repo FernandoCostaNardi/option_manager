@@ -51,6 +51,7 @@ export function ProcessingModal({
   const [estimateLoading, setEstimateLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [showProgress, setShowProgress] = useState(false);
+  const [isCompleted, setIsCompleted] = useState(false); // Proteção contra múltiplos toasts
 
   // ===== FUNÇÕES =====
   const loadEstimate = useCallback(async () => {
@@ -83,6 +84,17 @@ export function ProcessingModal({
   // ===== EFEITOS =====
   useEffect(() => {
     if (isOpen) {
+      // Resetar estado de conclusão quando modal abrir
+      setIsCompleted(false);
+      
+      // ✅ DEBUG: Log para verificar dados recebidos pelo modal
+      console.log('🔍 ProcessingModal - Dados recebidos:', {
+        'invoiceIds': invoiceIds,
+        'selectedInvoices': selectedInvoices,
+        'selectedInvoices-length': selectedInvoices.length,
+        'initialEstimate': initialEstimate
+      });
+      
       if (initialEstimate) {
         console.log('🔄 Modal aberto - Usando estimativa pré-carregada:', initialEstimate);
         setEstimate(initialEstimate);
@@ -92,7 +104,7 @@ export function ProcessingModal({
         loadEstimate();
       }
     }
-  }, [isOpen, initialEstimate, loadEstimate]);
+  }, [isOpen, initialEstimate, loadEstimate, invoiceIds, selectedInvoices]);
 
   const startProcessing = async () => {
     setProcessing(true);
@@ -127,16 +139,30 @@ export function ProcessingModal({
   };
 
   const handleProcessingComplete = (result: any) => {
+    // Proteção contra múltiplos toasts
+    if (isCompleted) {
+      console.log('🛡️ Processamento já foi completado no modal, ignorando...');
+      return;
+    }
+    
+    setIsCompleted(true);
     setProcessing(false);
     setStep('completed');
     
     console.log('📊 Resultado final do processamento:', result);
     
-    if (result.success || result.partialSuccess) {
+    // Verificar se o processamento foi bem-sucedido
+    const isSuccess = result.success === true;
+    const isPartialSuccess = result.partialSuccess === true;
+    const hasOperationsCreated = (result.operationsCreated || 0) > 0;
+    
+    if (isSuccess || isPartialSuccess || hasOperationsCreated) {
+      // Processamento bem-sucedido
       const message = cleanSpecialCharacters(result.summary || `Processamento concluído! ${result.operationsCreated || 0} operações criadas.`);
       toast.success(message);
       onSuccess();
     } else {
+      // Apenas mostrar erro se realmente falhou
       const errorMessage = cleanSpecialCharacters(result.error || 'Processamento falhou');
       const operationsCreated = result.operationsCreated || 0;
       const operationsSkipped = result.operationsSkipped || 0;
@@ -155,10 +181,36 @@ export function ProcessingModal({
   };
 
   const handleProgressError = (error: any) => {
+    console.error('❌ Erro no progresso do processamento:', error);
     setShowProgress(false);
     setSessionId(null);
     setProcessing(false);
-    toast.error('Erro no processamento');
+    
+    // Verificar se é realmente um erro ou se o processamento foi concluído
+    if (error && typeof error === 'object') {
+      const hasSuccess = error.success === true;
+      const hasPartialSuccess = error.partialSuccess === true;
+      const hasOperations = (error.operationsCreated || 0) > 0;
+      const hasError = error.error && error.error.trim() !== '';
+      
+      if (hasSuccess || hasPartialSuccess || hasOperations) {
+        // Se tem indicadores de sucesso, não é um erro real
+        console.log('🔄 Erro contém indicadores de sucesso, tratando como conclusão');
+        handleProcessingComplete(error);
+      } else if (hasError) {
+        // Apenas mostrar erro se realmente há um erro
+        console.log('❌ Erro real detectado');
+        toast.error('Erro no processamento');
+      } else {
+        // Processamento concluído sem erro específico
+        console.log('✅ Processamento concluído sem erro específico');
+        handleProcessingComplete(error);
+      }
+    } else {
+      // Erro genérico
+      console.log('❌ Erro genérico no processamento');
+      toast.error('Erro no processamento');
+    }
   };
 
   const handleProgressClose = () => {

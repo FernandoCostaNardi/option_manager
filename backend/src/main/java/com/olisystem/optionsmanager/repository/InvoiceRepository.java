@@ -20,6 +20,9 @@ public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
     // Buscar por hash do arquivo para evitar duplicatas
     Optional<Invoice> findByFileHash(String fileHash);
     
+    // ✅ NOVO: Buscar por número da invoice
+    Optional<Invoice> findByInvoiceNumber(String invoiceNumber);
+    
     // ✅ NOVO: Buscar invoice com todas as relações carregadas para processamento
     @Query("SELECT i FROM Invoice i " +
            "JOIN FETCH i.brokerage b " +
@@ -59,13 +62,20 @@ public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
     /**
      * Busca notas por usuário com paginação
      */
-    @Query("SELECT i FROM Invoice i WHERE i.user.id = :userId ORDER BY i.tradingDate DESC")
+    @Query("SELECT DISTINCT i FROM Invoice i " +
+           "LEFT JOIN FETCH i.items " +
+           "LEFT JOIN FETCH i.brokerage " +
+           "WHERE i.user.id = :userId " +
+           "ORDER BY i.tradingDate DESC")
     Page<Invoice> findByUser(@Param("userId") UUID userId, Pageable pageable);
 
     /**
      * Busca notas por corretora e usuário com paginação
      */
-    @Query("SELECT i FROM Invoice i WHERE i.brokerage.id = :brokerageId AND i.user.id = :userId")
+    @Query("SELECT DISTINCT i FROM Invoice i " +
+           "LEFT JOIN FETCH i.items " +
+           "LEFT JOIN FETCH i.brokerage " +
+           "WHERE i.brokerage.id = :brokerageId AND i.user.id = :userId")
     Page<Invoice> findByBrokerageAndUser(
         @Param("brokerageId") UUID brokerageId,
         @Param("userId") UUID userId,
@@ -75,7 +85,10 @@ public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
     /**
      * Busca notas por usuário e período
      */
-    @Query("SELECT i FROM Invoice i WHERE i.user.id = :userId " +
+    @Query("SELECT DISTINCT i FROM Invoice i " +
+           "LEFT JOIN FETCH i.items " +
+           "LEFT JOIN FETCH i.brokerage " +
+           "WHERE i.user.id = :userId " +
            "AND i.tradingDate BETWEEN :startDate AND :endDate " +
            "ORDER BY i.tradingDate DESC")
     Page<Invoice> findByUserAndDateRange(
@@ -88,7 +101,10 @@ public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
     /**
      * Busca notas importadas em uma data específica
      */
-    @Query("SELECT i FROM Invoice i WHERE i.user.id = :userId " +
+    @Query("SELECT DISTINCT i FROM Invoice i " +
+           "LEFT JOIN FETCH i.items " +
+           "LEFT JOIN FETCH i.brokerage " +
+           "WHERE i.user.id = :userId " +
            "AND DATE(i.importedAt) = :importDate " +
            "ORDER BY i.importedAt DESC")
     List<Invoice> findByUserAndImportDate(
@@ -99,7 +115,10 @@ public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
     /**
      * Busca últimas notas importadas
      */
-    @Query("SELECT i FROM Invoice i WHERE i.user.id = :userId " +
+    @Query("SELECT DISTINCT i FROM Invoice i " +
+           "LEFT JOIN FETCH i.items " +
+           "LEFT JOIN FETCH i.brokerage " +
+           "WHERE i.user.id = :userId " +
            "ORDER BY i.importedAt DESC")
     List<Invoice> findLatestImportedByUser(@Param("userId") UUID userId, Pageable pageable);
 
@@ -124,7 +143,10 @@ public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
      * ✅ NOVO: Busca notas por usuário e status de processamento
      * Retorna apenas invoices que NÃO foram processadas (não têm log ou têm status PENDING/ERROR)
      */
-    @Query("SELECT i FROM Invoice i WHERE i.user.id = :userId " +
+    @Query("SELECT DISTINCT i FROM Invoice i " +
+           "LEFT JOIN FETCH i.items " +
+           "LEFT JOIN FETCH i.brokerage " +
+           "WHERE i.user.id = :userId " +
            "AND (NOT EXISTS (SELECT 1 FROM InvoiceProcessingLog ipl WHERE ipl.invoice = i) " +
            "OR EXISTS (SELECT 1 FROM InvoiceProcessingLog ipl WHERE ipl.invoice = i AND ipl.status IN ('PENDING', 'ERROR'))) " +
            "ORDER BY i.tradingDate DESC")
@@ -136,7 +158,10 @@ public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
     /**
      * ✅ NOVO: Busca notas por usuário e status específico de processamento
      */
-    @Query("SELECT i FROM Invoice i WHERE i.user.id = :userId " +
+    @Query("SELECT DISTINCT i FROM Invoice i " +
+           "LEFT JOIN FETCH i.items " +
+           "LEFT JOIN FETCH i.brokerage " +
+           "WHERE i.user.id = :userId " +
            "AND (CASE " +
            "  WHEN :status = 'PENDING' THEN " +
            "    (NOT EXISTS (SELECT 1 FROM InvoiceProcessingLog ipl WHERE ipl.invoice = i) " +
@@ -163,7 +188,10 @@ public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
     /**
      * ✅ NOVO: Busca notas por usuário que NÃO foram processadas (para aba "Todas")
      */
-    @Query("SELECT i FROM Invoice i WHERE i.user.id = :userId " +
+    @Query("SELECT DISTINCT i FROM Invoice i " +
+           "LEFT JOIN FETCH i.items " +
+           "LEFT JOIN FETCH i.brokerage " +
+           "WHERE i.user.id = :userId " +
            "AND (NOT EXISTS (SELECT 1 FROM InvoiceProcessingLog ipl WHERE ipl.invoice = i) " +
            "OR EXISTS (SELECT 1 FROM InvoiceProcessingLog ipl WHERE ipl.invoice = i AND ipl.status IN ('PENDING', 'ERROR'))) " +
            "ORDER BY i.tradingDate DESC")
@@ -175,7 +203,10 @@ public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
     /**
      * ✅ NOVO: Busca notas por usuário que estão pendentes (para aba "Pendentes")
      */
-    @Query("SELECT i FROM Invoice i WHERE i.user.id = :userId " +
+    @Query("SELECT DISTINCT i FROM Invoice i " +
+           "LEFT JOIN FETCH i.items " +
+           "LEFT JOIN FETCH i.brokerage " +
+           "WHERE i.user.id = :userId " +
            "AND (NOT EXISTS (SELECT 1 FROM InvoiceProcessingLog ipl WHERE ipl.invoice = i) " +
            "OR EXISTS (SELECT 1 FROM InvoiceProcessingLog ipl WHERE ipl.invoice = i AND ipl.status = 'PENDING')) " +
            "ORDER BY i.tradingDate DESC")

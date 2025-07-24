@@ -120,13 +120,19 @@ public class OperationFilterServiceImpl implements OperationFilterService {
         log.info("hasNonStatusFilters: {}", hasNonStatusFilters);
         
         try {
+            // Buscar todos os grupos primeiro
+            List<AverageOperationGroup> allGroups = groupRepository.findAll();
+            List<AverageOperationGroup> filteredGroups = new ArrayList<>();
+            
             // Se não há filtros, usar query simples
             if (!hasAnyFilter) {
                 log.info("NENHUM FILTRO - USANDO QUERY SIMPLES");
-                return groupRepository.findAll().stream()
-                    .filter(group -> group.getItems().stream()
-                        .anyMatch(item -> item.getOperation().getUser().getId().equals(userId)))
-                    .collect(Collectors.toList());
+                for (AverageOperationGroup group : allGroups) {
+                    if (hasUserInGroup(group, userId)) {
+                        filteredGroups.add(group);
+                    }
+                }
+                return filteredGroups;
             }
             
             // Se há apenas status ACTIVE (caso mais comum), usar query específica
@@ -135,30 +141,72 @@ public class OperationFilterServiceImpl implements OperationFilterService {
                 criteria.getStatus().get(0) == OperationStatus.ACTIVE &&
                 !hasNonStatusFilters) {
                 log.info("APENAS STATUS ACTIVE - USANDO QUERY ESPECÍFICA");
-                List<AverageOperationGroup> result = groupRepository.findAll().stream()
-                    .filter(group -> group.getItems().stream()
-                        .anyMatch(item -> item.getOperation().getUser().getId().equals(userId) &&
-                                        item.getOperation().getStatus() == OperationStatus.ACTIVE))
-                    .collect(Collectors.toList());
-                log.info("Grupos retornados pela query específica: {}", result.size());
-                return result;
+                for (AverageOperationGroup group : allGroups) {
+                    if (hasUserInGroupWithStatus(group, userId, OperationStatus.ACTIVE)) {
+                        filteredGroups.add(group);
+                    }
+                }
+                log.info("Grupos retornados pela query específica: {}", filteredGroups.size());
+                return filteredGroups;
             }
             
             // Para outros casos, usar query simples e filtrar depois
             log.info("OUTROS CASOS - USANDO QUERY SIMPLES COM FILTRO POSTERIOR");
-            return groupRepository.findAll().stream()
-                .filter(group -> group.getItems().stream()
-                    .anyMatch(item -> item.getOperation().getUser().getId().equals(userId)))
-                .collect(Collectors.toList());
+            for (AverageOperationGroup group : allGroups) {
+                if (hasUserInGroup(group, userId)) {
+                    filteredGroups.add(group);
+                }
+            }
+            return filteredGroups;
             
         } catch (Exception e) {
             log.error("Erro na busca de grupos, fallback para query simples: {}", e.getMessage());
-            return groupRepository.findAll().stream()
-                .filter(group -> group.getItems().stream()
-                    .anyMatch(item -> item.getOperation().getUser().getId().equals(userId)))
-                .collect(Collectors.toList());
+            List<AverageOperationGroup> allGroups = groupRepository.findAll();
+            List<AverageOperationGroup> filteredGroups = new ArrayList<>();
+            for (AverageOperationGroup group : allGroups) {
+                if (hasUserInGroup(group, userId)) {
+                    filteredGroups.add(group);
+                }
+            }
+            return filteredGroups;
         }
     }
+    
+    /**
+     * Verifica se um grupo tem operações do usuário
+     */
+    private boolean hasUserInGroup(AverageOperationGroup group, UUID userId) {
+        if (group.getItems() == null) {
+            return false;
+        }
+        for (AverageOperationItem item : group.getItems()) {
+            if (item.getOperation() != null && 
+                item.getOperation().getUser() != null && 
+                userId.equals(item.getOperation().getUser().getId())) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    /**
+     * Verifica se um grupo tem operações do usuário com status específico
+     */
+    private boolean hasUserInGroupWithStatus(AverageOperationGroup group, UUID userId, OperationStatus status) {
+        if (group.getItems() == null) {
+            return false;
+        }
+        for (AverageOperationItem item : group.getItems()) {
+            if (item.getOperation() != null && 
+                item.getOperation().getUser() != null && 
+                userId.equals(item.getOperation().getUser().getId()) &&
+                status.equals(item.getOperation().getStatus())) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
     /**
      * ✅ CORREÇÃO CRÍTICA: Coleta operações escolhendo a representação correta baseada no status procurado
      */

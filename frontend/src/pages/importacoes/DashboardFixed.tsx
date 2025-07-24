@@ -16,6 +16,7 @@ import toast from 'react-hot-toast';
 export function DashboardInvoiceProcessing() {
   // ===== ESTADOS PRINCIPAIS =====
   const [simpleInvoices, setSimpleInvoices] = useState<SimpleInvoiceData[]>([]);
+  const [pendingInvoicesCount, setPendingInvoicesCount] = useState(0);
   
   // ===== ESTADOS DE UI =====
   const [loading, setLoading] = useState(true);
@@ -26,7 +27,9 @@ export function DashboardInvoiceProcessing() {
   const [processingModalOpen, setProcessingModalOpen] = useState(false);
   const [processingEstimate, setProcessingEstimate] = useState<any>(null);
   const [activeInvoiceTab, setActiveInvoiceTab] = useState<'pendentes' | 'processadas'>('pendentes');
+  const [invoicesTabInitialized, setInvoicesTabInitialized] = useState(false);
   const [overviewDataLoaded, setOverviewDataLoaded] = useState(false);
+  const [forceRefreshCounts, setForceRefreshCounts] = useState(false); // ✅ NOVO: Controla refresh dos contadores
   const loadingRef = useRef(false);
 
   // Função wrapper para setActiveInvoiceTab
@@ -43,6 +46,12 @@ export function DashboardInvoiceProcessing() {
     
     console.log('🔄 Mudando para aba:', tab);
     
+    // ✅ CORREÇÃO: Limpar lista antes de carregar novos dados
+    console.log('🧹 Limpando lista atual antes de carregar novos dados...');
+    setSimpleInvoices([]);
+    setTotalPages(0);
+    setTotalItems(0);
+    
     // Carregar dados ANTES de mudar a aba
     try {
       setTabLoading(true);
@@ -57,11 +66,25 @@ export function DashboardInvoiceProcessing() {
       const response = await InvoiceProcessingService.getSimpleInvoices(0, 1000, processingStatus);
       
       console.log('✅ Dados carregados com sucesso:', response.content.length, 'invoices');
+      console.log('📊 Status solicitado:', processingStatus, 'Total de elementos:', response.totalElements);
+      console.log('📊 Primeiras 3 invoices:', response.content.slice(0, 3).map(inv => ({ id: inv.id, number: inv.invoiceNumber })));
       
-      // Só mudar a aba após os dados estarem carregados
+      // ✅ CORREÇÃO: Temporariamente remover filtro frontend para debug
+      console.log('🔍 DEBUG - Dados recebidos da API no handleTabChange:', {
+        'status-solicitado': processingStatus,
+        'total-recebido': response.content.length,
+        'primeiras-3-invoices': response.content.slice(0, 3).map(inv => ({
+          id: inv.id,
+          number: inv.invoiceNumber,
+          itemsCount: inv.itemsCount
+        }))
+      });
+      
+      // ✅ CORREÇÃO: Usar dados sem filtro frontend por enquanto
       setSimpleInvoices(response.content);
       setTotalPages(response.totalPages);
       setTotalItems(response.totalElements);
+      
       setActiveInvoiceTab(tab);
       
     } catch (error) {
@@ -109,10 +132,14 @@ export function DashboardInvoiceProcessing() {
     if (selectedTab === 'overview') {
       console.log('🔄 Aba Visão Geral selecionada, carregando dados...');
       loadDashboardData();
+    } else if (selectedTab === 'invoices') {
+      console.log('🔄 Aba Invoices selecionada, carregando dados das invoices...');
+      loadSimpleInvoices();
     } else {
       // Resetar flag quando mudar para outra aba
       console.log('🔄 Mudando para outra aba, resetando flag...');
       setOverviewDataLoaded(false);
+      setInvoicesTabInitialized(false);
       loadingRef.current = false; // Resetar também o loading ref
     }
   }, [selectedTab]);
@@ -134,11 +161,29 @@ export function DashboardInvoiceProcessing() {
     loadingRef.current = true;
     setLoading(true);
     
+    // ✅ CORREÇÃO: Limpar lista antes de carregar novos dados
+    console.log('🧹 Limpando lista atual antes de carregar dados da Visão Geral...');
+    setSimpleInvoices([]);
+    setTotalPages(0);
+    setTotalItems(0);
+    
     try {
       console.log('🔍 Carregando dados da Visão Geral com filtro ALL...');
       const response = await InvoiceProcessingService.getSimpleInvoices(0, 1000, 'ALL'); // Carrega todas com filtro ALL
       console.log('✅ Dados da Visão Geral carregados:', response.content.length, 'invoices');
       setSimpleInvoices(response.content);
+      
+      // Carregar número de notas pendentes
+      try {
+        const pendingCount = await InvoiceProcessingService.getPendingCount();
+        setPendingInvoicesCount(pendingCount);
+        console.log('✅ Número de notas pendentes carregado:', pendingCount);
+      } catch (error) {
+        console.error('❌ Erro ao carregar número de notas pendentes:', error);
+        // Fallback: usar todas as notas como pendentes
+        setPendingInvoicesCount(response.content.length);
+      }
+      
       setOverviewDataLoaded(true);
     } catch (error) {
       console.error('❌ Erro ao carregar dados do dashboard:', error);
@@ -149,6 +194,15 @@ export function DashboardInvoiceProcessing() {
   };
 
   const loadSimpleInvoices = async () => {
+    // ✅ CORREÇÃO: Limpar lista antes de carregar novos dados
+    console.log('🧹 Limpando lista atual antes de carregar invoices...');
+    setSimpleInvoices([]);
+    setTotalPages(0);
+    setTotalItems(0);
+    
+    // ✅ CORREÇÃO: Ativar loading da aba
+    setTabLoading(true);
+    
     try {
       let processingStatus: string | undefined;
       if (activeInvoiceTab === 'pendentes') {
@@ -157,8 +211,22 @@ export function DashboardInvoiceProcessing() {
         processingStatus = 'SUCCESS';
       }
       
+      console.log('🔍 Carregando invoices com status:', processingStatus);
       const response = await InvoiceProcessingService.getSimpleInvoices(0, 1000, processingStatus);
+      console.log('✅ Invoices carregadas:', response.content.length, 'com status:', processingStatus);
       
+              // ✅ CORREÇÃO: Temporariamente remover filtro frontend para debug
+      console.log('🔍 DEBUG - Dados recebidos da API:', {
+        'status-solicitado': processingStatus,
+        'total-recebido': response.content.length,
+        'primeiras-3-invoices': response.content.slice(0, 3).map(inv => ({
+          id: inv.id,
+          number: inv.invoiceNumber,
+          itemsCount: inv.itemsCount
+        }))
+      });
+      
+      // ✅ CORREÇÃO: Usar dados sem filtro frontend por enquanto
       setSimpleInvoices(response.content);
       setTotalPages(response.totalPages);
       setTotalItems(response.totalElements);
@@ -168,24 +236,48 @@ export function DashboardInvoiceProcessing() {
       setSimpleInvoices([]);
       setTotalPages(0);
       setTotalItems(0);
+    } finally {
+      // ✅ CORREÇÃO: Desativar loading da aba
+      setTabLoading(false);
     }
   };
 
   // ===== AÇÕES DE PROCESSAMENTO (FASE 2 - IMPLEMENTADO) =====
   const handleProcessAll = async () => {
-    if (simpleInvoices.length === 0) {
-      toast.error('Nenhuma nota disponível para processamento');
+    if (pendingInvoicesCount === 0) {
+      toast.error('Nenhuma nota pendente disponível para processamento');
       return;
     }
     
-    const allInvoiceIds = simpleInvoices.map(inv => inv.id);
-    setSelectedInvoiceIds(allInvoiceIds);
+    // ✅ CORREÇÃO: Carregar apenas as invoices pendentes para processamento
+    let pendingInvoiceIds: string[] = [];
+    try {
+      console.log('🔍 Carregando invoices pendentes para processamento...');
+      const pendingResponse = await InvoiceProcessingService.getSimpleInvoices(0, 1000, 'PENDING');
+      pendingInvoiceIds = pendingResponse.content.map(inv => inv.id);
+      
+      console.log('✅ Invoices pendentes carregadas:', pendingInvoiceIds.length, 'de', pendingInvoicesCount, 'esperadas');
+      
+      if (pendingInvoiceIds.length !== pendingInvoicesCount) {
+        console.log('⚠️ Inconsistência detectada: contador mostra', pendingInvoicesCount, 'mas API retornou', pendingInvoiceIds.length);
+      }
+      
+      // ✅ CORREÇÃO: Atualizar simpleInvoices com as invoices pendentes para o modal
+      setSimpleInvoices(pendingResponse.content);
+      setSelectedInvoiceIds(pendingInvoiceIds);
+      
+      console.log('✅ SimpleInvoices atualizado com', pendingResponse.content.length, 'invoices pendentes');
+    } catch (error) {
+      console.error('❌ Erro ao carregar invoices pendentes:', error);
+      toast.error('Erro ao carregar notas pendentes. Tente novamente.');
+      return;
+    }
     
     // Carregar estimativa ANTES de abrir o modal
     try {
       setProcessing(true);
-      console.log('🔍 Carregando estimativa para processamento de todas:', allInvoiceIds);
-      const estimate = await InvoiceProcessingService.estimateProcessing(allInvoiceIds);
+      console.log('🔍 Carregando estimativa para processamento de todas:', pendingInvoiceIds);
+      const estimate = await InvoiceProcessingService.estimateProcessing(pendingInvoiceIds);
       console.log('✅ Estimativa carregada com sucesso:', estimate);
       
       // Armazenar estimativa e abrir modal
@@ -231,6 +323,18 @@ export function DashboardInvoiceProcessing() {
       return;
     }
     
+    // ✅ LOG: Verificar quais invoices estão sendo processadas
+    console.log('🔍 Processando selecionadas:', {
+      'quantidade-selecionada': selectedInvoiceIds.length,
+      'ids-selecionados': selectedInvoiceIds,
+      'invoices-disponiveis': simpleInvoices.length,
+      'aba-ativa': activeInvoiceTab
+    });
+    
+    // ✅ CORREÇÃO: Garantir que temos as invoices corretas para o modal
+    const selectedInvoicesForModal = simpleInvoices.filter(inv => selectedInvoiceIds.includes(inv.id));
+    console.log('✅ Invoices selecionadas para modal:', selectedInvoicesForModal.length);
+    
     // Carregar estimativa ANTES de abrir o modal
     try {
       setProcessing(true);
@@ -250,14 +354,31 @@ export function DashboardInvoiceProcessing() {
   };
 
   const handleProcessingSuccess = () => {
+    console.log('✅ Processamento concluído com sucesso - Recarregando dados...');
+    
+    // ✅ CORREÇÃO: Limpar lista antes de recarregar dados
+    console.log('🧹 Limpando lista após processamento...');
+    setSimpleInvoices([]);
+    setTotalPages(0);
+    setTotalItems(0);
+    
+    // ✅ CORREÇÃO: Forçar refresh dos contadores
+    setForceRefreshCounts(true);
+    
     // Recarregar dados após sucesso
     loadDashboardData();
     if (selectedTab === 'invoices') {
-      loadSimpleInvoices();
+      // Recarregar dados da aba atual
+      handleTabChange(activeInvoiceTab);
     }
     setSelectedInvoiceIds([]);
     setProcessingModalOpen(false);
     setProcessingEstimate(null);
+    
+    // Resetar o flag após um delay para permitir que o InvoicesTab processe
+    setTimeout(() => {
+      setForceRefreshCounts(false);
+    }, 1000);
   };
 
   // ===== UTILITÁRIOS =====
@@ -329,7 +450,7 @@ export function DashboardInvoiceProcessing() {
             
             <button
               onClick={handleProcessAll}
-              disabled={processing || totalInvoices === 0}
+              disabled={processing || pendingInvoicesCount === 0}
               className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {processing ? (
@@ -337,7 +458,7 @@ export function DashboardInvoiceProcessing() {
               ) : (
                 <Play className="h-4 w-4" />
               )}
-              Processar Todas ({totalInvoices})
+              Processar Todas ({pendingInvoicesCount})
             </button>
           </div>
         </div>
@@ -352,7 +473,16 @@ export function DashboardInvoiceProcessing() {
           ].map(({ key, label, icon: Icon }) => (
             <button
               key={key}
-              onClick={() => setSelectedTab(key as any)}
+              onClick={() => {
+                console.log('🔄 Clicou na aba:', key);
+                setSelectedTab(key as any);
+                
+                // ✅ CORREÇÃO: Se clicou em "invoices", carregar dados das invoices
+                if (key === 'invoices') {
+                  console.log('🔄 Carregando dados das invoices ao clicar na aba...');
+                  loadSimpleInvoices();
+                }
+              }}
               className={`py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap flex items-center gap-2 ${
                 selectedTab === key
                   ? 'border-purple-500 text-purple-600'
@@ -400,7 +530,7 @@ export function DashboardInvoiceProcessing() {
                       Não Processadas
                     </dt>
                     <dd className="text-2xl font-bold text-gray-900">
-                      {totalInvoices}
+                      {pendingInvoicesCount}
                     </dd>
                   </dl>
                 </div>
@@ -483,7 +613,7 @@ export function DashboardInvoiceProcessing() {
 
       {selectedTab === 'invoices' && (
         <>
-          {console.log('🔄 Renderizando InvoicesTab com selectedTab:', selectedTab)}
+          {console.log('🔄 Renderizando InvoicesTab com selectedTab:', selectedTab, 'activeTab:', activeInvoiceTab)}
           <InvoicesTab
             key={`invoices-tab-${selectedTab}`} // Forçar re-montagem apenas quando selectedTab muda
             invoices={simpleInvoices}
@@ -497,6 +627,7 @@ export function DashboardInvoiceProcessing() {
             activeTab={activeInvoiceTab}
             onTabChange={handleTabChange}
             tabLoading={tabLoading}
+            forceRefreshCounts={forceRefreshCounts}
           />
         </>
       )}
@@ -512,17 +643,31 @@ export function DashboardInvoiceProcessing() {
       />
 
       {/* MODAL DE PROCESSAMENTO */}
-      <ProcessingModal
-        isOpen={processingModalOpen}
-        onClose={() => {
-          setProcessingModalOpen(false);
-          setProcessingEstimate(null);
-        }}
-        invoiceIds={selectedInvoiceIds}
-        selectedInvoices={simpleInvoices.filter(inv => selectedInvoiceIds.includes(inv.id))}
-        onSuccess={handleProcessingSuccess}
-        initialEstimate={processingEstimate}
-      />
+      {(() => {
+        // ✅ DEBUG: Log para verificar dados sendo passados para o modal
+        const modalSelectedInvoices = simpleInvoices.filter(inv => selectedInvoiceIds.includes(inv.id));
+        console.log('🔍 Modal - Dados sendo passados:', {
+          'selectedInvoiceIds': selectedInvoiceIds,
+          'simpleInvoices-length': simpleInvoices.length,
+          'modalSelectedInvoices-length': modalSelectedInvoices.length,
+          'activeTab': activeInvoiceTab,
+          'processingModalOpen': processingModalOpen
+        });
+        
+        return (
+          <ProcessingModal
+            isOpen={processingModalOpen}
+            onClose={() => {
+              setProcessingModalOpen(false);
+              setProcessingEstimate(null);
+            }}
+            invoiceIds={selectedInvoiceIds}
+            selectedInvoices={modalSelectedInvoices}
+            onSuccess={handleProcessingSuccess}
+            initialEstimate={processingEstimate}
+          />
+        );
+      })()}
     </div>
   );
 }

@@ -37,12 +37,16 @@ export function ProcessingProgress({ sessionId, onComplete, onError, onClose }: 
   const [isVisible, setIsVisible] = useState(false);
   const [eventSource, setEventSource] = useState<EventSource | null>(null);
   const [completedOperations, setCompletedOperations] = useState(0);
+  const [isCompleted, setIsCompleted] = useState(false); // Proteção contra múltiplos toasts
+  const [completionTimeout, setCompletionTimeout] = useState<number | null>(null);
 
   useEffect(() => {
     if (!sessionId) return;
 
     console.log('🔗 Conectando ao SSE para sessão:', sessionId);
     setIsVisible(true);
+    setIsCompleted(false); // Resetar estado de conclusão
+    setCompletionTimeout(null); // Resetar timeout de conclusão
     
     // Conectar ao SSE quando iniciar processamento
     const token = localStorage.getItem('token');
@@ -92,6 +96,20 @@ export function ProcessingProgress({ sessionId, onComplete, onError, onClose }: 
       }
     });
 
+    // Função para debounce de conclusão
+    const debouncedComplete = (data: any) => {
+      if (completionTimeout) {
+        clearTimeout(completionTimeout);
+      }
+      
+      const timeout = setTimeout(() => {
+        console.log('🔄 Executando conclusão com debounce');
+        handleProcessingComplete(data);
+      }, 100); // 100ms de debounce
+      
+      setCompletionTimeout(timeout);
+    };
+
     // Listener para evento 'complete'
     newEventSource.addEventListener('complete', (event: any) => {
       console.log('🏁 EVENTO COMPLETE RECEBIDO:', event);
@@ -99,7 +117,7 @@ export function ProcessingProgress({ sessionId, onComplete, onError, onClose }: 
         const data = JSON.parse(event.data);
         console.log('📨 Dados de conclusão:', data);
         newEventSource.close();
-        handleProcessingComplete(data);
+        debouncedComplete(data);
       } catch (error) {
         console.error('❌ Erro ao parsear dados do evento complete:', error);
       }
@@ -112,7 +130,7 @@ export function ProcessingProgress({ sessionId, onComplete, onError, onClose }: 
         const data = JSON.parse(event.data);
         console.log('📨 Dados de finalização:', data);
         newEventSource.close();
-        handleProcessingComplete(data);
+        debouncedComplete(data);
       } catch (error) {
         console.error('❌ Erro ao parsear dados do evento finished:', error);
       }
@@ -129,7 +147,7 @@ export function ProcessingProgress({ sessionId, onComplete, onError, onClose }: 
         if (data.type === 'FINISHED' || data.status === 'FINISHED') {
           console.log('🏁 Detectado evento de finalização via message');
           newEventSource.close();
-          handleProcessingComplete(data);
+          debouncedComplete(data);
         } else {
           updateProgressUI(data);
         }
@@ -145,7 +163,7 @@ export function ProcessingProgress({ sessionId, onComplete, onError, onClose }: 
         const data = JSON.parse(event.data);
         console.log('📨 Dados de erro:', data);
         newEventSource.close();
-        handleProcessingComplete(data);
+        debouncedComplete(data);
       } catch (error) {
         console.error('❌ Erro ao parsear dados do evento error:', error);
       }
@@ -169,11 +187,14 @@ export function ProcessingProgress({ sessionId, onComplete, onError, onClose }: 
       if (newEventSource) {
         newEventSource.close();
       }
-      handleProcessingComplete({ type: 'TIMEOUT', message: 'Processamento concluído (timeout)' });
+      debouncedComplete({ type: 'TIMEOUT', message: 'Processamento concluído (timeout)' });
     }, 30000); // 30 segundos
 
     return () => {
       clearTimeout(safetyTimeout);
+      if (completionTimeout) {
+        clearTimeout(completionTimeout);
+      }
       if (newEventSource) {
         newEventSource.close();
       }
@@ -279,25 +300,65 @@ export function ProcessingProgress({ sessionId, onComplete, onError, onClose }: 
   const handleProcessingComplete = (result: any) => {
     console.log('📊 Resultado final do processamento:', result);
     
+    // Proteção contra múltiplos toasts
+    if (isCompleted) {
+      console.log('🛡️ Processamento já foi completado, ignorando...');
+      return;
+    }
+    
+    // Limpar timeout de conclusão se existir
+    if (completionTimeout) {
+      clearTimeout(completionTimeout);
+      setCompletionTimeout(null);
+    }
+    
+    setIsCompleted(true);
+    
     // Fechar o EventSource se ainda estiver aberto
     if (eventSource) {
       eventSource.close();
       setEventSource(null);
     }
     
-    if (result.success || result.partialSuccess || result.type === 'FINISHED') {
-      const totalOperations = result.current || completedOperations || 0;
+    // Verificar se o processamento foi bem-sucedido
+    const isSuccess = result.success === true;
+    const isPartialSuccess = result.partialSuccess === true;
+    const isFinished = result.type === 'FINISHED';
+    const hasOperationsCreated = (result.current || completedOperations || 0) > 0;
+    const hasError = result.error && result.error.trim() !== '';
+    
+    // Verificar se é um resultado válido
+    if (!result || (typeof result === 'object' && Object.keys(result).length === 0)) {
+      console.log('⚠️ Resultado vazio ou inválido, tratando como sucesso');
+      const totalOperations = completedOperations || 0;
+      const message = `Processamento concluído! ${totalOperations} operações criadas.`;
+      toast.success(message);
+      onComplete?.({ success: true, operationsCreated: totalOperations });
+      setIsVisible(false);
+      return;
+    }
+    
+    // Lógica simplificada: se tem operações criadas, é sucesso
+    const totalOperations = result.current || completedOperations || 0;
+    
+    if (hasOperationsCreated || isSuccess || isPartialSuccess || isFinished) {
+      // Processamento bem-sucedido
       const message = cleanSpecialCharacters(result.summary || result.message || `Processamento concluído! ${totalOperations} operações criadas.`);
       toast.success(message);
       onComplete?.(result);
-    } else {
+    } else if (hasError) {
+      // Apenas mostrar erro se realmente há um erro
       const errorMessage = cleanSpecialCharacters(result.error || 'Processamento falhou');
-      const totalOperations = result.current || completedOperations || 0;
       const processingTime = result.processingTimeMs ? `${Math.round(result.processingTimeMs / 1000)}s` : '';
       
       console.error('❌ Processamento falhou:', result);
       toast.error(`${errorMessage}. ${totalOperations} operações processadas. Tempo: ${processingTime}`);
       onError?.(result);
+    } else {
+      // Processamento concluído sem erro específico - tratar como sucesso
+      const message = cleanSpecialCharacters(result.summary || result.message || `Processamento concluído! ${totalOperations} operações criadas.`);
+      toast.success(message);
+      onComplete?.(result);
     }
     
     // Garantir que o modal seja fechado

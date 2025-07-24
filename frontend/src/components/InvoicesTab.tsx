@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   FileText, Play, Eye, CheckCircle, Clock, AlertCircle, 
-  ChevronLeft, ChevronRight, RefreshCw, Download, BarChart3
+  ChevronLeft, ChevronRight, RefreshCw, Download
 } from 'lucide-react';
 import { SimpleInvoiceData, InvoiceProcessingService } from '../services/invoiceProcessingService';
 
@@ -18,12 +18,14 @@ interface InvoicesTabProps {
   onTabChange?: (tab: 'pendentes' | 'processadas') => void;
   activeTab?: 'pendentes' | 'processadas';
   tabLoading?: boolean;
+  forceRefreshCounts?: boolean; // ✅ NOVO: Força recarregamento dos contadores
 }
 
 interface InvoiceDetailsModalProps {
   invoice: SimpleInvoiceData | null;
   isOpen: boolean;
   onClose: () => void;
+  activeTab?: 'pendentes' | 'processadas';
 }
 
 // ===== COMPONENTE PRINCIPAL =====
@@ -38,7 +40,8 @@ export function InvoicesTab({
   onSelectionChange,
   onTabChange,
   activeTab = 'pendentes',
-  tabLoading = false
+  tabLoading = false,
+  forceRefreshCounts = false
 }: InvoicesTabProps) {
   console.log('🔄 InvoicesTab montado/remontado com activeTab:', activeTab);
   const [selectedInvoice, setSelectedInvoice] = useState<SimpleInvoiceData | null>(null);
@@ -46,8 +49,55 @@ export function InvoicesTab({
   const [counts, setCounts] = useState({ pendentes: 0, processadas: 0 });
   const countsLoadedRef = useRef(false);
 
-  // Simplificado: usar invoices diretamente, já que o carregamento é controlado pelo handleTabChange
-  const filteredInvoices = tabLoading ? [] : invoices;
+  // Usar invoices diretamente, já que o carregamento é controlado pelo handleTabChange
+  // Mas limitar baseado no contador se houver inconsistência
+  let filteredInvoices = invoices;
+  
+  // Se estamos na aba pendentes e há inconsistência, limitar aos primeiros N itens
+  if (activeTab === 'pendentes' && invoices.length > counts.pendentes && counts.pendentes > 0) {
+    console.log('🔧 Aplicando correção: limitando a', counts.pendentes, 'itens pendentes');
+    filteredInvoices = invoices.slice(0, counts.pendentes);
+  }
+  
+  // Se estamos na aba processadas e há inconsistência, limitar aos primeiros N itens
+  if (activeTab === 'processadas' && invoices.length > counts.processadas && counts.processadas > 0) {
+    console.log('🔧 Aplicando correção: limitando a', counts.processadas, 'itens processadas');
+    filteredInvoices = invoices.slice(0, counts.processadas);
+  }
+  
+  // Log para debug
+  console.log('🔄 InvoicesTab - invoices recebidas:', invoices.length, 'activeTab:', activeTab, 'tabLoading:', tabLoading);
+  console.log('🔄 InvoicesTab - primeiras 3 invoices:', invoices.slice(0, 3).map(inv => ({ id: inv.id, number: inv.invoiceNumber })));
+  
+  // ✅ CORREÇÃO: Mostrar estado de carregamento quando lista estiver vazia e tabLoading for true
+  if (tabLoading && invoices.length === 0) {
+    console.log('🔄 Mostrando estado de carregamento...');
+  }
+  
+  // Verificar inconsistência entre contadores e dados reais
+  if (activeTab === 'pendentes' && invoices.length !== counts.pendentes) {
+    console.log('⚠️ INCONSISTÊNCIA DETECTADA - PENDENTES:', {
+      'contador-pendentes': counts.pendentes,
+      'dados-reais': invoices.length,
+      'diferenca': invoices.length - counts.pendentes
+    });
+  }
+  
+  if (activeTab === 'processadas' && invoices.length !== counts.processadas) {
+    console.log('⚠️ INCONSISTÊNCIA DETECTADA - PROCESSADAS:', {
+      'contador-processadas': counts.processadas,
+      'dados-reais': invoices.length,
+      'diferenca': invoices.length - counts.processadas
+    });
+  }
+  
+  // ✅ CORREÇÃO: Limpar seleções quando mudar de aba para evitar inconsistências
+  useEffect(() => {
+    if (selectedInvoiceIds.length > 0) {
+      console.log('🔄 Limpando seleções ao mudar de aba para evitar inconsistências');
+      onSelectionChange([]);
+    }
+  }, [activeTab]); // Executa quando a aba muda
 
 
 
@@ -97,7 +147,14 @@ export function InvoicesTab({
     if (selectedInvoiceIds.length === filteredInvoices.length) {
       onSelectionChange([]);
     } else {
-      onSelectionChange(filteredInvoices.map(inv => inv.id));
+      // ✅ CORREÇÃO: Garantir que apenas invoices da aba atual sejam selecionadas
+      const selectableInvoices = filteredInvoices;
+      console.log('🔍 Selecionando todas as invoices:', {
+        'aba-ativa': activeTab,
+        'invoices-disponiveis': selectableInvoices.length,
+        'ids-para-selecionar': selectableInvoices.map(inv => inv.id)
+      });
+      onSelectionChange(selectableInvoices.map(inv => inv.id));
     }
   };
 
@@ -109,17 +166,19 @@ export function InvoicesTab({
     }
   };
 
-  // Carregar contadores apenas uma vez ao montar o componente
+  // ✅ CORREÇÃO: Carregar contadores ao montar e quando forceRefreshCounts mudar
   useEffect(() => {
-    // Evitar carregar contadores se já foram carregados
-    if (countsLoadedRef.current) {
+    console.log('🔄 useEffect contadores - forceRefreshCounts:', forceRefreshCounts, 'countsLoaded:', countsLoadedRef.current);
+    
+    // Se forceRefreshCounts é true, recarregar contadores mesmo se já foram carregados
+    if (countsLoadedRef.current && !forceRefreshCounts) {
       console.log('🔄 Contadores já carregados, pulando...');
       return;
     }
 
     const loadCounts = async () => {
       try {
-        console.log('🔍 Carregando contadores das abas...');
+        console.log('🔍 Carregando contadores das abas...', forceRefreshCounts ? '(forçado)' : '');
         const [pendingResponse, processedResponse] = await Promise.all([
           InvoiceProcessingService.getSimpleInvoices(0, 1000, 'PENDING'),
           InvoiceProcessingService.getSimpleInvoices(0, 1000, 'SUCCESS')
@@ -127,7 +186,10 @@ export function InvoicesTab({
         
         console.log('✅ Contadores carregados:', {
           pendentes: pendingResponse.totalElements,
-          processadas: processedResponse.totalElements
+          processadas: processedResponse.totalElements,
+          'dados-pendentes-reais': pendingResponse.content.length,
+          'dados-processadas-reais': processedResponse.content.length,
+          'forcado': forceRefreshCounts
         });
         
         setCounts({
@@ -151,7 +213,7 @@ export function InvoicesTab({
     }, 100);
 
     return () => clearTimeout(timeoutId);
-  }, []); // ✅ Executa apenas uma vez ao montar o componente
+  }, [forceRefreshCounts]); // ✅ Executa quando forceRefreshCounts mudar
 
   const isAllSelected = selectedInvoiceIds.length > 0 && selectedInvoiceIds.length === filteredInvoices.length;
   const isIndeterminate = selectedInvoiceIds.length > 0 && selectedInvoiceIds.length < filteredInvoices.length;
@@ -199,10 +261,10 @@ export function InvoicesTab({
           <div className="text-sm text-gray-500">
             {selectedInvoiceIds.length > 0 ? (
               <span className="text-purple-600 font-medium">
-                {selectedInvoiceIds.length} selecionada(s) • Total: {totalItems} notas
+                {selectedInvoiceIds.length} selecionada(s) • Total: {filteredInvoices.length} notas
               </span>
             ) : (
-              `Total: ${totalItems} notas`
+              `Total: ${filteredInvoices.length} notas`
             )}
           </div>
         </div>
@@ -259,7 +321,24 @@ export function InvoicesTab({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white">
-                  {filteredInvoices.map((invoice) => (
+                  {/* ✅ CORREÇÃO: Mostrar estado de carregamento quando lista estiver vazia */}
+                  {tabLoading && filteredInvoices.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-12 text-center">
+                        <div className="flex items-center justify-center gap-3">
+                          <div className="h-6 w-6 animate-spin text-purple-600">⏳</div>
+                          <span className="text-gray-500">Carregando {activeTab}...</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : filteredInvoices.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                        Nenhuma nota {activeTab === 'pendentes' ? 'pendente' : 'processada'} encontrada.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredInvoices.map((invoice) => (
                     <tr key={invoice.id} className={`hover:bg-gray-50 ${
                       selectedInvoiceIds.includes(invoice.id) ? 'bg-purple-50 border-purple-200' : ''
                     }`}>
@@ -334,7 +413,8 @@ export function InvoicesTab({
                         </div>
                       </td>
                     </tr>
-                  ))}
+                  ))
+                )}
                 </tbody>
               </table>
             </div>
@@ -389,13 +469,17 @@ export function InvoicesTab({
           setDetailsModalOpen(false);
           setSelectedInvoice(null);
         }}
+        activeTab={activeTab}
       />
     </div>
   );
 }
 // ===== MODAL DE DETALHES =====
-function InvoiceDetailsModal({ invoice, isOpen, onClose }: InvoiceDetailsModalProps) {
+function InvoiceDetailsModal({ invoice, isOpen, onClose, activeTab }: InvoiceDetailsModalProps) {
   if (!isOpen || !invoice) return null;
+
+  // Determinar se a nota está processada baseado na aba ativa
+  const isProcessed = activeTab === 'processadas';
 
   const formatCurrency = (value: number | undefined | null) => {
     if (value === null || value === undefined || isNaN(value)) {
@@ -466,13 +550,23 @@ function InvoiceDetailsModal({ invoice, isOpen, onClose }: InvoiceDetailsModalPr
             {/* STATUS DE PROCESSAMENTO */}
             <div>
               <h4 className="font-medium text-gray-900 mb-3">Status de Processamento</h4>
-              <div className="text-center p-6 bg-yellow-50 rounded-lg">
-                <Clock className="h-12 w-12 text-yellow-500 mx-auto mb-3" />
-                <p className="text-yellow-700 font-medium">Esta nota ainda não foi processada</p>
-                <p className="text-sm text-yellow-600 mt-2">
-                  O processamento para criar operações será implementado na Fase 2 do sistema
-                </p>
-              </div>
+              {isProcessed ? (
+                <div className="text-center p-6 bg-green-50 rounded-lg">
+                  <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-3" />
+                  <p className="text-green-700 font-medium">Nota processada com sucesso</p>
+                  <p className="text-sm text-green-600 mt-2">
+                    As operações foram criadas e estão disponíveis no sistema
+                  </p>
+                </div>
+              ) : (
+                <div className="text-center p-6 bg-yellow-50 rounded-lg">
+                  <Clock className="h-12 w-12 text-yellow-500 mx-auto mb-3" />
+                  <p className="text-yellow-700 font-medium">Esta nota ainda não foi processada</p>
+                  <p className="text-sm text-yellow-600 mt-2">
+                    Clique no botão "Processar" para criar as operações
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* INFORMAÇÕES ADICIONAIS */}
@@ -483,6 +577,8 @@ function InvoiceDetailsModal({ invoice, isOpen, onClose }: InvoiceDetailsModalPr
                 <div>Valor para Liquidação: {formatCurrency(invoice.netSettlementValue)}</div>
               </div>
             </div>
+
+
           </div>
         </div>
 

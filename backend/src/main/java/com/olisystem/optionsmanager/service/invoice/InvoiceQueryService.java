@@ -91,14 +91,34 @@ public class InvoiceQueryService {
             invoicesPage = invoiceRepository.findByUser(user.getId(), pageable);
             log.info("📋 Filtro ALL: Retornando todas as invoices ({} encontradas)", invoicesPage.getTotalElements());
         } else {
-                            // Buscar com filtro de status específico
-                invoicesPage = invoiceRepository.findByUserAndProcessingStatus(
-                    user.getId(),
-                    filterRequest.processingStatus(),
-                    pageable
-                );
-                            log.info("📋 Filtro {}: Retornando {} invoices",
-                    filterRequest.processingStatus(), invoicesPage.getTotalElements());
+            // ✅ CORREÇÃO: Usar métodos específicos para cada status
+            switch (filterRequest.processingStatus()) {
+                case "PENDING":
+                    log.info("📋 Buscando notas pendentes");
+                    invoicesPage = invoiceRepository.findByUserAndPending(user.getId(), pageable);
+                    break;
+                    
+                case "SUCCESS":
+                case "PARTIAL_SUCCESS":
+                case "ERROR":
+                case "PROCESSING":
+                case "CANCELLED":
+                    log.info("📋 Buscando notas com status: {}", filterRequest.processingStatus());
+                    invoicesPage = invoiceRepository.findByUserAndProcessingStatus(
+                        user.getId(),
+                        filterRequest.processingStatus(),
+                        pageable
+                    );
+                    break;
+                    
+                default:
+                    log.warn("⚠️ Status de processamento não reconhecido: {}", filterRequest.processingStatus());
+                    invoicesPage = invoiceRepository.findByUserAndNotSuccessfullyProcessed(user.getId(), pageable);
+                    break;
+            }
+            
+            log.info("📋 Filtro {}: Retornando {} invoices",
+                filterRequest.processingStatus(), invoicesPage.getTotalElements());
         }
         
         List<InvoiceData> invoiceDataList = invoicesPage.getContent().stream()

@@ -19,6 +19,14 @@ import org.springframework.format.annotation.DateTimeFormat;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
+import java.util.Optional;
+import java.util.HashMap;
+import java.util.Map;
+
+import com.olisystem.optionsmanager.model.invoice.Invoice;
+import com.olisystem.optionsmanager.repository.InvoiceRepository;
+import com.olisystem.optionsmanager.model.invoice.InvoiceProcessingLog;
+import com.olisystem.optionsmanager.service.invoice.processing.log.InvoiceProcessingLogService;
 
 /**
  * Controller para importação e consulta de notas de corretagem
@@ -34,6 +42,8 @@ public class InvoiceV2Controller {
     private final InvoiceImportService invoiceImportService;
     private final InvoiceQueryService invoiceQueryService;
     private final UserService userService;
+    private final InvoiceRepository invoiceRepository;
+    private final InvoiceProcessingLogService processingLogService;
 
     /**
      * Importa múltiplas notas de corretagem
@@ -267,6 +277,118 @@ public class InvoiceV2Controller {
             
         } catch (Exception e) {
             log.error("❌ Erro ao contar notas pendentes: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    /**
+     * ✅ TEMPORÁRIO: Endpoint para testar invoices pendentes sem autenticação
+     * GET /api/invoices-v2/test/pending
+     */
+    @GetMapping("/test/pending")
+    public ResponseEntity<Page<InvoiceData>> getPendingInvoicesTest(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        
+        log.info("🧪 TESTE: Buscando invoices pendentes (sem autenticação) - Page: {}, Size: {}", page, size);
+        
+        try {
+            // ✅ TEMPORÁRIO: Usar usuário padrão para teste
+            User testUser = userService.findByUsername("fc-nardi@hotmail.com")
+                .orElseThrow(() -> new RuntimeException("Usuário de teste não encontrado"));
+            
+            InvoiceFilterRequest filterRequest = new InvoiceFilterRequest(
+                null, // brokerageId
+                null, // startDate
+                null, // endDate
+                null, // invoiceNumber
+                null, // clientName
+                null, // importStartDate
+                null, // importEndDate
+                "PENDING", // processingStatus
+                page,
+                size,
+                "createdAt",
+                "desc"
+            );
+            
+            // ✅ NOVO: Usar método com suporte ao filtro PENDING
+            Page<InvoiceData> invoices = invoiceQueryService.findInvoicesWithProcessingStatusFilter(filterRequest, testUser);
+            
+            log.info("✅ TESTE: Encontradas {} invoices pendentes", invoices.getTotalElements());
+            return ResponseEntity.ok(invoices);
+            
+        } catch (Exception e) {
+            log.error("❌ TESTE: Erro ao buscar invoices pendentes: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    /**
+     * ✅ TEMPORÁRIO: Endpoint para verificar logs de processamento de uma invoice
+     * GET /api/invoices-v2/test/logs/{invoiceNumber}
+     */
+    @GetMapping("/test/logs/{invoiceNumber}")
+    public ResponseEntity<Map<String, Object>> getInvoiceProcessingLogs(@PathVariable String invoiceNumber) {
+        
+        log.info("🧪 TESTE: Verificando logs de processamento para invoice: {}", invoiceNumber);
+        
+        try {
+            // ✅ TEMPORÁRIO: Usar usuário padrão para teste
+            User testUser = userService.findByUsername("fc-nardi@hotmail.com")
+                .orElseThrow(() -> new RuntimeException("Usuário de teste não encontrado"));
+            
+            // Buscar invoice pelo número
+            Optional<Invoice> invoice = invoiceRepository.findByInvoiceNumber(invoiceNumber);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("invoiceNumber", invoiceNumber);
+            response.put("invoiceFound", invoice.isPresent());
+            
+            if (invoice.isPresent()) {
+                Invoice invoiceEntity = invoice.get();
+                response.put("invoiceId", invoiceEntity.getId());
+                response.put("tradingDate", invoiceEntity.getTradingDate());
+                response.put("clientName", invoiceEntity.getClientName());
+                
+                // Buscar logs de processamento
+                Optional<InvoiceProcessingLog> processingLog = processingLogService.findProcessingLog(invoiceEntity);
+                
+                response.put("hasProcessingLog", processingLog.isPresent());
+                
+                if (processingLog.isPresent()) {
+                    InvoiceProcessingLog processingLogEntity = processingLog.get();
+                    response.put("logId", processingLogEntity.getId());
+                    response.put("status", processingLogEntity.getStatus().name());
+                    response.put("operationsCreated", processingLogEntity.getOperationsCreated());
+                    response.put("operationsUpdated", processingLogEntity.getOperationsUpdated());
+                    response.put("operationsSkipped", processingLogEntity.getOperationsSkipped());
+                    response.put("startedAt", processingLogEntity.getStartedAt());
+                    response.put("completedAt", processingLogEntity.getCompletedAt());
+                    response.put("errorMessage", processingLogEntity.getErrorMessage());
+                    response.put("createdAt", processingLogEntity.getCreatedAt());
+                    
+                    // Verificações específicas
+                    response.put("isAlreadyProcessed", processingLogService.isInvoiceAlreadyProcessed(invoiceEntity));
+                    response.put("isBeingProcessed", processingLogService.isInvoiceBeingProcessed(invoiceEntity));
+                    response.put("canProcessInBatch", processingLogService.canProcessInBatch(invoiceEntity));
+                    
+                    log.info("✅ TESTE: Log encontrado para invoice {} - Status: {}", invoiceNumber, processingLogEntity.getStatus());
+                } else {
+                    response.put("isAlreadyProcessed", false);
+                    response.put("isBeingProcessed", false);
+                    response.put("canProcessInBatch", true);
+                    
+                    log.info("✅ TESTE: Nenhum log encontrado para invoice {}", invoiceNumber);
+                }
+            } else {
+                log.warn("⚠️ TESTE: Invoice {} não encontrada", invoiceNumber);
+            }
+            
+            return ResponseEntity.ok(response);
+            
+        } catch (Exception e) {
+            log.error("❌ TESTE: Erro ao verificar logs: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
